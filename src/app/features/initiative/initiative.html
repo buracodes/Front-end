@@ -1,0 +1,320 @@
+<div class="d-flex align-center justify-between">
+  <div>
+    <h1 class="page-title">Initiatives management</h1>
+    <p class="page-subtitle">Strategic initiatives and milestones.</p>
+  </div>
+  @if (canCreate()) {
+  <button type="button" class="btn toolbar-create btn-accent" (click)="openAddModal()"><svg lucideIcon="plus"
+      size="16"></svg> Create initiative</button>
+  }
+</div>
+
+<div class="toolbar card mb-4">
+  <div class="toolbar-search">
+    <input class="form-control" type="text" placeholder="Search initiatives" [value]="search()"
+      (input)="onSearchChange($any($event.target).value)" />
+  </div>
+
+  <select class="form-control toolbar-select" [value]="statusFilter()"
+    (change)="onStatusFilterChange($any($event.target).value)">
+    <option value="all">All statuses</option>
+    <option value="NotStarted">Not started</option>
+    <option value="InProgress">In progress</option>
+    <option value="OnHold">On hold</option>
+    <option value="Completed">Completed</option>
+    <option value="Cancelled">Cancelled</option>
+  </select>
+
+  <select class="form-control toolbar-select" [value]="ownerFilter()"
+    (change)="onOwnerFilterChange($any($event.target).value)">
+    <option value="all">All owners</option>
+    @for (owner of ownerFilterOptions(); track owner.value) {
+    <option [value]="owner.value">{{ owner.label }}</option>
+    }
+  </select>
+
+  <label class="toolbar-checkbox">
+    <input type="checkbox" [checked]="includeClosed()" (change)="onIncludeClosedChange($any($event.target).checked)" />
+    Show closed
+  </label>
+</div>
+
+@if (showForm()) {
+<div class="modal-backdrop" (click)="onCancelEdit()">
+  <div class="modal-dialog modal-lg" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>{{ editingId() ? 'Edit Initiative' : 'New Initiative' }}</h3>
+      <button type="button" class="close-btn" aria-label="Close" (click)="onCancelEdit()"><svg lucideIcon="x"
+          size="18"></svg></button>
+    </div>
+    <div class="modal-body">
+      <form id="initiative-form" [formGroup]="form" (ngSubmit)="editingId() ? onUpdate() : onSubmit()" novalidate>
+        <div class="form-group">
+          <label class="form-label" for="initiative-name">Name</label>
+          <input id="initiative-name" class="form-control" type="text" formControlName="name"
+            placeholder="e.g. Digital Transformation" />
+          @if (form.controls.name.invalid && form.controls.name.touched) {
+          <p class="form-error">
+            @if (form.controls.name.hasError('required')) {
+            Name is required.
+            } @else if (form.controls.name.hasError('maxlength')) {
+            Name must be at most 200 characters.
+            }
+          </p>
+          }
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="initiative-description">Description</label>
+          <textarea id="initiative-description" class="form-control" formControlName="description"
+            placeholder="Optional description"></textarea>
+          @if (form.controls.description.invalid && form.controls.description.touched) {
+          <p class="form-error">Description must be at most 500 characters.</p>
+          }
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Goal(optional)</label>
+            <select class="form-control" formControlName="goalId" (change)="onGoalChange($any($event.target).value)">
+              <option value="">None</option>
+              @for (goal of goalOptions(); track goal.id) {
+              <option [value]="goal.id">{{ goal.name }}</option>
+              }
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">KRA(optional)</label>
+            <select class="form-control" formControlName="kraId" (change)="onKraChange($any($event.target).value)">
+              <option value="">None</option>
+              @for (kra of kraOptions(); track kra.id) {
+              <option [value]="kra.id">{{ kra.name }}</option>
+              }
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">KPI(optional)</label>
+            <select class="form-control" formControlName="kpiId">
+              <option value="">None</option>
+              @for (kpi of kpiOptions(); track kpi.id) {
+              <option [value]="kpi.id">{{ kpi.name }}</option>
+              }
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <button type="button" class="btn btn-secondary btn-sm" (click)="clearLinks()">Clear links</button>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Owner</label>
+          <select class="form-control" formControlName="ownerId">
+            <option value="">Select owner</option>
+            @for (owner of ownerFormOptions(); track owner.id) {
+            <option [value]="owner.id">{{ owner.label }}</option>
+            }
+          </select>
+          @if (form.controls.ownerId.invalid && form.controls.ownerId.touched) {
+          <p class="form-error">Owner is required.</p>
+          }
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Priority</label>
+            <select class="form-control" formControlName="priority">
+              <option value="Low">Low</option>
+              <option value="Medium">Medium</option>
+              <option value="High">High</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Start Date</label>
+            <input class="form-control" type="date" formControlName="startDate" [attr.min]="todayIso" />
+            @if (form.controls.startDate.invalid && form.controls.startDate.touched) {
+            <p class="form-error">
+              @if (form.controls.startDate.hasError('required')) {
+              Start date is required.
+              } @else if (form.controls.startDate.hasError('pastStartDate')) {
+              Start date cannot be before today.
+              }
+            </p>
+            }
+          </div>
+          <div class="form-group">
+            <label class="form-label">End Date</label>
+            <input class="form-control" type="date" formControlName="endDate" />
+            @if (form.controls.endDate.hasError('required') && form.controls.endDate.touched) {
+            <p class="form-error">End date is required.</p>
+            }
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Planned Budget (ETB)</label>
+            <input class="form-control" type="number" formControlName="budget" placeholder="0" />
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Resource Requirements</label>
+            <input class="form-control" type="text" formControlName="resources"
+              placeholder="People, equipment, or other resources needed" />
+          </div>
+        </div>
+
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-secondary" (click)="onCancelEdit()">Cancel</button>
+      <button type="submit" form="initiative-form" class="btn btn-primary" [disabled]="form.invalid || submitting()">
+        {{ submitting() ? 'Saving…' : (editingId() ? 'Update Initiative' : 'Save Initiative') }}
+      </button>
+    </div>
+  </div>
+</div>
+}
+
+@if (loadError()) {
+<div class="alert alert-danger" role="alert">{{ loadError() }}</div>
+}
+
+@else {
+<div class="stats-row mb-4">
+  <div class="stat-card">
+    <span class="stat-label">Total initiatives</span>
+    <span class="stat-value">{{ stats().total }}</span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-label">In progress</span>
+    <span class="stat-value">{{ stats().inProgress }}</span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-label">Completed</span>
+    <span class="stat-value">{{ stats().completed }}</span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-label">Overdue</span>
+    <span class="stat-value stat-value-danger">{{ stats().overdue }}</span>
+  </div>
+</div>
+
+<div class="initiative-grid">
+  @for (initiative of filteredRows(); track initiative.id) {
+  <div class="card initiative-card">
+    <div class="initiative-card-header">
+      <h3 class="initiative-name">{{ initiative.name }}</h3>
+      <div class="initiative-card-actions">
+        <span class="badge" [class]="statusClass(initiative.status)">{{ statusLabel(initiative.status) }}</span>
+        <button type="button" class="kebab-btn" (click)="toggleMenu(initiative.id, $event)" aria-label="Actions"><svg
+            lucideIcon="ellipsis-vertical" size="16"></svg></button>
+        @if (openMenuId() === initiative.id) {
+        <div class="kebab-menu" (click)="$event.stopPropagation()">
+          <button type="button" (click)="onView(initiative)"><svg lucideIcon="eye" size="14"></svg> View</button>
+          @if (canEdit() && !initiative.isClosed) {
+          <button type="button" (click)="onEdit(initiative)"><svg lucideIcon="square-pen" size="14"></svg> Edit</button>
+          }
+          @if (canDelete() && !initiative.isClosed) {
+          <button type="button" class="danger" (click)="onDelete(initiative.id)"><svg lucideIcon="trash"
+              size="14"></svg> Delete</button>
+          }
+        </div>
+        }
+      </div>
+    </div>
+
+    <div class="initiative-meta">
+      <div>
+        Owner · {{ initiative.ownerName || ownerName(initiative.ownerId ?? '') }}
+        @if (initiative.isClosed) {
+        · <span class="badge badge-neutral">Closed</span>
+        }
+        @if (initiative.isOverdue) {
+        · <span class="badge badge-danger">Overdue</span>
+        }
+      </div>
+
+      @if (initiative.startDate || initiative.endDate) {
+      <div class="initiative-dates text-muted">
+        {{ initiative.startDate | date: 'MMM d, y' }} – {{ initiative.endDate | date: 'MMM d, y' }}
+      </div>
+      }
+    </div>
+
+
+    <div class="initiative-progress">
+      <div class="d-flex justify-between">
+        <span class="progress-label">Progress</span>
+        <span class="progress-value">{{ progressFor(initiative) }}%</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" [class]="ragClassFor(initiative)" [style.width.%]="progressFor(initiative)"></div>
+      </div>
+      @if (initiative.milestoneCount > 0 && !weightsAreValid(initiative)) {
+      <p class="form-error">
+        Milestone weights total {{ initiative.totalMilestoneWeight }}% — they must total 100%.
+      </p>
+      }
+    </div>
+
+    <div class="initiative-budget">
+      @if (initiative.budgetPosition.isBudgetTracked) {
+      <div class="d-flex justify-between">
+        <span class="value-planned">Planned: {{ initiative.budgetPosition.plannedBudget | number }} ETB</span>
+        <span class="value-actual">Actual: {{ initiative.budgetPosition.actualExpenditure | number }} ETB</span>
+      </div>
+      <div class="d-flex justify-between">
+        <span>Variance: {{ budgetVariance(initiative) | number }} ETB</span>
+        <span [class.over-budget]="isOverBudget(initiative)">
+          Utilization: {{ budgetUtilization(initiative) | number }}%
+        </span>
+      </div>
+      } @else {
+      <span class="muted">No budget configured</span>
+      }
+    </div>
+
+    <div class="initiative-card-footer">
+      <button type="button" class="btn btn-secondary btn-sm" (click)="onView(initiative)"><svg lucideIcon="eye"
+          size="14"></svg> View</button>
+      @if (canEdit() && !initiative.isClosed) {
+      <button type="button" class="btn btn-secondary btn-sm" (click)="onEdit(initiative)"><svg lucideIcon="square-pen"
+          size="14"></svg> Edit</button>
+      }
+      @if (canDelete() && !initiative.isClosed) {
+      <button type="button" class="btn btn-icon-danger btn-sm" (click)="onDelete(initiative.id)"
+        aria-label="Delete"><svg lucideIcon="trash" size="15"></svg></button>
+      }
+    </div>
+  </div>
+  } @empty {
+  <p class="empty-state">No initiatives match the current filters.</p>
+  }
+</div>
+
+@if (totalCount() > 0) {
+<div class="pagination">
+  <span class="muted">
+    Showing {{ rows().length }} of {{ totalCount() }} initiatives
+  </span>
+  <div class="pagination-controls">
+    <button type="button" class="btn btn-secondary btn-sm" [disabled]="page() <= 1" (click)="goToPage(page() - 1)">
+      <svg lucideIcon="chevron-left" size="14"></svg> Previous
+    </button>
+    <span>Page {{ page() }} of {{ totalPages() || 1 }}</span>
+    <button type="button" class="btn btn-secondary btn-sm" [disabled]="!totalPages() || page() >= totalPages()"
+      (click)="goToPage(page() + 1)">
+      Next <svg lucideIcon="chevron-right" size="14"></svg>
+    </button>
+  </div>
+</div>
+}
+}

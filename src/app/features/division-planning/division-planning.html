@@ -1,0 +1,649 @@
+<div class="dp-page">
+  <!-- Header -->
+  <header class="dp-header">
+    <div>
+      <h1 class="dp-title">Division planning</h1>
+      <p class="dp-subtitle">Align division goals to the corporate scorecard · {{ divisionName() }}</p>
+    </div>
+    <div class="dp-header-actions">
+      @if (planStatus() === 'Finalized') {
+        <span class="dp-status-badge is-finalized">
+          <span class="dp-status-dot" aria-hidden="true"></span>
+          Finalized{{ finalizedLabel() ? ' · ' + finalizedLabel() : '' }}
+        </span>
+      }
+      @if (canFinalize()) {
+        <button type="button" class="btn btn-primary dp-finalize-btn" [disabled]="finalizing()" (click)="finalizePlan()">
+          @if (finalizing()) {
+            <span class="dp-spinner" aria-hidden="true"></span>
+            Finalizing…
+          } @else {
+            <svg aria-hidden="true" lucideIcon="briefcase" size="15"></svg>
+            Finalize plan
+          }
+        </button>
+      }
+      <div class="dp-export-menu">
+        <div class="dp-export-group">
+          <button type="button" class="btn btn-secondary dp-export-btn" [disabled]="exporting()" (click)="exportPlan('pdf')">
+            @if (exporting()) {
+              <span class="dp-spinner" aria-hidden="true"></span>
+            } @else {
+              <svg aria-hidden="true" lucideIcon="file-down" size="14"></svg>
+            }
+            Export plan
+          </button>
+          <button type="button" class="dp-export-caret" [disabled]="exporting()" (click)="toggleExportMenu()" aria-label="Export format" [class.is-open]="exportMenuOpen()">
+            <svg aria-hidden="true" lucideIcon="chevron-down" size="14" strokeWidth="3"></svg>
+          </button>
+        </div>
+        @if (exportMenuOpen()) {
+          <div class="dp-export-options" role="menu">
+            <button type="button" class="dp-export-option" role="menuitem" (click)="exportPlan('pdf', $event)">
+              <svg aria-hidden="true" lucideIcon="file-down" size="14"></svg>
+              Export as PDF
+            </button>
+            <button type="button" class="dp-export-option" role="menuitem" (click)="exportPlan('xlsx', $event)">
+              <svg aria-hidden="true" lucideIcon="file-spreadsheet" size="14"></svg>
+              Export as Excel (.xlsx)
+            </button>
+          </div>
+        }
+      </div>
+    </div>
+  </header>
+
+  <!-- Stepper -->
+  <ol class="dp-steps" aria-label="Planning progress">
+    @for (step of steps; track step.id) {
+      <li class="dp-step" [class.is-done]="stepState(step.id) === 'done'" [class.is-active]="stepState(step.id) === 'active'">
+        <span class="dp-step-indicator" [attr.aria-current]="stepState(step.id) === 'active' ? 'step' : null">
+          @if (stepState(step.id) === 'done') {
+            <svg aria-hidden="true" lucideIcon="check" size="14" strokeWidth="3"></svg>
+          } @else {
+            {{ step.id }}
+          }
+        </span>
+        <span class="dp-step-label">{{ step.label }}</span>
+      </li>
+      @if (!$last) {
+        <li class="dp-step-connector" [class.is-complete]="stepState(step.id) === 'done'" aria-hidden="true"></li>
+      }
+    }
+  </ol>
+
+  <!-- Division / scorecard filter -->
+  <div class="dp-filters">
+    <label class="dp-filter">
+      <span class="dp-filter-label">Scorecard</span>
+      <select class="form-control dp-filter-control" [ngModel]="scorecardFilter()" (ngModelChange)="scorecardFilter.set($event); onScorecardChange()">
+        @if (scorecards().length === 0) {
+          <option value="">No scorecards</option>
+        }
+        @for (s of scorecards(); track s.id) {
+          <option [value]="s.id">{{ s.name }}{{ s.fiscalYearName ? ' · ' + s.fiscalYearName : '' }}</option>
+        }
+      </select>
+    </label>
+    <label class="dp-filter">
+      <span class="dp-filter-label">Division</span>
+      <select class="form-control dp-filter-control" [ngModel]="divisionFilter()" (ngModelChange)="divisionFilter.set($event); onDivisionChange()">
+        <option value="">Select a division</option>
+        @for (d of divisions(); track d.id) {
+          <option [value]="d.id">{{ d.name }}</option>
+        }
+      </select>
+    </label>
+  </div>
+
+  <!-- Two-column plan area -->
+  <div class="dp-columns">
+    <!-- Corporate goals checklist -->
+    <section class="card dp-panel dp-col">
+      <div class="dp-panel-head">
+        <h2 class="dp-panel-title">
+          <svg class="dp-panel-icon" aria-hidden="true" lucideIcon="target" size="18"></svg>
+          Corporate goals this division contributes to
+        </h2>
+        <p class="dp-cg-summary">
+          {{ selectedCorporateGoalCount() }} of {{ corporateGoals().length }} selected · tick a goal to link it to this division’s plan
+        </p>
+      </div>
+
+      @if (loading()) {
+        <div class="dp-loading">Loading corporate goals…</div>
+      } @else if (corporateGoals().length === 0) {
+        <p class="dp-empty">No corporate goals in this scorecard yet.</p>
+      } @else {
+        <div class="dp-goal-list">
+          @for (goal of corporateGoals(); track goal.id) {
+            <label class="dp-goal-row" [class.is-locked]="!canEdit()">
+              <input
+                type="checkbox"
+                [checked]="selectedIds().has(goal.id)"
+                [disabled]="!canEdit()"
+                (change)="toggleContribution(goal.id, $any($event.target).checked)"
+              />
+              <span class="dp-goal-row-meta">
+                <span class="dp-goal-row-name">{{ goal.name }}</span>
+                @if (goal.description) {
+                  <span class="dp-goal-row-desc">{{ goal.description }}</span>
+                }
+              </span>
+            </label>
+          }
+        </div>
+
+        @if (canEdit()) {
+          <div class="dp-cg-actions">
+            <span class="dp-cg-dirty-hint" [class.is-dirty]="selectionDirty()">
+              @if (selectionDirty()) {
+                Save your changes to link or remove corporate goals.
+              } @else {
+                All changes saved.
+              }
+            </span>
+            <button type="button" class="btn btn-primary" [disabled]="!selectionDirty() || crudSubmitting()" (click)="saveSelection()">
+              @if (crudSubmitting()) {
+                <span class="dp-spinner" aria-hidden="true"></span>
+                Saving…
+              } @else {
+                Save selection
+              }
+            </button>
+            @if (selectionDirty()) {
+              <button type="button" class="btn btn-secondary" [disabled]="crudSubmitting()" (click)="revertSelection()">Revert</button>
+            }
+          </div>
+        }
+      }
+    </section>
+
+    <!-- Division goals & KPIs -->
+    <section class="card dp-panel dp-col">
+      <div class="dp-panel-head">
+        <h2 class="dp-panel-title">
+          <svg class="dp-panel-icon" aria-hidden="true" lucideIcon="git-fork" size="18"></svg>
+          Division goals &amp; KPIs
+        </h2>
+        <p class="dp-cg-summary">Weighted goals across this division’s plan, each with its own KPIs.</p>
+      </div>
+
+      @if (loading()) {
+        <div class="dp-loading">Loading division goals…</div>
+      } @else if (divisionGoals().length === 0) {
+        <p class="dp-empty">No division goals yet. Add one to start building the plan.</p>
+      } @else {
+        <div class="dp-goal-panels">
+          @for (goal of divisionGoals(); track goal.id) {
+            <div class="dp-goal-card" [class.is-locked]="!canEdit()">
+              <div class="dp-goal-head">
+                <div class="dp-goal-panel-meta">
+                  <p class="dp-goal-name">{{ goal.name }}</p>
+                  <p class="dp-goal-sub">
+                    Weight {{ goal.weight }}%
+                    @if (goal.score != null) { · Score {{ goal.score }}% }
+                    @if (goal.parentGoalName) { · {{ goal.parentGoalName }} }
+                  </p>
+                </div>
+                <div class="dp-goal-actions">
+                  @if (goal.status) {
+                    <span class="dp-status-pill" [class.is-red]="goal.status === 'red'" [class.is-amber]="goal.status === 'amber'">
+                      <span class="dp-status-dot" aria-hidden="true"></span>
+                      {{ statusLabel(goal.status) }}
+                    </span>
+                  }
+                  @if (canEdit()) {
+                    <button type="button" class="dp-icon-btn" title="Edit goal" (click)="openEditGoal(goal)"><svg aria-hidden="true" lucideIcon="square-pen" size="14"></svg>
+                    </button>
+                    <button type="button" class="dp-icon-btn dp-icon-btn-danger" title="Delete goal" (click)="deleteGoal(goal)"><svg aria-hidden="true" lucideIcon="trash" size="14"></svg>
+                    </button>
+                  }
+                </div>
+              </div>
+
+              <div class="dp-kpi-chips">
+                @for (kpi of goal.kpis; track kpi.id) {
+                  <span class="dp-kpi-chip" [class.is-locked]="!canEdit()" (click)="canEdit() && openEditKpi(kpi, goal)">
+                    {{ kpi.name }}
+                    @if (kpi.score != null) { <span class="dp-kpi-chip-score"> · {{ kpi.score }}%</span> }
+                    @if (kpi.divisionOwnerName) {
+                      <span class="dp-kpi-chip-owner">@if (kpi.score != null) { · } {{ kpi.divisionOwnerName }}</span>
+                    }
+                    @if (kpi.status) {
+                      <span class="dp-status-dot" [class.is-red]="kpi.status === 'red'" [class.is-amber]="kpi.status === 'amber'" aria-hidden="true"></span>
+                    }
+                    @if (canEdit()) {
+                      <span class="dp-kpi-chip-remove" role="button" title="Delete KPI" (click)="$event.stopPropagation(); deleteKpi(kpi)"><svg aria-hidden="true" lucideIcon="x" size="10" strokeWidth="3"></svg>
+                      </span>
+                    }
+                  </span>
+                }
+                @if (canEdit()) {
+                  <button type="button" class="dp-add-kpi" (click)="openCreateKpi(goal)"><svg aria-hidden="true" lucideIcon="plus" size="14" strokeWidth="3"></svg>
+                    Add KPI
+                  </button>
+                }
+              </div>
+
+              @if (goal.contributionDescription) {
+                <p class="dp-goal-contribution">{{ goal.contributionDescription }}</p>
+              }
+            </div>
+          }
+        </div>
+      }
+
+      @if (canEdit()) {
+        <button type="button" class="dp-add-goal" (click)="openCreateGoal()"><svg aria-hidden="true" lucideIcon="plus" size="14" strokeWidth="3"></svg>
+          Add division goal
+        </button>
+      }
+    </section>
+  </div>
+
+  @if (loadError(); as error) {
+    <div class="dp-error" role="alert">{{ error }}</div>
+  }
+
+  <!-- Division performance report -->
+  <section class="card dp-report">
+    <div class="dp-report-header">
+      <div class="dp-report-title">
+        <svg class="dp-report-icon" aria-hidden="true" lucideIcon="file-text" size="20"></svg>
+        <h2>Division performance report</h2>
+      </div>
+      <div class="dp-report-filters">
+        <select class="form-control dp-report-period" aria-label="Report period" [ngModel]="reportPeriod()" (ngModelChange)="reportPeriod.set($event); onPeriodChange()">
+          @for (option of periodOptions(); track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+        @if (reportPeriod() === 'Range') {
+          <label class="dp-range-filter">
+            <span>From</span>
+            <select class="form-control" aria-label="Range from month" [ngModel]="rangeFromMonth()" (ngModelChange)="onRangeChange($event, rangeToMonth())">
+              @for (m of entryMonths(); track m.month) {
+                <option [value]="m.month">{{ m.label }}</option>
+              }
+            </select>
+          </label>
+          <label class="dp-range-filter">
+            <span>To</span>
+            <select class="form-control" aria-label="Range to month" [ngModel]="rangeToMonth()" (ngModelChange)="onRangeChange(rangeFromMonth(), $event)">
+              @for (m of entryMonths(); track m.month) {
+                <option [value]="m.month">{{ m.label }}</option>
+              }
+            </select>
+          </label>
+        }
+      </div>
+    </div>
+
+    <div class="dp-report-body">
+      <div class="dp-donut-wrap">
+        <div class="dp-donut" [style.width.px]="donutSize" [style.height.px]="donutSize">
+          <svg class="dp-donut-svg" viewBox="0 0 42 42" aria-hidden="true">
+            @for (segment of donutSegments(); track $index) {
+              <circle
+                cx="21"
+                cy="21"
+                r="15.915"
+                fill="transparent"
+                stroke-width="20"
+                [attr.stroke]="segment.color"
+                [attr.stroke-dasharray]="segment.dash + ' ' + segment.gap"
+                [attr.stroke-dashoffset]="segment.offset"
+              />
+            }
+          </svg>
+          <div class="dp-donut-center">
+            <span class="dp-donut-value">{{ overallScore() }}<small>%</small></span>
+            <span class="dp-donut-label">Overall</span>
+          </div>
+        </div>
+        <p class="dp-donut-caption">Weighted overall score of the division plan for the selected period.</p>
+      </div>
+
+      <div class="dp-table-wrap">
+        <table class="dp-table">
+          <thead>
+            <tr>
+              <th>Division goal</th>
+              <th>Weight</th>
+              <th class="dp-align-right">Score</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            @if (reportGoalRows().length === 0) {
+              <tr>
+                <td colspan="4" class="dp-empty-cell">No division goals yet.</td>
+              </tr>
+            } @else {
+              @for (row of reportGoalRows(); track row.name) {
+                <tr>
+                  <td class="dp-cell-goal">{{ row.name }}</td>
+                  <td>{{ row.weight }}%</td>
+                  <td class="dp-align-right dp-cell-score" [class.is-positive]="row.status === 'green'" [class.is-negative]="row.status === 'red'">
+                    {{ row.score }}%
+                  </td>
+                  <td>
+                    @if (row.status) {
+                      <span class="dp-status-badge" [class.is-red]="row.status === 'red'" [class.is-amber]="row.status === 'amber'">
+                        <span class="dp-status-dot" aria-hidden="true"></span>
+                        {{ statusLabel(row.status) }}
+                      </span>
+                    } @else {
+                      <span class="dp-cell-muted">—</span>
+                    }
+                  </td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- Division performance entry (available once the plan is finalized) -->
+  @if (planStatus() === 'Finalized') {
+    <section class="card dp-entry">
+      <div class="dp-report-header">
+        <div class="dp-report-title">
+          <svg class="dp-report-icon" aria-hidden="true" lucideIcon="pencil-line" size="20"></svg>
+          <h2>Division performance entry</h2>
+        </div>
+        <select class="form-control dp-report-period" aria-label="Fiscal month" [ngModel]="entryMonth()" (ngModelChange)="entryMonth.set($event); onEntryMonthChange()">
+          @for (m of entryMonths(); track m.month) {
+            <option [ngValue]="m.month">{{ m.label }}</option>
+          }
+        </select>
+      </div>
+
+      @if (!isEntryOpen(entryMonth())) {
+        <p class="dp-entry-note">This period is locked or has no entry window yet. Actuals can only be entered for open periods.</p>
+      }
+
+      @if (actualRows().length === 0) {
+        <p class="dp-empty">No division KPIs exist for performance entry.</p>
+      } @else {
+        <div class="dp-entry-table">
+          <div class="dp-entry-grid dp-entry-grid-head">
+            <span>Division KPI</span>
+            <span class="dp-align-right">Target</span>
+            <span>Actual value</span>
+            <span>Comment / evidence</span>
+            <span class="dp-align-right"></span>
+          </div>
+          @for (row of actualRows(); track row.kpi.id) {
+            <div class="dp-entry-grid">
+              <div class="dp-entry-kpi">
+                <span class="dp-entry-kpi-name">{{ row.kpi.name }}</span>
+                <span class="dp-entry-kpi-meta">
+                  {{ row.kpi.unit || '—' }} · {{ row.kpi.optimizationType ?? 'Maximize' }}
+                  @if (row.goal.parentGoalName) {
+                    · <svg lucideIcon="arrow-right" size="12"></svg> {{ row.goal.parentGoalName }}
+                  }
+                </span>
+              </div>
+              <div class="dp-align-right dp-entry-target">
+                <strong>{{ row.kpi.target != null ? row.kpi.target : '—' }}</strong>
+              </div>
+              <div>
+                <input
+                  class="form-control dp-entry-input"
+                  type="number"
+                  [value]="entryValue(row.kpi.id)"
+                  [disabled]="!isEntryOpen(entryMonth())"
+                  placeholder="Actual"
+                  (input)="setEntryValue(row.kpi.id, $any($event.target).value)"
+                />
+              </div>
+              <div>
+                <input
+                  class="form-control dp-entry-input"
+                  type="text"
+                  [value]="entryNote(row.kpi.id)"
+                  [disabled]="!isEntryOpen(entryMonth())"
+                  placeholder="Comment / evidence"
+                  (input)="setEntryNote(row.kpi.id, $any($event.target).value)"
+                />
+              </div>
+              <div class="dp-align-right">
+                @if (isSavingActual(row.kpi.id)) {
+                  <span class="dp-entry-saving">Saving…</span>
+                } @else {
+                  <button type="button" class="btn btn-primary" [disabled]="!canSaveEntry(row.kpi.id)" (click)="saveActual(row.kpi.id)">
+                    Save
+                  </button>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      }
+    </section>
+  }
+
+  <!-- Goal modal -->
+  @if (goalModalOpen()) {
+    <div class="modal-backdrop" (click)="closeGoalModal()">
+      <div class="modal-dialog" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>{{ goalEditingId() ? 'Edit division goal' : 'Add division goal' }}</h3>
+          <button type="button" class="close-btn" (click)="closeGoalModal()" aria-label="Close"><svg lucideIcon="x" size="18"></svg></button>
+        </div>
+        <form [formGroup]="goalForm" (ngSubmit)="submitGoal()">
+          <div class="modal-body">
+            <div class="form-group">
+              <label class="form-label" for="dp-goal-name">Goal name</label>
+              <input id="dp-goal-name" class="form-control" formControlName="name" placeholder="e.g. Grow trading volume" />
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="dp-goal-parent">Corporate goal</label>
+              <select id="dp-goal-parent" class="form-control" formControlName="parentGoalId">
+                <option value="" disabled>Select a corporate goal</option>
+                @for (contribution of selectedCorporateGoals(); track contribution.id) {
+                  <option [value]="contribution.id">{{ contribution.name }}</option>
+                }
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="dp-goal-weight">Weight (%)</label>
+              <input id="dp-goal-weight" class="form-control" type="number" min="0" max="100" formControlName="weight" />
+              <p class="weight-remaining" [class.weight-over]="goalWeightRemaining() < 0">
+                {{ goalWeightRemaining() }}% remaining across division goals
+              </p>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="dp-goal-desc">Description</label>
+              <textarea id="dp-goal-desc" class="form-control" rows="3" formControlName="description" placeholder="Optional"></textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="dp-goal-contribution">How does this goal contribute to the corporate goal?</label>
+              <textarea id="dp-goal-contribution" class="form-control" rows="2" formControlName="contributionDescription" placeholder="Optional — e.g. expands trade volume in new corridors"></textarea>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" (click)="closeGoalModal()">Cancel</button>
+            <button type="submit" class="btn btn-primary" [disabled]="goalForm.invalid || crudSubmitting()">
+              {{ goalEditingId() ? 'Save changes' : 'Add goal' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+
+  <!-- KPI modal -->
+  @if (kpiModalOpen()) {
+    <div class="modal-backdrop" (click)="closeKpiModal()">
+      <div class="modal-dialog modal-lg" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>{{ kpiEditingId() ? 'Edit division KPI' : 'Add division KPI' }}</h3>
+          <button type="button" class="close-btn" (click)="closeKpiModal()" aria-label="Close"><svg lucideIcon="x" size="18"></svg></button>
+        </div>
+        <form [formGroup]="kpiForm" (ngSubmit)="submitKpi()">
+          <div class="modal-body">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="dp-kpi-name">KPI name</label>
+                <input id="dp-kpi-name" class="form-control" formControlName="name" placeholder="e.g. Orders executed" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="dp-kpi-unit">Unit</label>
+                <input id="dp-kpi-unit" class="form-control" formControlName="unit" placeholder="e.g. %" />
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="dp-kpi-owner">Owner (division) *</label>
+                <select id="dp-kpi-owner" class="form-control" formControlName="divisionOwnerId">
+                  @for (d of divisions(); track d.id) {
+                    <option [value]="d.id">{{ d.name }}</option>
+                  }
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="dp-kpi-type">KPI type</label>
+                <select id="dp-kpi-type" class="form-control" formControlName="kpiType">
+                  <option value="Leading">Leading</option>
+                  <option value="Lagging">Lagging</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="dp-kpi-optimization">Optimization</label>
+                <select id="dp-kpi-optimization" class="form-control" formControlName="optimizationType">
+                  <option value="Maximize">Maximize</option>
+                  <option value="Minimize">Minimize</option>
+                  <option value="ExactHit">Exact hit</option>
+                  <option value="Binary">Binary</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="dp-kpi-source">Data source</label>
+                <select id="dp-kpi-source" class="form-control" formControlName="dataSource">
+                  <option value="Manual">Manual</option>
+                  <option value="Automated">Automated</option>
+                  <option value="Calculated">Calculated</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="dp-kpi-weight">Weight (%)</label>
+                <input id="dp-kpi-weight" class="form-control" type="number" min="0" max="100" formControlName="weight" />
+                <p class="weight-remaining" [class.weight-over]="kpiWeightRemaining() < 0">
+                  {{ kpiWeightRemaining() }}% remaining for this goal
+                </p>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Cumulative</label>
+                <label class="dp-check">
+                  <input type="checkbox" formControlName="isCumulative" />
+                  <span>Counts cumulatively</span>
+                </label>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="dp-kpi-baseline">Baseline</label>
+                <input id="dp-kpi-baseline" class="form-control" type="number" formControlName="baseline" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="dp-kpi-min">Min value</label>
+                <input id="dp-kpi-min" class="form-control" type="number" formControlName="minValue" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="dp-kpi-max">Max value</label>
+                <input id="dp-kpi-max" class="form-control" type="number" formControlName="maxValue" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="dp-kpi-desc">Description</label>
+              <textarea id="dp-kpi-desc" class="form-control" rows="2" formControlName="description" placeholder="Optional"></textarea>
+            </div>
+
+            <!-- FR-904: annual / quarterly / monthly targets, mirroring the corporate rule set -->
+            <div class="kpi-targets">
+              <div class="kpi-targets-head">
+                <h4>Targets</h4>
+                <span class="kpi-targets-hint">
+                  Optional. Once any value is entered the annual target is required and every quarterly/monthly
+                  value must reconcile with it.
+                </span>
+              </div>
+
+              <div class="form-group kpi-annual-group">
+                <label class="form-label" for="dp-kpi-annual">Annual target</label>
+                <input
+                  id="dp-kpi-annual"
+                  class="form-control kpi-annual-input"
+                  type="number"
+                  inputmode="decimal"
+                  placeholder="&mdash;"
+                  [value]="kpiAnnualTarget() ?? ''"
+                  (input)="onKpiAnnualChange($event)"
+                />
+                @if (kpiAnnualTarget() === null && kpiTargetsProvided()) {
+                  <p class="kpi-target-error">Annual target is required.</p>
+                }
+              </div>
+
+              <div class="kpi-quarter-grid">
+                @for (q of kpiQuarterIndexes; track q) {
+                  <div class="kpi-quarter-box" [class.invalid]="kpiQuarterError(q)">
+                    <div class="kpi-quarter-head">
+                      <span class="kpi-quarter-name">{{ kpiQuarterLabel(q) }}</span>
+                      <label class="kpi-field-label kpi-quarter-edit">
+                        <span>Quarter target</span>
+                        <input
+                          type="number"
+                          inputmode="decimal"
+                          [value]="kpiQuarterDisplay(q)"
+                          (input)="onKpiQuarterChange(q, $event)"
+                        />
+                      </label>
+                    </div>
+                    <div class="kpi-month-row">
+                      @for (mi of monthsOfKpiQuarter(q); track mi) {
+                        <label class="kpi-month-box">
+                          <span>{{ kpiMonthLabel(mi + 1) }}</span>
+                          <input
+                            type="number"
+                            inputmode="decimal"
+                            [value]="kpiMonthly()[mi]"
+                            (input)="onKpiMonthChange(mi, $event)"
+                          />
+                        </label>
+                      }
+                    </div>
+                    @if (kpiQuarterError(q); as err) {
+                      <p class="kpi-target-error">{{ err }}</p>
+                    } @else {
+                      <p class="kpi-quarter-sum">
+                        &Sigma; months = {{ kpiQuarterSum(q) }} &middot; target = {{ kpiQuarterDisplay(q) }}
+                      </p>
+                    }
+                  </div>
+                }
+              </div>
+
+              @if (kpiTargetsError(); as err) {
+                <p class="kpi-target-error kpi-targets-error">{{ err }}</p>
+              }
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" (click)="closeKpiModal()">Cancel</button>
+            <button type="submit" class="btn btn-primary" [disabled]="kpiForm.invalid || crudSubmitting() || !kpiTargetsValid()">
+              {{ kpiEditingId() ? 'Save changes' : 'Add KPI' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+</div>

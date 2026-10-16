@@ -1,0 +1,790 @@
+@if (loading()) {
+    <p>Loading initiative...</p>
+  } @else if (loadError() || !initiative()) {
+    <div class="alert alert-danger" role="alert">{{ loadError() || 'Initiative not found.' }}</div>
+    <button type="button" class="btn btn-secondary" (click)="goBack()">Back to Initiatives</button>
+  } @else {
+    <div class="detail-header d-flex align-center justify-between mb-4">
+      <div class="d-flex align-center detail-title-row">
+        <button type="button"
+          class="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 transition-colors"
+          (click)="goBack()" aria-label="Back">
+          <svg lucideIcon="arrow-left" size="18"></svg>
+          <span>Back</span>
+        </button>
+        <div>
+          <p class="page-subtitles">Initiative detail</p>
+          <h1 class="page-title">{{ initiative()!.name }}</h1>
+        </div>
+      </div>
+
+      <div class="d-flex align-center detail-header-actions">
+        <span class="badge" [class]="statusClass(initiative()!.status)">{{ statusLabel(initiative()!.status) }}</span>
+        @if (initiative()!.isClosed) {
+          <span class="badge badge-neutral">Closed</span>
+          @if (canClose()) {
+            <button type="button" class="btn btn-secondary" (click)="openReopenModal()">Reopen</button>
+          }
+        } @else {
+          @if (canConfirmCompletion()) {
+            <button
+              type="button"
+              class="btn btn-primary"
+              (click)="confirmCompletion()"
+              [disabled]="!canCloseNow()"
+              [attr.title]="!canCloseNow() ? (notReadyReason() || 'Delivery is not complete') : null"
+            >
+               Confirm completion
+            </button>
+          }
+          @if (canManageLifecycle()) {
+            @if (initiative()!.status === 'OnHold') {
+              <button type="button" class="btn btn-secondary" (click)="resumeInitiative()">Resume</button>
+            } @else if (initiative()!.status === 'NotStarted' || initiative()!.status === 'InProgress') {
+              <button type="button" class="btn btn-secondary" (click)="openHoldModal()">Put on hold</button>
+            }
+          }
+          @if (canCancelInitiative() && (initiative()!.status === 'NotStarted' || initiative()!.status === 'InProgress' || initiative()!.status === 'OnHold')) {
+            <button type="button" class="btn btn-secondary" (click)="openCancelModal()">Cancel initiative</button>
+          }
+        }
+      </div>
+    </div>
+
+    @if (isReadOnly()) {
+      <div class="alert alert-warning" role="alert">
+        This initiative is closed and read-only. Reopen it to make corrections.
+      </div>
+    }
+
+    @if (initiative()!.isClosed) {
+      <div class="card mb-4">
+        <div class="card-header">
+          <h2 class="card-title">Closure record</h2>
+        </div>
+        <div class="card-body">
+          <dl class="closure-grid">
+            <div>
+              <dt>Closed at</dt>
+              <dd>{{ initiative()!.closedAtUtc | date: 'MMM d, y HH:mm' }}</dd>
+            </div>
+            <div>
+              <dt>Closed by</dt>
+              <dd>{{ ownerName(initiative()!.closedByUserId!) }}</dd>
+            </div>
+            <div>
+              <dt>Actual end date</dt>
+              <dd>{{ initiative()!.actualEndDate | date: 'MMM d, y' }}</dd>
+            </div>
+            <div>
+              <dt>Final expenditure</dt>
+              <dd>{{ initiative()!.actualExpenditure | number }} ETB</dd>
+            </div>
+            <div class="closure-full">
+              <dt>Outcome summary</dt>
+              <dd>{{ initiative()!.outcomeSummary || '—' }}</dd>
+            </div>
+            <div class="closure-full">
+              <dt>Lessons learned</dt>
+              <dd>{{ initiative()!.lessonsLearned || '—' }}</dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+    }
+
+    <div class="stats-row mb-4">
+      <div class="stat-card">
+        <span class="stat-label">Overall progress</span>
+        <span class="stat-value" [class]="progressRagClass()">{{ progress() }}%</span>
+        <div class="progress-track" role="progressbar" aria-label="Overall progress"
+             aria-valuemin="0" aria-valuemax="100" [attr.aria-valuenow]="progress()"
+             [attr.aria-valuetext]="progress() + '% overall progress, ' + progressRagLabel()">
+          <div class="progress-fill" [class]="progressRagClass()" [style.width.%]="progress()"></div>
+        </div>
+        <span class="stat-footnote" [class]="progressRagClass()">{{ progressRagLabel() }}</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Planned budget</span>
+        <span class="stat-value value-planned">{{ formatCompact(initiative()!.budget) }} ETB</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Actual spend</span>
+        <span class="stat-value value-actual">{{ formatCompact(initiative()!.actualExpenditure) }} ETB</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Budget utilization</span>
+        @if (budgetPosition()?.isBudgetTracked) {
+          <span class="stat-value" [class.stat-value-danger]="budgetPosition()?.isOverBudget">
+            {{ budgetPosition()?.budgetUtilizationPercent | number: '1.0-2' }}%
+          </span>
+        } @else {
+          <span class="stat-value stat-value-sm">Not tracked</span>
+        }
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Timeline</span>
+        <span class="stat-value stat-value-sm">
+          {{ initiative()!.startDate | date: 'MMM d, y' }} – {{ initiative()!.endDate | date: 'MMM d, y' }}
+        </span>
+      </div>
+    </div>
+
+    <div class="tabs mb-4">
+      <button type="button" class="tab" [class.active]="activeTab() === 'milestones'" (click)="setTab('milestones')">Milestones</button>
+      <button type="button" class="tab" [class.active]="activeTab() === 'budget'" (click)="setTab('budget')">Budget tracking</button>
+      <button type="button" class="tab" [class.active]="activeTab() === 'progress'" (click)="setTab('progress')">Progress history</button>
+      <!-- <button type="button" class="tab" [class.active]="activeTab() === 'dependencies'" (click)="setTab('dependencies')">Dependencies</button> -->
+      <button type="button" class="tab" [class.active]="activeTab() === 'closure'" (click)="setTab('closure')">Closure</button>
+    </div>
+
+    @if (activeTab() === 'milestones') {
+      <div class="card mb-4">
+        <div class="card-header d-flex align-center justify-between">
+          <h2 class="card-title">Milestones</h2>
+          @if (canManageMilestones() && !isReadOnly()) {
+            <button type="button" class="btn btn-primary" (click)="openMilestoneModal()"><svg lucideIcon="plus" size="16"></svg> Add milestone</button>
+          }
+        </div>
+        <div class="card-body">
+          @if (loadingMilestones()) {
+            <p>Loading milestones...</p>
+          } @else {
+            <table class="milestone-table">
+              <thead>
+                <tr>
+                  <th>Milestone</th>
+                  <th>Due Date</th>
+                  <th>Weight</th>
+                  <th>Completion</th>
+                  <th>Contribution</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (milestone of milestones(); track milestone.id) {
+                  <tr>
+                    <td>
+                      {{ milestone.name }}
+                      @if (milestone.comments) {
+                        <p class="milestone-comment">{{ milestone.comments }}</p>
+                      }
+                    </td>
+                    <td>{{ milestone.dueDate | date: 'MMM d, y' }}</td>
+                    <td>{{ milestone.weight | number: '1.0-2' }}%</td>
+                    <td class="completion-cell">
+                      <div class="progress-track small">
+                        <div class="progress-fill" [style.width.%]="milestone.completionPercentage"></div>
+                      </div>
+                      <span>{{ milestone.completionPercentage }}%</span>
+                    </td>
+                    <td>{{ milestone.contributionPercentage | number: '1.0-2' }}%</td>
+                    <td>
+                      <span class="badge" [class]="milestoneStatusClass(milestone.status)">
+                        {{ milestoneStatusLabel(milestone.status) }}
+                      </span>
+                    </td>
+                    <td class="row-actions">
+                      @if (!isReadOnly() && (canUpdateProgress() || canManageMilestones())) {
+                        <div class="kebab-wrap">
+                          <button type="button" class="kebab-btn" (click)="toggleMilestoneMenu(milestone.id, $event)" aria-label="Milestone actions"><svg lucideIcon="ellipsis-vertical" size="16"></svg></button>
+                          @if (milestoneMenuId() === milestone.id) {
+                            <div class="kebab-menu" (click)="$event.stopPropagation()">
+                              @if (canUpdateProgress()) {
+                                <button type="button" (click)="openProgressModal(milestone)"><svg lucideIcon="percent" size="14"></svg> Update progress</button>
+                              }
+                              @if (canManageMilestones()) {
+                                <button type="button" (click)="onMilestoneEdit(milestone)"><svg lucideIcon="square-pen" size="14"></svg> Edit</button>
+                                <button type="button" class="danger" (click)="onMilestoneDelete(milestone.id)"><svg lucideIcon="trash" size="14"></svg> Delete</button>
+                              }
+                            </div>
+                          }
+                        </div>
+                      }
+                    </td>
+                  </tr>
+                } @empty {
+                  <tr><td colspan="7" class="empty-state">No milestones yet.</td></tr>
+                }
+              </tbody>
+            </table>
+            <p class="formula-note">
+              Progress = Σ (milestone weight × completion) ÷ 100.
+              Total weight: {{ initiative()!.totalMilestoneWeight | number: '1.0-2' }}% Current progress: {{ progress() }}%
+            </p>
+          }
+        </div>
+      </div>
+    }
+
+    @if (activeTab() === 'budget') {
+      <div class="budget-grid">
+        <div class="card">
+       <div class="card-header d-flex align-center justify-between">
+          <h2 class="card-title">Budget position</h2>
+          @if (canUpdateExpenditure() && !isReadOnly() && !editingExpenditure() && budgetPosition()?.isBudgetTracked) {
+            <button type="button" class="btn btn-secondary" (click)="openExpenditure()">Update spend</button>
+          }
+        </div>
+          <div class="card-body">
+            @if (budgetPosition()?.isBudgetTracked) {
+              <dl class="closure-grid">
+                <div>
+                  <dt>Planned budget</dt>
+                  <dd class="value-planned">{{ budgetPosition()?.plannedBudget | number }} ETB</dd>
+                </div>
+                <div>
+                  <dt>Actual expenditure</dt>
+                  <dd class="value-actual">{{ budgetPosition()?.actualExpenditure | number }} ETB</dd>
+                </div>
+                <div>
+                  <dt>Variance</dt>
+                  <dd [class.stat-value-danger]="budgetPosition()?.isOverBudget">
+                    {{ budgetPosition()?.budgetVariance | number }} ETB
+                  </dd>
+                </div>
+                <div>
+                  <dt>Utilization</dt>
+                  <dd>{{ budgetPosition()?.budgetUtilizationPercent | number: '1.0-2' }}%</dd>
+                </div>
+              </dl>
+              @if (budgetPosition()?.isOverBudget) {
+                <p class="form-error">This initiative is over its planned budget.</p>
+              }
+            } @else {
+              <p class="empty-state">
+                No planned budget is configured, so variance and utilization are not tracked.
+              </p>
+            }
+
+            @if (editingExpenditure()) {
+              <form class="form-row mt-3" [formGroup]="expenditureForm" (ngSubmit)="saveExpenditure()" novalidate>
+                <div class="form-group">
+                  <label class="form-label" for="actual-expenditure">Actual expenditure (ETB)</label>
+                  <input
+                    id="actual-expenditure"
+                    class="form-control"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    formControlName="actualExpenditure"
+                  />
+                  @if (expenditureForm.controls.actualExpenditure.touched && expenditureForm.controls.actualExpenditure.invalid) {
+                    <p class="form-error">Actual expenditure cannot be negative.</p>
+                  }
+                  <p class="form-hint">Spend to date. This never changes the planned budget or the owner.</p>
+                  <div class="form-row">
+                    <button type="submit" class="btn btn-primary" [disabled]="savingExpenditure() || expenditureForm.invalid">
+                      {{ savingExpenditure() ? 'Saving…' : 'Save' }}
+                    </button>
+                    <button type="button" class="btn btn-secondary" (click)="cancelExpenditure()" [disabled]="savingExpenditure()">Cancel</button>
+                  </div>
+                </div>
+              </form>
+            }
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">Strategic alignment</h2>
+          </div>
+          <div class="card-body">
+            <dl class="closure-grid">
+              <div>
+                <dt>Goal</dt>
+                <dd>{{ initiative()!.goalName || '—' }}</dd>
+              </div>
+              <div>
+                <dt>KRA</dt>
+                <dd>{{ initiative()!.kraName || '—' }}</dd>
+              </div>
+              <div>
+                <dt>KPI</dt>
+                <dd>{{ initiative()!.kpiName || '—' }}</dd>
+              </div>
+              <div>
+                <dt>Owner</dt>
+                <dd>{{ initiative()!.ownerName || ownerName(initiative()!.ownerId) }}</dd>
+              </div>
+            </dl>
+            @if (initiative()!.resources) {
+              <p class="muted">{{ initiative()!.resources }}</p>
+            }
+          </div>
+        </div>
+      </div>
+    }
+
+    @if (activeTab() === 'progress') {
+      <div class="card">
+        <div class="card-header d-flex align-center justify-between">
+          <h2 class="card-title">Progress history</h2>
+          @if (history().length) {
+            <button type="button" class="btn btn-secondary btn-sm" (click)="exportHistory()" aria-label="Export progress history to Excel"><svg lucideIcon="download" size="14"></svg> Export</button>
+          }
+        </div>
+        <div class="card-body">
+          @if (loadingHistory()) {
+            <p>Loading history…</p>
+          } @else if (history().length) {
+            <ul class="progress-log">
+              @for (entry of history(); track entry.id) {
+                <li>
+                  <span class="progress-log-name">{{ historyTypeLabel(entry.changeType) }}</span>
+                  <span class="progress-log-meta">
+                    @if (entry.milestoneName) {
+                      {{ entry.milestoneName }} ·
+                    }
+                    @if (entry.previousValue || entry.newValue) {
+                      {{ entry.previousValue || '—' }} → {{ entry.newValue || '—' }} ·
+                    }
+                    {{ entry.recordedAtUtc | date: 'MMM d, y HH:mm' }}
+                  </span>
+                  @if (entry.details) {
+                    <p class="milestone-comment">{{ entry.details }}</p>
+                  }
+                </li>
+              }
+            </ul>
+          } @else {
+            <p class="empty-state">No progress updates recorded yet.</p>
+          }
+        </div>
+      </div>
+    }
+
+    @if (activeTab() === 'dependencies') {
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Depends on</h2>
+        </div>
+        <div class="card-body">
+          @if (initiative()!.dependencies.length) {
+            <table class="milestone-table">
+              <thead>
+                <tr>
+                  <th>Prerequisite initiative</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (dependency of initiative()!.dependencies; track dependency.dependsOnInitiativeId) {
+                  <tr>
+                    <td>
+                      <a [routerLink]="['/initiatives', dependency.dependsOnInitiativeId]">
+                        {{ dependencyName(dependency.dependsOnInitiativeId, dependency.dependsOnInitiativeName) }}
+                      </a>
+                    </td>
+                    <td class="row-actions">
+                      @if (canManageDependencies() && !isReadOnly()) {
+                        <button
+                          type="button"
+                          class="icon-btn danger"
+                          (click)="onRemoveDependency(dependency.dependsOnInitiativeId)"
+                          aria-label="Remove dependency"
+                        ><svg lucideIcon="trash" size="16"></svg></button>
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          } @else {
+            <p class="empty-state">This initiative has no prerequisites.</p>
+          }
+
+          @if (canManageDependencies() && !isReadOnly()) {
+            <div class="form-row mt-3">
+              <div class="form-group">
+                <label class="form-label">Add prerequisite</label>
+                <select class="form-control" [value]="selectedDependencyId()" (change)="selectedDependencyId.set($any($event.target).value)">
+                  <option value="">— Select initiative —</option>
+                  @for (candidate of availableDependencies(); track candidate.id) {
+                    <option [value]="candidate.id">{{ candidate.name }}</option>
+                  }
+                </select>
+              </div>
+              <div class="form-group form-group-action">
+                <button
+                  type="button"
+                  class="btn btn-primary"
+                  [disabled]="!selectedDependencyId() || dependencySubmitting()"
+                  (click)="onAddDependency()"
+                >
+                  Add dependency
+                </button>
+              </div>
+            </div>
+            <p class="formula-note">Circular dependencies are rejected by the API.</p>
+          }
+        </div>
+      </div>
+    }
+
+    @if (activeTab() === 'closure') {
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Closure</h2>
+        </div>
+        <div class="card-body">
+          @if (initiative()!.isClosed) {
+            <p>This initiative was closed and is now read-only.</p>
+            @if (canClose()) {
+              <button type="button" class="btn btn-secondary" (click)="openReopenModal()">Reopen for correction</button>
+            }
+          } @else {
+            @if (canConfirmCompletion()) {
+              @if (canCloseNow()) {
+                <p>All milestones are complete and weighted correctly. The initiative can be closed.</p>
+                <button type="button" class="btn btn-primary" (click)="openCloseModal()">Close initiative</button>
+              } @else {
+                <p class="empty-state">
+                  Closure is blocked until every milestone is complete and the milestone weights total exactly 100%
+                  (currently {{ initiative()!.totalMilestoneWeight | number: '1.0-2' }}% at {{ progress() }}% progress).
+                </p>
+              }
+            } @else {
+              <p class="empty-state">You do not have permission to close this initiative.</p>
+            }
+          }
+        </div>
+      </div>
+    }
+  }
+
+ 
+  @if (showMilestoneForm()) {
+    <div class="modal-backdrop" (click)="closeMilestoneModal()">
+      <div class="modal-dialog" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>{{ editingMilestoneId() ? 'Edit Milestone' : 'New Milestone' }}</h3>
+          <button type="button" class="close-btn" (click)="closeMilestoneModal()" aria-label="Close"><svg lucideIcon="x" size="18"></svg></button>
+        </div>
+        <div class="modal-body">
+          <form [formGroup]="milestoneForm" (ngSubmit)="onSubmitMilestone()" novalidate>
+            <div class="form-group">
+              <label class="form-label">Name</label>
+              <input class="form-control" type="text" formControlName="name" placeholder="Enter Milestone Name" />
+              @if (milestoneForm.controls.name.invalid && milestoneForm.controls.name.touched) {
+                <p class="form-error">
+                  @if (milestoneForm.controls.name.hasError('required')) {
+                    Name is required.
+                  } @else if (milestoneForm.controls.name.hasError('maxlength')) {
+                    Name must be at most 200 characters.
+                  }
+                </p>
+              }
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Description</label>
+              <textarea class="form-control" formControlName="description" placeholder="Optional description"></textarea>
+            </div>
+
+            <div class="form-row">
+              <!-- <div class="form-group">
+                <label class="form-label">Completion %</label>
+                <input class="form-control" type="number" formControlName="completionPercentage" min="0" max="100" />
+              </div> -->
+              <div class="form-group">
+                <label class="form-label">Weight %</label>
+                <input class="form-control" type="number" formControlName="weight" min="0" max="100" />
+                <p class="form-hint"
+                   [class.form-hint--over]="isMilestoneWeightOverspent() || milestoneForm.controls.weight.hasError('milestoneWeightBudgetFullyAllocated')">
+                  @if (isMilestoneWeightOverspent()) {
+                    Over by {{ -milestoneWeightRemaining() | number: '1.0-2' }}% — weights must total exactly
+                    100%
+                  } @else if (milestoneForm.controls.weight.hasError('milestoneWeightBudgetFullyAllocated')) {
+                    No weight left to allocate — milestone weights must total 100%
+                  } @else {
+                    Remaining: {{ milestoneWeightRemaining() | number: '1.0-2' }}%
+                  }
+                </p>
+                @if (milestoneForm.controls.weight.touched) {
+                  @if (milestoneForm.controls.weight.hasError('milestoneWeightOverBudget')) {
+                    <p class="form-error">
+                      This milestone takes the initiative total over 100%. Lower it by
+                      {{ -milestoneWeightRemaining() | number: '1.0-2' }}%, or lower another milestone.
+                    </p>
+                  } @else if (milestoneForm.controls.weight.hasError('milestoneWeightBudgetFullyAllocated')) {
+                    <p class="form-error">
+                      The existing milestones already account for all 100% of the weight, so a milestone
+                      saved at 0% would never contribute to initiative progress. Give this milestone a
+                      share and lower another, or lower an existing one first to free up weight.
+                    </p>
+                  } @else if (milestoneForm.controls.weight.hasError('min')) {
+                    <p class="form-error">Weight cannot be negative.</p>
+                  } @else if (milestoneForm.controls.weight.hasError('max')) {
+                    <p class="form-error">Weight cannot exceed 100.</p>
+                  }
+                }
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Due Date</label>
+                <input
+                  class="form-control"
+                  type="date"
+                  formControlName="dueDate"
+                  [attr.min]="milestoneDueDateMin()"
+                  [attr.max]="milestoneDueDateMax()"
+                />
+                @if (milestoneDueDateMin() || milestoneDueDateMax()) {
+                  <p class="form-hint">
+                    Must fall inside the initiative window
+                    @if (milestoneDueDateMin()) {
+                      ({{ milestoneDueDateMin() | date: 'MMM d, y' }} –
+                    }
+                    @if (milestoneDueDateMax()) {
+                      ({{ milestoneDueDateMax() | date: 'MMM d, y' }})
+                    }
+                  </p>
+                }
+                @if (milestoneForm.controls.dueDate.hasError('required') && milestoneForm.controls.dueDate.touched) {
+                  <p class="form-error">Due date is required.</p>
+                }
+                @if (milestoneForm.controls.dueDate.hasError('milestoneDueDateBeforeStart') && milestoneForm.controls.dueDate.touched) {
+                  <p class="form-error">Due date cannot be before the initiative start date.</p>
+                }
+                @if (milestoneForm.controls.dueDate.hasError('milestoneDueDateAfterEnd') && milestoneForm.controls.dueDate.touched) {
+                  <p class="form-error">Due date cannot be after the initiative end date.</p>
+                }
+              </div>
+            </div>
+
+            <!-- <div class="form-group">
+              <label class="form-label">Comments</label>
+              <textarea class="form-control" formControlName="comments" placeholder="Progress note"></textarea>
+            </div> -->
+
+            <p class="formula-note">
+              Weights across all milestones must total exactly 100% before the initiative can be closed.
+            </p>
+
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" (click)="closeMilestoneModal()">Cancel</button>
+              <!-- Only disabled while saving. Disabling it on an invalid form would swallow the
+                   submit click, so the user would never learn which field needs fixing. -->
+              <button type="submit" class="btn btn-primary" [disabled]="milestoneSubmitting()">
+                {{ milestoneSubmitting() ? 'Saving…' : (editingMilestoneId() ? 'Update Milestone' : 'Save Milestone') }}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (progressTarget()) {
+    <div class="modal-backdrop" (click)="closeProgressModal()">
+      <div class="modal-dialog" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>Update progress — {{ progressTarget()!.name }}</h3>
+          <button type="button" class="close-btn" (click)="closeProgressModal()" aria-label="Close"><svg lucideIcon="x" size="18"></svg></button>
+        </div>
+        <div class="modal-body">
+          <form [formGroup]="progressForm" (ngSubmit)="onSubmitProgress()" novalidate>
+            <div class="form-group">
+              <label class="form-label" for="completionSlider">Completion</label>
+              <div class="slider-row">
+                <input id="completionSlider" class="completion-slider" type="range"
+                       formControlName="completionPercentage" min="0" max="100" step="1"
+                       aria-describedby="completionSliderValue" />
+                <output id="completionSliderValue" class="slider-value" for="completionSlider">{{ progressCompletion() }}%</output>
+              </div>
+              @if (progressForm.controls.completionPercentage.invalid && progressForm.controls.completionPercentage.touched) {
+                <p class="form-error">Completion must be between 0 and 100.</p>
+              }
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Progress note</label>
+              <textarea class="form-control" formControlName="comments" placeholder="What changed?"></textarea>
+            </div>
+
+            <p class="formula-note">
+              Drag the slider or use the arrow keys. 100% completion marks the milestone complete;
+            </p>
+
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" (click)="closeProgressModal()">Cancel</button>
+              <button type="submit" class="btn btn-primary" [disabled]="progressForm.invalid || progressSubmitting()">
+                {{ progressSubmitting() ? 'Saving…' : 'Save progress' }}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (showCloseForm()) {
+    <div class="modal-backdrop" (click)="closeCloseModal()">
+      <div class="modal-dialog" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>Close initiative</h3>
+          <button type="button" class="close-btn" (click)="closeCloseModal()" aria-label="Close"><svg lucideIcon="x" size="18"></svg></button>
+        </div>
+        <div class="modal-body">
+          <form [formGroup]="closeForm" (ngSubmit)="submitClose()" novalidate>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Actual end date</label>
+                <input
+                  class="form-control"
+                  type="date"
+                  formControlName="actualEndDate"
+                  [attr.min]="closeActualEndDateMin()"
+                  [attr.max]="closeActualEndDateMax()" />
+                @if (closeForm.controls.actualEndDate.touched && closeForm.controls.actualEndDate.invalid) {
+                  @if (closeForm.controls.actualEndDate.hasError('required')) {
+                    <p class="form-error">Actual End Date is required.</p>
+                  } @else if (closeForm.controls.actualEndDate.hasError('futureDate')) {
+                    <p class="form-error">Actual End Date must be less than or equal to today's date.</p>
+                  } @else if (closeForm.controls.actualEndDate.hasError('beforeStart')) {
+                    <p class="form-error">Actual End Date must be strictly later than the initiative's Start Date.</p>
+                  } @else if (closeForm.controls.actualEndDate.hasError('afterPlannedEnd')) {
+                    <p class="form-error">Actual End Date must be on or before the initiative's planned End Date.</p>
+                  }
+                }
+              </div>
+              <div class="form-group">
+                <label class="form-label">Final expenditure (ETB)</label>
+                <input class="form-control" type="number" formControlName="finalActualExpenditure" min="0" />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Outcome summary</label>
+              <textarea class="form-control" formControlName="outcomeSummary"></textarea>
+              @if (closeForm.controls.outcomeSummary.invalid && closeForm.controls.outcomeSummary.touched) {
+                <p class="form-error">Outcome summary must be at most 2000 characters.</p>
+              }
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Lessons learned</label>
+              <textarea class="form-control" formControlName="lessonsLearned"></textarea>
+            </div>
+
+            <p class="formula-note">Closing locks the initiative. Reopen it if a correction is needed.</p>
+
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" (click)="closeCloseModal()">Cancel</button>
+              <button type="submit" class="btn btn-primary" [disabled]="closeForm.invalid || closing()">
+                {{ closing() ? 'Closing…' : 'Close initiative' }}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (showHoldForm()) {
+    <div class="modal-backdrop" (click)="closeHoldModal()">
+      <div class="modal-dialog" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>Put initiative on hold</h3>
+          <button type="button" class="close-btn" (click)="closeHoldModal()" aria-label="Close"><svg lucideIcon="x" size="18"></svg></button>
+        </div>
+        <div class="modal-body">
+          <form [formGroup]="holdForm" (ngSubmit)="submitHold()" novalidate>
+            <div class="form-group">
+              <label class="form-label">Reason</label>
+              <textarea class="form-control" formControlName="reason" placeholder="Why is work being suspended?"></textarea>
+              @if (holdForm.controls.reason.invalid && holdForm.controls.reason.touched) {
+                <p class="form-error">
+                  @if (holdForm.controls.reason.hasError('required')) {
+                  A reason is required to put an initiative on hold.
+                  } @else {
+                  Reason must be at most 500 characters.
+                  }
+                </p>
+              }
+            </div>
+            <p class="formula-note">Holding suspends work but keeps the initiative active.</p>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" (click)="closeHoldModal()">Cancel</button>
+              <button type="submit" class="btn btn-primary" [disabled]="holdForm.invalid || holding()">
+                {{ holding() ? 'Holding…' : 'Put on hold' }}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (showCancelForm()) {
+    <div class="modal-backdrop" (click)="closeCancelModal()">
+      <div class="modal-dialog" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>Cancel initiative</h3>
+          <button type="button" class="close-btn" (click)="closeCancelModal()" aria-label="Close"><svg lucideIcon="x" size="18"></svg></button>
+        </div>
+        <div class="modal-body">
+          <form [formGroup]="cancelForm" (ngSubmit)="submitCancel()" novalidate>
+            <div class="form-group">
+              <label class="form-label">Reason</label>
+              <textarea class="form-control" formControlName="reason" placeholder="Why is this initiative being cancelled?"></textarea>
+              @if (cancelForm.controls.reason.invalid && cancelForm.controls.reason.touched) {
+                <p class="form-error">
+                  @if (cancelForm.controls.reason.hasError('required')) {
+                  A reason is required to cancel an initiative.
+                  } @else {
+                  Reason must be at most 500 characters.
+                  }
+                </p>
+              }
+            </div>
+            <p class="formula-note">Cancelling stops the initiative for good. It remains visible with its history.</p>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" (click)="closeCancelModal()">Cancel</button>
+              <button type="submit" class="btn btn-primary" [disabled]="cancelForm.invalid || cancelling()">
+                {{ cancelling() ? 'Cancelling…' : 'Cancel initiative' }}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (showReopenForm()) {
+    <div class="modal-backdrop" (click)="closeReopenModal()">
+      <div class="modal-dialog" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>Reopen initiative</h3>
+          <button type="button" class="close-btn" (click)="closeReopenModal()" aria-label="Close"><svg lucideIcon="x" size="18"></svg></button>
+        </div>
+        <div class="modal-body">
+          <form [formGroup]="reopenForm" (ngSubmit)="submitReopen()" novalidate>
+            <div class="form-group">
+              <label class="form-label">Reason</label>
+              <textarea class="form-control" formControlName="reason" placeholder="Why is a correction needed?"></textarea>
+              @if (reopenForm.controls.reason.invalid && reopenForm.controls.reason.touched) {
+                <p class="form-error">
+                  @if (reopenForm.controls.reason.hasError('required')) {
+                  A reason is required to reopen an initiative.
+                  } @else {
+                  Reason must be at most 500 characters.
+                  }
+                </p>
+              }
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" (click)="closeReopenModal()">Cancel</button>
+              <button type="submit" class="btn btn-primary" [disabled]="reopenForm.invalid || reopening()">
+                {{ reopening() ? 'Reopening…' : 'Reopen' }}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  }

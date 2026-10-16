@@ -1,0 +1,332 @@
+.op-page {
+  padding: 18px 18px 46px;
+  background: var(--color-bg);
+}
+
+/* ---------------------------------------------------------------- */
+/* Top context bar                                                   */
+/* ---------------------------------------------------------------- */
+.op-topbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 28px;
+  flex-wrap: wrap;
+}
+.op-breadcrumb {
+  font-size: 13px;
+  color: var(--color-text-subtle);
+  margin-bottom: 4px;
+}
+.op-breadcrumb-sep { margin: 0 4px; }
+.op-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--color-text);
+  letter-spacing: -0.01em;
+}
+.op-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.op-select-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.op-select {
+  appearance: none;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  padding: 10px 34px 10px 16px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--color-text);
+  cursor: pointer;
+  max-width: 260px;
+}
+.op-select-chevron {
+  position: absolute;
+  right: 12px;
+  width: 14px;
+  height: 14px;
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+.op-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--color-sidebar-bg);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  flex: none;
+}
+
+.btn-accent {
+  background: var(--color-accent-dark, #e8982f);
+  color: #fff;
+}
+.btn-accent:hover:not(:disabled) { background: #d6851f; }
+
+/* ---------------------------------------------------------------- */
+/* Organization identity card                                        */
+/* ---------------------------------------------------------------- */
+.op-identity-card {
+  padding: 28px 32px;
+  margin-bottom: 36px;
+}
+.op-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+.op-card-title {
+  font-size: 19px;
+  font-weight: 700;
+  // color:#18552c;
+   color: var(--color-text);
+}
+.op-icon-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--color-text-subtle);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex: none;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.op-icon-btn:hover { background: var(--color-surface-muted); color: var(--color-text); border-color: var(--color-border); }
+.op-icon-btn-danger:hover { color: var(--color-danger); }
+.op-icon-btn-sm { width: 22px; height: 22px; }
+
+.op-vm-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+  margin-bottom: 24px;
+}
+.op-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-subtle);
+  margin-bottom: 8px;
+}
+.op-body-text {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.6;
+  color: #1f2937;
+}
+
+.op-tag-block { margin-top: 20px; }
+.op-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+.op-tag {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: default;
+  line-height: 1.3;
+}
+.op-tag-blue { background: #dbeafe; color: #1d4ed8; }
+.op-tag-amber { background: #fef3c7; color: #b45309; }
+.op-tag-delete {
+  border: none;
+  background: none;
+  color: inherit;
+  opacity: 0;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  transition: opacity .15s;
+}
+.op-tag:hover .op-tag-delete { opacity: .6; }
+.op-tag-delete:hover { opacity: 1 !important; }
+.op-tag-add {
+  display:flex;
+  gap: 6px;
+  border: 1px dashed var(--color-border-strong);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  border-radius: 9999px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+.op-tag-add:hover { border-color: var(--color-primary); color: var(--color-primary); }
+.op-empty-inline { font-size: 13.5px; color: var(--color-text-subtle); }
+
+/* ---------------------------------------------------------------- */
+/* Section headings                                                   */
+/* ---------------------------------------------------------------- */
+.op-section { margin-bottom: 40px; }
+.op-section-title {
+  font-size: 21px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin-bottom: 18px;
+}
+
+/* ---------------------------------------------------------------- */
+/* SWOT / PESTEL grids & list cards                                   */
+/* ---------------------------------------------------------------- */
+.op-swot-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+.op-pestel-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 20px;
+}
+
+.op-list-card { padding: 22px 26px; }
+.op-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1px;
+}
+.op-list-title { font-size: 15.5px; font-weight: 700; }
+
+.op-swot-strength  { color: #16a34a; }
+.op-swot-weakness   { color: #dc2626; }
+.op-swot-opportunity{ color: #2563eb; }
+.op-swot-threat      { color: #feb044; }
+
+.op-list { margin-top: 4px; }
+.op-list-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--color-border);
+  position: relative;
+}
+.op-list-item:last-child { border-bottom: none; }
+.op-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+}
+.op-swot-dot-strength   { background: #16a34a; }
+.op-swot-dot-weakness    { background: #dc2626; }
+.op-swot-dot-opportunity { background: #2563eb; }
+.op-swot-dot-threat       { background: #feb044; }
+.op-dot-neutral { background: #64748b; }
+
+.op-item-text {
+  font-size: 14.5px;
+  font-weight: 500;
+  color: #1f2937;
+  flex: 1;
+}
+.op-item-actions {
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity .15s;
+}
+.op-list-item-hoverable:hover .op-item-actions { opacity: 1; }
+
+.op-empty-row {
+  padding: 14px 0;
+  font-size: 13.5px;
+  color: var(--color-text-subtle);
+  list-style: none;
+}
+
+/* ---------------------------------------------------------------- */
+/* "New" dropdown menu (scoped, matching the other action menus)    */
+/* ---------------------------------------------------------------- */
+.op-actions-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.actions-dropdown-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  min-width: 190px;
+  padding: 6px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: 0 16px 32px -12px rgba(15, 23, 42, 0.28), var(--shadow-md);
+  z-index: 1000;
+  display: none;
+  animation: op-menu-in 0.12s ease-out;
+
+  &.show { display: block; }
+}
+
+@keyframes op-menu-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 9px 10px;
+  border: none;
+  background: transparent;
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background 0.12s ease;
+
+  &:hover { background: var(--color-surface-muted); }
+  &:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
+}
+
+/* ---------------------------------------------------------------- */
+/* Responsive                                                         */
+/* ---------------------------------------------------------------- */
+@media (max-width: 1180px) {
+  .op-pestel-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 860px) {
+  .op-page { padding: 24px 20px 40px; }
+  .op-vm-grid,
+  .op-swot-grid,
+  .op-pestel-grid { grid-template-columns: 1fr; }
+  .op-topbar { align-items: flex-start; }
+  .op-topbar-right { flex-wrap: wrap; }
+}

@@ -1,0 +1,74 @@
+[33m>[39m Building...
+[32m√[39m Building...
+[1mInitial chunk files[22m[2m | [22m[1mNames[22m        [2m | [22m [1mRaw size[22m
+[32mstyles.css[39m         [2m | [22m[2mstyles[22m       [2m | [22m [36m24.46 kB[39m[2m | [22m
+[32mchunk-RX5F4QUM.js[39m  [2m | [22m[2m-[22m            [2m | [22m  [36m7.03 kB[39m[2m | [22m
+[32mmain.js[39m            [2m | [22m[2mmain[22m         [2m | [22m  [36m6.18 kB[39m[2m | [22m
+[32mchunk-QJVFOIJW.js[39m  [2m | [22m[2m-[22m            [2m | [22m  [36m5.32 kB[39m[2m | [22m
+[32mchunk-I6QLO25A.js[39m  [2m | [22m[2m-[22m            [2m | [22m  [36m3.34 kB[39m[2m | [22m
+[32mchunk-WYDTRSKI.js[39m  [2m | [22m[2m-[22m            [2m | [22m  [36m1.64 kB[39m[2m | [22m
+[32mchunk-FERVYI2Q.js[39m  [2m | [22m[2m-[22m            [2m | [22m  [36m1.63 kB[39m[2m | [22m
+[32mchunk-YQOESBWP.js[39m  [2m | [22m[2m-[22m            [2m | [22m[36m754 bytes[39m[2m | [22m
+
+[1m [22m                  [2m | [22m[1mInitial total[22m[2m | [22m [1m50.36 kB[22m
+
+[1mLazy chunk files[22m   [2m | [22m[1mNames[22m        [2m | [22m [1mRaw size[22m
+[32mchunk-3KWCSCSL.js[39m  [2m | [22m[2morg-profile[22m  [2m | [22m[36m173.27 kB[39m[2m | [22m
+[32mchunk-6POQXBGP.js[39m  [2m | [22m[2mgoals[22m        [2m | [22m [36m20.18 kB[39m[2m | [22m
+[32mchunk-XYTA6XJX.js[39m  [2m | [22m[2mshell[22m        [2m | [22m [36m19.68 kB[39m[2m | [22m
+[32mchunk-TZSKTWW5.js[39m  [2m | [22m[2mlogin[22m        [2m | [22m [36m14.71 kB[39m[2m | [22m
+[32mchunk-FKETE3XC.js[39m  [2m | [22m[2mdashboard[22m    [2m | [22m [36m11.44 kB[39m[2m | [22m
+
+Application bundle generation complete. [13.728 seconds] - 2026-08-13T06:04:17.612Z
+
+Watch mode enabled. Watching for file changes...
+NOTE: Raw file sizes do not reflect development server per-request transformations.
+[2m9:34:18 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m Re-optimizing dependencies because vite config has changed
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m4200[22m/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttp://10.1.10.122:[1m4200[22m/[39m
+[33m>[39m Changes detected. Rebuilding...
+[32m√[39m Changes detected. Rebuilding...
+[1mInitial chunk files[22m[2m | [22m[1mNames[22m        [2m | [22m [1mRaw size[22m
+[32mstyles.css[39m         [2m | [22m[2mstyles[22m       [2m | [22m [36m24.46 kB[39m[2m | [22m
+[32mchunk-RX5F4QUM.js[39m  [2m | [22m[2m-[22m            [2m | [22m  [36m7.03 kB[39m[2m | [22m
+[32mmain.js[39m            [2m | [22m[2mmain[22m         [2m | [22m  [36m6.18 kB[39m[2m | [22m
+[32mchunk-QJVFOIJW.js[39m  [2m | [22m[2m-[22m            [2m | [22m  [36m5.32 kB[39m[2m | [22m
+[32mchunk-I6QLO25A.js[39m  [2m | [22m[2m-[22m            [2m | [22m  [36m3.34 kB[39m[2m | [22m
+[32mchunk-WYDTRSKI.js[39m  [2m | [22m[2m-[22m            [2m | [22m  [36m1.64 kB[39m[2m | [22m
+[32mchunk-FERVYI2Q.js[39m  [2m | [22m[2m-[22m            [2m | [22m  [36m1.63 kB[39m[2m | [22m
+[32mchunk-YQOESBWP.js[39m  [2m | [22m[2m-[22m            [2m | [22m[36m754 bytes[39m[2m | [22m
+
+[1m [22m                  [2m | [22m[1mInitial total[22m[2m | [22m [1m50.36 kB[22m
+
+[1mLazy chunk files[22m   [2m | [22m[1mNames[22m        [2m | [22m [1mRaw size[22m
+[32mchunk-3KWCSCSL.js[39m  [2m | [22m[2morg-profile[22m  [2m | [22m[36m173.27 kB[39m[2m | [22m
+[32mchunk-6POQXBGP.js[39m  [2m | [22m[2mgoals[22m        [2m | [22m [36m20.18 kB[39m[2m | [22m
+[32mchunk-XYTA6XJX.js[39m  [2m | [22m[2mshell[22m        [2m | [22m [36m19.68 kB[39m[2m | [22m
+[32mchunk-TZSKTWW5.js[39m  [2m | [22m[2mlogin[22m        [2m | [22m [36m14.71 kB[39m[2m | [22m
+[32mchunk-FKETE3XC.js[39m  [2m | [22m[2mdashboard[22m    [2m | [22m [36m11.44 kB[39m[2m | [22m
+
+Application bundle generation complete. [0.197 seconds] - 2026-08-13T09:05:51.253Z
+
+[33m>[39m Changes detected. Rebuilding...
+[32m√[39m Changes detected. Rebuilding...
+[1mInitial chunk files[22m[2m | [22m[1mNames[22m        [2m | [22m [1mRaw size[22m
+[32mstyles.css[39m         [2m | [22m[2mstyles[22m       [2m | [22m [36m24.46 kB[39m[2m | [22m
+[32mchunk-RX5F4QUM.js[39m  [2m | [22m[2m-[22m            [2m | [22m  [36m7.03 kB[39m[2m | [22m
+[32mmain.js[39m            [2m | [22m[2mmain[22m         [2m | [22m  [36m6.18 kB[39m[2m | [22m
+[32mchunk-QJVFOIJW.js[39m  [2m | [22m[2m-[22m            [2m | [22m  [36m5.32 kB[39m[2m | [22m
+[32mchunk-I6QLO25A.js[39m  [2m | [22m[2m-[22m            [2m | [22m  [36m3.34 kB[39m[2m | [22m
+[32mchunk-WYDTRSKI.js[39m  [2m | [22m[2m-[22m            [2m | [22m  [36m1.64 kB[39m[2m | [22m
+[32mchunk-FERVYI2Q.js[39m  [2m | [22m[2m-[22m            [2m | [22m  [36m1.63 kB[39m[2m | [22m
+[32mchunk-YQOESBWP.js[39m  [2m | [22m[2m-[22m            [2m | [22m[36m754 bytes[39m[2m | [22m
+
+[1m [22m                  [2m | [22m[1mInitial total[22m[2m | [22m [1m50.36 kB[22m
+
+[1mLazy chunk files[22m   [2m | [22m[1mNames[22m        [2m | [22m [1mRaw size[22m
+[32mchunk-3KWCSCSL.js[39m  [2m | [22m[2morg-profile[22m  [2m | [22m[36m173.27 kB[39m[2m | [22m
+[32mchunk-6POQXBGP.js[39m  [2m | [22m[2mgoals[22m        [2m | [22m [36m20.18 kB[39m[2m | [22m
+[32mchunk-XYTA6XJX.js[39m  [2m | [22m[2mshell[22m        [2m | [22m [36m19.68 kB[39m[2m | [22m
+[32mchunk-TZSKTWW5.js[39m  [2m | [22m[2mlogin[22m        [2m | [22m [36m14.71 kB[39m[2m | [22m
+[32mchunk-FKETE3XC.js[39m  [2m | [22m[2mdashboard[22m    [2m | [22m [36m11.44 kB[39m[2m | [22m
+
+Application bundle generation complete. [0.017 seconds] - 2026-08-13T09:05:54.794Z
+

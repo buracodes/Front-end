@@ -1,0 +1,86 @@
+<div class="card mb-4">
+  <div class="card-body filters">
+    @if (shows().has('fiscalYear')) {
+      <div class="form-group filter-field">
+        <label class="form-label" for="plan-filter-fiscal-year">Fiscal Year</label>
+        <select
+          id="plan-filter-fiscal-year"
+          class="form-control"
+          [value]="filters.fiscalYearId()"
+          (change)="onFiscalYearChange($any($event.target).value)"
+        >
+          <option value="" [disabled]="requireFiscalYear()">All Fiscal Years</option>
+          @for (year of filters.fiscalYears(); track year.id) {
+            <option [value]="year.id">{{ year.label }}{{ year.status === 'Closed' ? ' (closed)' : '' }}</option>
+          }
+        </select>
+      </div>
+    }
+
+    @if (shows().has('scorecard')) {
+      <div class="form-group filter-field">
+        <label class="form-label" for="plan-filter-scorecard">Scorecard</label>
+        <select
+          id="plan-filter-scorecard"
+          class="form-control"
+          [value]="filters.scorecardId()"
+          [disabled]="requireFiscalYear() && !filters.fiscalYearId()"
+          (change)="onScorecardChange($any($event.target).value)"
+        >
+          <option value="">All Scorecards</option>
+          @for (scorecard of filters.scorecards(); track scorecard.id) {
+            <option [value]="scorecard.id">
+              {{ filters.scorecardLabel(scorecard.id) }}
+            </option>
+          }
+        </select>
+      </div>
+    }
+
+    @if (shows().has('goal')) {
+      <div class="form-group filter-field">
+        <label class="form-label" for="plan-filter-goal">Goal</label>
+        <select
+          id="plan-filter-goal"
+          class="form-control"
+          [value]="filters.goalId()"
+          [disabled]="!filters.scorecardId()"
+          (change)="onGoalChange($any($event.target).value)"
+        >
+          <option value="">All Goals</option>
+          @for (goal of filters.goals(); track goal.id) {
+            <option [value]="goal.id">{{ goal.name }}</option>
+          }
+        </select>
+        @if (filters.scorecardId() && filters.goals().length === 0) {
+          <p class="form-hint">No goals under this scorecard yet.</p>
+        }
+      </div>
+    }
+
+    @if (shows().has('kra')) {
+      <div class="form-group filter-field">
+        <label class="form-label" for="plan-filter-kra">KRA</label>
+        <select
+          id="plan-filter-kra"
+          class="form-control"
+          [value]="filters.kraId()"
+          [disabled]="!filters.goalId()"
+          (change)="onKraChange($any($event.target).value)"
+        >
+          <option value="">All KRAs</option>
+          @for (kra of filters.kras(); track kra.id) {
+            <option [value]="kra.id">{{ kra.name }}</option>
+          }
+        </select>
+        @if (filters.goalId() && filters.kras().length === 0) {
+          <p class="form-hint">No KRAs under this goal yet.</p>
+        }
+      </div>
+    }
+
+    @if (hasSelection) {
+      <button type="button" class="btn btn-secondary" (click)="onReset()">Clear</button>
+    }
+  </div>
+</div>

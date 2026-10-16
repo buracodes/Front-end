@@ -1,0 +1,287 @@
+.numeric-col {
+  text-align: right;
+}
+
+.form-row {
+  display: flex;
+  gap: 1rem;
+
+  .form-group {
+    flex: 1;
+  }
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.toolbar-search {
+  flex: 1;
+}
+
+.toolbar-select {
+  width: auto;
+  min-width: 150px;
+}
+
+.toolbar-create {
+  white-space: nowrap;
+}
+
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+}
+
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem;
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8a94a6;
+}
+
+.stat-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #1c2531;
+}
+
+.stat-value-danger {
+  color: #d64545;
+}
+
+.initiative-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.25rem;
+}
+
+.pagination{
+  display: flex;
+  justify-content: space-between;
+  margin-top: 1rem;
+}
+
+@media (max-width: 1200px) {
+  .stats-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .initiative-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .stats-row,
+  .initiative-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.initiative-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1.25rem;
+}
+
+.initiative-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  position: relative;
+}
+
+.initiative-name {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #1c2531;
+  line-height: 1.3;
+}
+
+.initiative-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  position: relative;
+}
+
+.kebab-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: #8a94a6;
+  padding: 0.15rem 0.4rem;
+  border-radius: 6px;
+
+  &:hover {
+    background: #f2f4f7;
+  }
+}
+
+.kebab-menu {
+  position: absolute;
+  top: 1.75rem;
+  right: 0;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+  min-width: 120px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
+  button {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    border: none;
+    background: transparent;
+    text-align: left;
+    padding: 0.5rem 0.9rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+    color: #1c2531;
+
+    &:hover {
+      background: #f2f4f7;
+    }
+
+    &.danger {
+      color: #d64545;
+    }
+  }
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.badge-info {
+  background: #e6f0fd;
+  color: #2f6fed;
+}
+
+.badge-warning {
+  background: #fdf1e0;
+  color: #c07a1f;
+}
+
+.badge-success {
+  background: #e6f7ec;
+  color: #1f9254;
+}
+
+.badge-danger {
+  background: #fde8e8;
+  color: #c0392b;
+}
+
+.badge-neutral {
+  background: #f0f0f0;
+  color: #6b7280;
+}
+
+.initiative-meta {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #8a94a6;
+}
+
+.initiative-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.progress-label {
+  font-size: 0.8rem;
+  color: #8a94a6;
+}
+
+.progress-value {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #1c2531;
+}
+
+.progress-track {
+  height: 8px;
+  border-radius: 999px;
+  background: #eef0f3;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--color-primary);
+  transition: width 0.2s ease;
+}
+
+/* FRD RAG bands, same thresholds as the backend. Green (>= 95%) is the primary green. */
+.progress-fill.rag-green { background: var(--color-primary); }
+.progress-fill.rag-amber { background: var(--color-rag-yellow); }
+.progress-fill.rag-red { background: var(--color-rag-red); }
+.progress-fill.rag-gray { background: var(--color-rag-gray); }
+
+.initiative-budget {
+  font-size: 0.85rem;
+  color: #4a5568;
+}
+
+.value-planned { color: var(--color-accent); }
+
+.value-actual {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.initiative-card-footer {
+  display: flex;
+  gap: 0.6rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #eef0f3;
+}
+
+.btn-icon-danger {
+  background: #fff;
+  border: 1px solid #f3d3d3;
+  color: #d64545;
+
+  &:hover {
+    background: #fde8e8;
+  }
+}
+
+.empty-state {
+  color: #8a94a6;
+  padding: 2rem 0;
+}

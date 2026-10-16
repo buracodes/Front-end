@@ -1,0 +1,149 @@
+<div class="performance">
+  <div class="pf-summary">
+    <div class="card pf-card pf-card--score">
+      <span class="pf-label">Overall Performance</span>
+      <span class="pf-score" [style.color]="tone(overall())">
+        {{ overall() !== null ? (overall()! | number: '1.0-1') : '—' }}
+      </span>
+      <span class="pf-delta" [class]="deltaTone()">
+        @if (delta() !== null && delta() !== 0) {
+          <svg [lucideIcon]="delta()! > 0 ? 'arrow-up' : 'arrow-down'" size="14"></svg> {{ absDelta() | number: '1.1-1' }} vs prev period
+        } @else {
+          <svg lucideIcon="square" size="12"></svg> No change
+        }
+      </span>
+    </div>
+
+    <div class="card pf-card">
+      <span class="pf-label">Goal Score Average</span>
+      <span class="pf-value">{{ goalAvg() | number: '1.0-1' }}</span>
+    </div>
+    <div class="card pf-card">
+      <span class="pf-label">Targets Hit (&ge; 70)</span>
+      <span class="pf-value">{{ targetsHit() }}<span class="pf-sub">/ {{ kpis().length }}</span></span>
+    </div>
+    <div class="card pf-card">
+      <span class="pf-label">Attention Needed</span>
+      <span class="pf-value pf-value--warn">{{ redFlags() + amberFlags() }}</span>
+      <span class="pf-sub">{{ redFlags() }} red / {{ amberFlags() }} amber</span>
+    </div>
+  </div>
+
+  <div class="pf-grid">
+    <div class="card pf-chart-card">
+      <div class="pf-card-head">
+        <h3>Performance Trend</h3>
+        <span class="pf-hint">Rolling score per fiscal period</span>
+      </div>
+
+      @if (trend().length) {
+        <svg class="pf-chart" [attr.viewBox]="'0 0 ' + W + ' ' + H" role="img" aria-label="Score trend">
+          <defs>
+            <linearGradient id="pfArea" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="var(--color-primary)" stop-opacity="0.28" />
+              <stop offset="100%" stop-color="var(--color-primary)" stop-opacity="0.02" />
+            </linearGradient>
+          </defs>
+
+          @for (g of [25, 50, 75]; track g) {
+            <line class="pf-gridline" [attr.x1]="PAD" [attr.x2]="W - PAD" [attr.y1]="y(g)" [attr.y2]="y(g)" />
+            <text class="pf-axis" [attr.x]="2" [attr.y]="y(g) + 3">{{ g }}</text>
+          }
+
+          <polygon class="pf-area" [attr.points]="area()" fill="url(#pfArea)" />
+          <polyline class="pf-line" [attr.points]="points()" />
+
+          @for (month of [1, 3, 5, 7, 9, 11]; track month) {
+            <text class="pf-axis" [attr.x]="x(month) - 10" [attr.y]="H - 2">{{ monthLabel(month) }}</text>
+          }
+
+          @for (e of trend(); track e.fiscalPeriodId + e.fiscalMonth) {
+            <title>{{ monthLabel(e.fiscalMonth) }}: {{ e.score ?? '—' }}</title>
+            <circle
+              class="pf-dot"
+              [attr.cx]="x(e.fiscalMonth)"
+              [attr.cy]="y(e.score)"
+              r="3.5"
+              [style.fill]="tone(e.score)"
+            />
+          }
+        </svg>
+      } @else {
+        <div class="pf-empty">No trend data yet. Enter actuals and recalculate scores.</div>
+      }
+    </div>
+
+    <div class="card pf-goals-card">
+      <div class="pf-card-head">
+        <h3>Goal Breakdown</h3>
+        <span class="pf-hint">Weighted contribution</span>
+      </div>
+
+      @for (item of goalsBreakdown(); track item.goal.id) {
+        <div class="pf-goal">
+          <div class="pf-goal-row">
+            <span class="pf-goal-name">{{ item.goal.name }}</span>
+            <span class="pf-goal-score" [style.color]="tone(item.score)">{{ item.score !== null ? (item.score! | number: '1.0-1') : '—' }}</span>
+          </div>
+          <div class="pf-bar">
+            <div class="pf-bar-fill" [style.width.%]="item.score ?? 0" [style.background]="barColor(item.score)"></div>
+          </div>
+        </div>
+      } @empty {
+        <div class="pf-empty">No goals configured.</div>
+      }
+    </div>
+  </div>
+
+  <div class="pf-grid pf-grid--bottom">
+    <div class="card pf-insights">
+      <div class="pf-card-head">
+        <h3>Insights</h3>
+      </div>
+      <p class="pf-insight" [innerHTML]="insight()"></p>
+      <div class="pf-standouts">
+        @if (bestKpi()) {
+          <div class="pf-standout">
+            <span class="pf-standout-label">Best</span>
+            <span class="pf-standout-name">{{ bestKpi()!.kpi.name }}</span>
+            <span class="pf-standout-score" [style.color]="tone(bestKpi()!.score)">{{ bestKpi()!.score !== null ? (bestKpi()!.score! | number: '1.0-1') : '—' }}</span>
+          </div>
+        }
+        @if (worstKpi()) {
+          <div class="pf-standout">
+            <span class="pf-standout-label">Watchlist</span>
+            <span class="pf-standout-name">{{ worstKpi()!.kpi.name }}</span>
+            <span class="pf-standout-score" [style.color]="tone(worstKpi()!.score)">{{ worstKpi()!.score !== null ? (worstKpi()!.score! | number: '1.0-1') : '—' }}</span>
+          </div>
+        }
+      </div>
+    </div>
+
+    <div class="card pf-ranked">
+      <div class="pf-card-head">
+        <h3>KPI Ranking</h3>
+        <span class="pf-hint">By latest score</span>
+      </div>
+      <table class="pf-table">
+        <tbody>
+          @for (row of kpisRanked(); track row.kpi.id; let i = $index) {
+            <tr>
+              <td class="pf-rank">{{ i + 1 }}</td>
+              <td class="pf-rag">
+                <span class="rag-inline" [class]="'rag-' + row.rag.toLowerCase()">
+                  <span class="rag-dot"></span>{{ row.rag }}
+                </span>
+              </td>
+              <td class="pf-kpi-name">{{ row.kpi.name }}
+                <span class="trend-inline" [class.up]="row.trend === 'up'" [class.down]="row.trend === 'down'">{{ trendArrow(row.trend) }}</span>
+              </td>
+              <td class="pf-kpi-score" [style.color]="tone(row.score)">{{ row.score !== null ? (row.score! | number: '1.0-1') : '—' }}</td>
+            </tr>
+          } @empty {
+            <tr><td class="pf-empty" colspan="4">No KPI scores yet.</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>

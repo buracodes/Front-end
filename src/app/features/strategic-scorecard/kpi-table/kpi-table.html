@@ -1,0 +1,62 @@
+<div class="kpi-table-wrap">
+  @if (loading()) {
+    <div class="kpi-table-loading"><div class="spinner"></div></div>
+  } @else if (!rows().length) {
+    <div class="kpi-table-empty">No KPIs configured for this selection yet.</div>
+  } @else {
+    <table class="kpi-table">
+      <thead>
+        <tr>
+          <th class="col-code">Code</th>
+          <th class="col-name">Name</th>
+          <th class="col-owner">Owner</th>
+          <th class="col-unit">Unit</th>
+          <th class="col-opt">Optimization</th>
+          <th class="col-type">Leading / Lagging</th>
+          <th class="col-num col-target">Target</th>
+          <th class="col-num col-actual">Actual</th>
+          <th class="col-num col-score">Score</th>
+          <th class="col-rag">RAG</th>
+          <th class="col-trend">Trend</th>
+          <th class="col-actions">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (row of rows(); track row.kpi.id) {
+          <tr (click)="openDetails.emit(row.kpi)">
+            <td class="col-code kpi-code">{{ row.code }}</td>
+            <td class="col-name">
+              <span class="kpi-name">{{ row.kpi.name }}</span>
+              @if (row.kpi.kpiType === 'Leading') {
+                <span class="kpi-badge kpi-badge-leading">Leading</span>
+              }
+            </td>
+            <td class="col-owner">{{ row.kpi.divisionOwnerName ?? row.kpi.ownerName ?? '—' }}</td>
+            <td class="col-unit">{{ row.kpi.unit ?? '—' }}</td>
+            <td class="col-opt">{{ row.kpi.optimizationType }}</td>
+            <td class="col-type">{{ row.kpi.kpiType }}</td>
+            <td class="col-num">{{ row.target !== null ? (row.target | number: '1.0-1') : '—' }}</td>
+            <td class="col-num">{{ row.actual !== null ? (row.actual | number: '1.0-1') : '—' }}</td>
+            <td class="col-num col-score" [style.color]="scoreTone(row.score)">
+              {{ row.score !== null ? (row.score | number: '1.0-1') : '—' }}
+            </td>
+            <td class="col-rag">
+              <span class="rag-badge" [class]="'rag-' + (row.rag | lowercase)">
+                <span class="rag-dot"></span>{{ ragLabel(row.rag) }}
+              </span>
+            </td>
+            <td class="col-trend">
+              <span class="trend" [class.up]="row.trend === 'up'" [class.down]="row.trend === 'down'">
+                {{ trendArrow(row.trend) }}
+              </span>
+            </td>
+            <td class="col-actions" (click)="$event.stopPropagation()">
+              <button type="button" class="btn btn-secondary btn-xs" (click)="openDetails.emit(row.kpi)">Details</button>
+              <button type="button" class="btn btn-ghost btn-xs" (click)="manage.emit(row.kpi)">Manage</button>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+</div>

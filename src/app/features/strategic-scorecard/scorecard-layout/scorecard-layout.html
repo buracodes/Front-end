@@ -1,0 +1,195 @@
+<div class="ssc">
+  <header class="ssc-card ssc-header">
+    <div class="ssc-header-top">
+      <div class="ssc-title-block">
+        <h1 class="ssc-title">Strategic Scorecard</h1>
+        <p class="ssc-subtitle">
+          @if (selectedScorecard()) {
+            <strong>{{ selectedScorecard()!.name }}</strong> · {{ selectedFiscalYear()?.label ?? '—' }}
+          } @else {
+            Select a fiscal year and scorecard to begin.
+          }
+        </p>
+      </div>
+
+      <div class="ssc-selectors">
+        <div class="ssc-field">
+          <label class="ssc-label" for="ssc-fiscal-year">Fiscal Year</label>
+          <select
+            id="ssc-fiscal-year"
+            class="form-control ssc-select"
+            [value]="fiscalYearId() ?? ''"
+            (change)="onFiscalYearChange($event)"
+          >
+            @for (fy of fiscalYears(); track fy.id) {
+              <option [value]="fy.id">{{ fy.label }} ({{ fy.status }})</option>
+            }
+          </select>
+        </div>
+        <div class="ssc-field">
+          <label class="ssc-label" for="ssc-scorecard">Scorecard</label>
+          <select
+            id="ssc-scorecard"
+            class="form-control ssc-select"
+            [value]="scorecardId() ?? ''"
+            (change)="onScorecardChange($event)"
+          >
+            @for (sc of scorecards(); track sc.id) {
+              <option [value]="sc.id">{{ sc.name }} — {{ sc.scope }} ({{ sc.scorecardStatus }})</option>
+            }
+          </select>
+        </div>
+        <div class="ssc-field ssc-period-filter">
+          <span class="ssc-label">Period</span>
+          <button
+            type="button"
+            class="btn btn-secondary ssc-period-btn"
+            [class.active]="periodFilterOpen()"
+            (click)="togglePeriodFilter()"
+          >
+            Filter by Period
+            @if (hasPeriodFilter()) {
+              <span class="ssc-period-dot" title="Period filter active"></span>
+            }
+            <svg lucideIcon="chevron-down" size="12"></svg>
+          </button>
+          @if (periodFilterOpen()) {
+            <div class="ssc-period-panel">
+              <div class="ssc-period-types">
+                <button
+                  type="button"
+                  [class.active]="periodType() === 'quarter'"
+                  (click)="setPeriodType('quarter')"
+                >Quarter</button>
+                <button
+                  type="button"
+                  [class.active]="periodType() === 'month'"
+                  (click)="setPeriodType('month')"
+                >Month</button>
+              </div>
+              @if (periodType() === 'quarter') {
+                <select
+                  class="form-control ssc-period-select"
+                  [value]="quarterFilter()"
+                  (change)="onQuarterFilterChange($event)"
+                >
+                  <option value="">All Quarters</option>
+                  @for (q of quarters; track q) {
+                    <option [value]="q">{{ q }}</option>
+                  }
+                </select>
+              } @else {
+                <div class="ssc-period-month-row">
+                  <input
+                    type="month"
+                    class="form-control"
+                    [value]="monthFrom()"
+                    (change)="onMonthFromChange($event)"
+                    aria-label="From month"
+                  />
+                  <span class="ssc-period-sep">to</span>
+                  <input
+                    type="month"
+                    class="form-control"
+                    [value]="monthTo()"
+                    (change)="onMonthToChange($event)"
+                    aria-label="To month"
+                  />
+                </div>
+              }
+              @if (hasPeriodFilter()) {
+                <button type="button" class="ssc-period-clear" (click)="clearPeriodFilter()">Clear Period Filter</button>
+              }
+            </div>
+          }
+        </div>
+        <button type="button" class="btn btn-secondary" (click)="goToManagement()">Manage Scorecards</button>
+      </div>
+    </div>
+
+    <div class="ssc-summary">
+      <div class="ssc-summary-card">
+        <svg class="ssc-summary-icon" lucideIcon="gauge" size="18" aria-hidden="true"></svg>
+        <div class="ssc-summary-body">
+          <span class="ssc-summary-label">Overall Performance</span>
+          <div class="ssc-summary-main">
+            <span class="ssc-score" [style.color]="scoreTone(overallScore())">
+              {{ overallScore() !== null ? (overallScore() | number: '1.0-1') : '—' }}
+            </span>
+            <span class="ssc-delta" [class.up]="(overallDelta() ?? 0) >= 0" [class.down]="(overallDelta() ?? 0) < 0">
+              @if (overallDelta() !== null) {
+                <svg [lucideIcon]="overallDelta()! >= 0 ? 'arrow-up' : 'arrow-down'" size="14"></svg> {{ overallDelta()! | number: '1.0-1' }}
+              }
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="ssc-summary-card">
+        <svg class="ssc-summary-icon" lucideIcon="target" size="18" aria-hidden="true"></svg>
+        <div class="ssc-summary-body">
+          <span class="ssc-summary-label">Goals</span>
+          <span class="ssc-summary-value">{{ goalCount().length }}</span>
+        </div>
+      </div>
+
+      <div class="ssc-summary-card">
+        <svg class="ssc-summary-icon" lucideIcon="list-checks" size="18" aria-hidden="true"></svg>
+        <div class="ssc-summary-body">
+          <span class="ssc-summary-label">KRAs</span>
+          <span class="ssc-summary-value">{{ kraCount().length }}</span>
+        </div>
+      </div>
+
+      <div class="ssc-summary-card">
+        <svg class="ssc-summary-icon" lucideIcon="clipboard-list" size="18" aria-hidden="true"></svg>
+        <div class="ssc-summary-body">
+          <span class="ssc-summary-label">KPIs</span>
+          <span class="ssc-summary-value">{{ kpiCount().length }}</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  @if (isReadOnly()) {
+  <div class="alert alert-warning read-only-banner" role="alert">
+    <span>
+      @if (scorecardClosed()) {
+        This scorecard is <strong>closed</strong> and read-only.
+      } @else {
+        This fiscal year has <strong>ended or is closed</strong> and is read-only.
+      }
+      Historical data remains available for viewing and reporting.
+    </span>
+  </div>
+  }
+
+  <nav class="ssc-tabs" aria-label="Scorecard modules">
+    @for (tab of tabs; track tab.label) {
+      @if (tab.available && tab.route) {
+        <a
+          class="ssc-tab"
+          [routerLink]="tab.route"
+          [queryParams]="tab.carryScope ? scopeQueryParams() : null"
+          routerLinkActive="active"
+          [routerLinkActiveOptions]="{ exact: true }"
+        >{{ tab.label }}</a>
+      } @else {
+        <span class="ssc-tab ssc-tab-disabled" title="This module is part of a later phase.">
+          {{ tab.label }} <span class="ssc-phase-pill">Phase 2</span>
+        </span>
+      }
+    }
+  </nav>
+
+  @if (loading()) {
+    <div class="ssc-loading">
+      <div class="spinner"></div>
+      <span>Loading scorecard…</span>
+    </div>
+  } @else if (error()) {
+    <div class="alert alert-danger" role="alert">{{ error() }}</div>
+  } @else {
+    <router-outlet />
+  }
+</div>

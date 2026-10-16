@@ -1,0 +1,196 @@
+@switch (payload().kind) {
+  @case ('statCards') {
+    <div class="stat-grid">
+      @for (card of statCards(); track card.key) {
+        @if (card.route) {
+          <a class="stat-card" [routerLink]="card.route">
+            <span class="stat-label">{{ card.label }}</span>
+            <span class="stat-value">
+              {{ card.value }}
+              @if (card.unit) {
+                <small>{{ card.unit }}</small>
+              }
+            </span>
+            @if (card.ragLabel) {
+              <span [class]="'rag-pill ' + ragTone(card.ragLabel)">{{ ragLabels[card.ragLabel] }}</span>
+            }
+            @if (card.detail) {
+              <span class="stat-detail">{{ card.detail }}</span>
+            }
+          </a>
+        } @else {
+          <div class="stat-card">
+            <span class="stat-label">{{ card.label }}</span>
+            <span class="stat-value">
+              {{ card.value }}
+              @if (card.unit) {
+                <small>{{ card.unit }}</small>
+              }
+            </span>
+            @if (card.ragLabel) {
+              <span [class]="'rag-pill ' + ragTone(card.ragLabel)">{{ ragLabels[card.ragLabel] }}</span>
+            }
+            @if (card.detail) {
+              <span class="stat-detail">{{ card.detail }}</span>
+            }
+          </div>
+        }
+      }
+    </div>
+  }
+
+  @case ('gauge') {
+    @if (gauge(); as gauge) {
+      <div class="gauge">
+        <app-dashboard-chart
+          kind="gauge"
+          [gaugeValue]="gauge.value"
+          [gaugeLabel]="gauge.caption ?? 'Overall performance'"
+          [height]="200"
+        />
+        @if (gauge.value == null) {
+          <p class="empty">No score for the selected period.</p>
+        } @else if (gauge.footnote) {
+          <p class="foot-note">{{ gauge.footnote }}</p>
+        }
+      </div>
+    }
+  }
+
+  @case ('ragDistribution') {
+    @if (rag(); as rag) {
+      <div class="rag">
+        <app-dashboard-chart kind="donut" [buckets]="ragBuckets()" [height]="190" />
+        <ul class="rag-legend">
+          @for (bucket of ragBuckets(); track bucket.label) {
+            <li>
+              <span class="dot" [style.background]="ragColor[bucket.label]"></span>
+              <span class="rag-name">{{ ragLabels[bucket.label] }}</span>
+              <strong>{{ bucket.count }}</strong>
+              <span class="rag-pct">{{ bucket.percentage }}%</span>
+            </li>
+          }
+        </ul>
+        @if (rag.total === 0) {
+          <p class="empty">No KPIs in scope for the selected filters.</p>
+        }
+      </div>
+    }
+  }
+
+  @case ('trend') {
+    @if (trend(); as trend) {
+      @if (trend.series.length) {
+        <app-dashboard-chart kind="trend" [trend]="trend" [height]="250" />
+      } @else {
+        <p class="empty">{{ trend.emptyMessage }}</p>
+      }
+    }
+  }
+
+  @case ('barChart') {
+    @if (barChart(); as chart) {
+      <div class="bar-chart">
+        @if (chart.cards.length) {
+          <div class="stat-grid stat-grid--compact">
+            @for (card of chart.cards; track card.key) {
+              <div class="stat-card stat-card--compact">
+                <span class="stat-label">{{ card.label }}</span>
+                <span class="stat-value">
+                  {{ card.value }}
+                  @if (card.unit) {
+                    <small>{{ card.unit }}</small>
+                  }
+                </span>
+                @if (card.ragLabel) {
+                  <span [class]="'rag-pill ' + ragTone(card.ragLabel)">{{ ragLabels[card.ragLabel] }}</span>
+                }
+                @if (card.detail) {
+                  <span class="stat-detail">{{ card.detail }}</span>
+                }
+              </div>
+            }
+          </div>
+        }
+        @if (chart.categories.length && chart.series.length) {
+          <app-dashboard-chart kind="comparison" [comparison]="chart" />
+        } @else {
+          <p class="empty">{{ chart.emptyMessage }}</p>
+        }
+      </div>
+    }
+  }
+
+  @case ('table') {
+    @if (table(); as table) {
+      <app-dashboard-table
+        [columns]="table.columns"
+        [rows]="table.rows"
+        [emptyMessage]="table.emptyMessage"
+        [showRowLinks]="table.showRowLinks"
+        (rowSelected)="navigate.emit($event)"
+      />
+    }
+  }
+
+  @case ('composite') {
+    @if (composite(); as composite) {
+      <div class="composite">
+        @if (composite.cards.length) {
+          <div class="stat-grid stat-grid--compact">
+            @for (card of composite.cards; track card.key) {
+              <div class="stat-card stat-card--compact">
+                <span class="stat-label">{{ card.label }}</span>
+                <span class="stat-value">
+                  {{ card.value }}
+                  @if (card.unit) {
+                    <small>{{ card.unit }}</small>
+                  }
+                </span>
+                @if (card.detail) {
+                  <span class="stat-detail">{{ card.detail }}</span>
+                }
+              </div>
+            }
+          </div>
+        }
+        @if (composite.columns.length) {
+          <app-dashboard-table
+            [columns]="composite.columns"
+            [rows]="composite.rows"
+            [emptyMessage]="composite.emptyMessage"
+            [showRowLinks]="composite.showRowLinks"
+            (rowSelected)="navigate.emit($event)"
+          />
+        } @else if (!composite.cards.length) {
+          <p class="empty">{{ composite.emptyMessage }}</p>
+        }
+      </div>
+    }
+  }
+
+  @case ('alerts') {
+    @if (alerts(); as alerts) {
+      @if (alerts.alerts.length) {
+        <ul class="alert-list">
+          @for (alert of alerts.alerts; track alert.key) {
+            <li [class]="'alert alert--' + alert.severity">
+              <span class="alert-severity">{{ severityIcon(alert.severity) }}</span>
+              <div class="alert-body">
+                <span class="alert-title">{{ alert.title }}</span>
+                @if (alert.description) {
+                  <span class="alert-desc">{{ alert.description }}</span>
+                }
+              </div>
+              @if (alert.route) {
+                <a class="alert-link" [routerLink]="alert.route">View</a>
+              }
+            </li>
+          }
+        </ul>
+      } @else {
+        <p class="empty">{{ alerts.emptyMessage }}</p>
+      }
+    }
+  }
+}

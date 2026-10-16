@@ -1,0 +1,86 @@
+@if (open() && kpi()) {
+  <div class="drawer-backdrop" (click)="close()"></div>
+  <aside class="drawer" role="dialog" aria-label="KPI details">
+    <div class="drawer-header">
+      <div>
+        <h3 class="drawer-title">KPI Details</h3>
+        <p class="drawer-subtitle">{{ kpi()!.name }}</p>
+      </div>
+      <button type="button" class="close-btn" (click)="close()" aria-label="Close"><svg lucideIcon="x" size="18"></svg></button>
+    </div>
+
+    <div class="drawer-body">
+      <div class="kpi-hero">
+        <span class="rag-badge" [class]="'rag-' + (rag() | lowercase)">
+          <span class="rag-dot"></span>{{ rag() }}
+        </span>
+        <span class="trend" [class.up]="trend() === 'up'" [class.down]="trend() === 'down'">
+          {{ trendArrow(trend()) }}
+        </span>
+      </div>
+
+      <h4 class="kpi-name">{{ kpi()!.name }}</h4>
+
+      <dl class="kpi-facts">
+        <div class="fact">
+          <dt>Optimization</dt>
+          <dd>{{ kpi()!.optimizationType }}</dd>
+        </div>
+        <div class="fact">
+          <dt>Indicator Type</dt>
+          <dd>{{ kpi()!.kpiType === 'Leading' ? 'Leading Indicator' : 'Lagging Indicator' }}</dd>
+        </div>
+        <div class="fact">
+          <dt>Data Source</dt>
+          <dd>{{ kpi()!.dataSource }}</dd>
+        </div>
+        <div class="fact">
+          <dt>Unit</dt>
+          <dd>{{ kpi()!.unit ?? '—' }}</dd>
+        </div>
+        <div class="fact">
+          <dt>Owner</dt>
+          <dd>{{ kpi()!.divisionOwnerName ?? kpi()!.ownerName ?? '—' }}</dd>
+        </div>
+        <div class="fact">
+          <dt>Weight</dt>
+          <dd>{{ kpi()!.weight }}%</dd>
+        </div>
+        <div class="fact">
+          <dt>Baseline</dt>
+          <dd>{{ kpi()!.baseline ?? '—' }}</dd>
+        </div>
+        <div class="fact">
+          <dt>Min / Max</dt>
+          <dd>{{ kpi()!.minValue ?? '—' }} / {{ kpi()!.maxValue ?? '—' }}</dd>
+        </div>
+        <div class="fact">
+          <dt>Annual Target</dt>
+          <dd>{{ snapshot()?.targetValue ?? kpi()!.targetAnnual ?? '—' }}</dd>
+        </div>
+        <div class="fact">
+          <dt>Actual (YTD)</dt>
+          <dd>{{ snapshot()?.actualValue ?? kpi()!.actualYTD ?? '—' }}</dd>
+        </div>
+      </dl>
+
+      <div class="score-panel">
+        <span class="score-label">Latest Score</span>
+        <span class="score-value" [style.color]="tone(snapshot()?.score ?? null)">
+          {{ snapshot()?.score !== undefined && snapshot()?.score !== null ? (snapshot()!.score! | number: '1.0-1') : '—' }}
+        </span>
+      </div>
+
+      @if (kpi()!.description) {
+        <div class="kpi-description">
+          <h5>Description</h5>
+          <p>{{ kpi()!.description }}</p>
+        </div>
+      }
+    </div>
+
+    <div class="drawer-footer">
+      <button type="button" class="btn btn-secondary btn-block" (click)="sendToManagement()">Edit / View History</button>
+    </div>
+  </aside>
+}

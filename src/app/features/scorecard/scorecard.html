@@ -1,0 +1,313 @@
+<div class="sc-header">
+  <div>
+    <h1 class="page-title">Scorecards</h1>
+    <p class="page-subtitle">Manage balanced scorecards across fiscal years.</p>
+  </div>
+  <div class="sc-header-actions">
+    <button type="button" class="btn btn-secondary" (click)="openAddFiscalYearModal()">
+      <svg lucideIcon="calendar-days" size="16"></svg>
+      Add Fiscal Year
+    </button>
+    <button type="button" class="btn btn-accent" (click)="openAddModal()">
+      <svg lucideIcon="plus" size="16"></svg>
+      Add Scorecard
+    </button>
+  </div>
+</div>
+
+@if (fiscalYears().length === 0 && !fiscalYearsLoading()) {
+<div class="alert-info-soft">
+  No fiscal years yet — create one first, then add a scorecard under it.
+</div>
+}
+
+<!-- Filters -->
+<div class="sc-filters card mb-4">
+  <div class="sc-filters-row">
+    <div class="sc-search">
+      <svg class="sc-search-icon" lucideIcon="search" size="16"></svg>
+      <input type="search" class="form-control" placeholder="Search scorecards by name or description..."
+        [value]="searchText()" (input)="onSearchInput($event)" />
+    </div>
+    <select class="form-control sc-filter-select" [value]="fiscalYearFilter()"
+      (change)="onFiscalYearFilterChange($event)">
+      <option value="">All Fiscal Years</option>
+      @for (fy of fiscalYears(); track fy.id) {
+      <option [value]="fy.id">{{ fy.label }}</option>
+      }
+    </select>
+    <select class="form-control sc-filter-select" [value]="scopeFilter()" (change)="onScopeFilterChange($event)">
+      <option value="">All Scopes</option>
+      @for (scope of scopes; track scope) {
+      <option [value]="scope">{{ scope }}</option>
+      }
+    </select>
+    <select class="form-control sc-filter-select" [value]="statusFilter()" (change)="onStatusFilterChange($event)">
+      <option value="">All Statuses</option>
+      @for (status of statuses; track status) {
+      <option [value]="status">{{ status }}</option>
+      }
+    </select>
+    @if (searchText() || fiscalYearFilter() || scopeFilter() || statusFilter()) {
+    <button type="button" class="btn btn-secondary sc-clear-btn" (click)="clearFilters()">Clear Filters</button>
+    }
+  </div>
+</div>
+
+@if (loadError()) {
+<div class="alert alert-danger" role="alert">{{ loadError() }}</div>
+}
+
+@if (loading()) {
+<div class="sc-loading">
+  <div class="spinner"></div>
+  <span>Loading scorecards...</span>
+</div>
+} @else if (filteredScorecards().length === 0) {
+<div class="sc-empty card">
+  <div class="sc-empty-body">
+    <svg class="sc-empty-icon" lucideIcon="file-text" size="48" strokeWidth="1.5"></svg>
+    @if (searchText() || fiscalYearFilter() || scopeFilter() || statusFilter()) {
+    <p class="sc-empty-text">No scorecards match the current filters.</p>
+    <button type="button" class="btn btn-secondary" (click)="clearFilters()">Clear Filters</button>
+    } @else {
+    <p class="sc-empty-text">No scorecards have been created yet.</p>
+    <button type="button" class="btn btn-primary" (click)="openAddModal()">Create Your First Scorecard</button>
+    }
+  </div>
+</div>
+} @else {
+@for (group of scorecardsByFiscalYear(); track group.fiscalYearId) {
+<div class="sc-fy-group">
+  <h2 class="sc-fy-group-title">{{ group.fiscalYearLabel }}</h2>
+  <div class="sc-grid">
+    @for (scorecard of group.scorecards; track scorecard.id) {
+    <div class="sc-card card" (click)="openScorecard(scorecard)">
+      <div class="sc-card-header">
+        <div class="sc-card-title-row">
+          <div class="sc-card-title-wrap">
+            <h3 class="sc-card-title">{{ scorecard.name }}</h3>
+            <div class="sc-card-meta">
+              <span class="badge badge-sm" [class]="scopeBadgeClass(scorecard.scope)">{{ displayStatus(scorecard.scope)
+                }}</span>
+              <span class="sc-card-fy">{{ scorecard.fiscalYearName ?? '—' }}</span>
+            </div>
+          </div>
+          <div class="sc-card-tools">
+            <span class="badge" [class]="statusBadgeClass(scorecard.scorecardStatus)">{{
+              displayStatus(scorecard.scorecardStatus) }}</span>
+            <div class="actions-dropdown" (click)="$event.stopPropagation()">
+              <button type="button" class="actions-menu-btn" (click)="toggleCardMenu(scorecard.id, $event)"
+                aria-label="More actions" title="More actions">
+                <svg lucideIcon="ellipsis-vertical" size="16"></svg>
+              </button>
+              @if (isCardMenuOpen(scorecard.id)) {
+              <div class="actions-dropdown-menu">
+                <button type="button" class="dropdown-item" (click)="openScorecard(scorecard)">
+                  <svg lucideIcon="square-pen" size="14"></svg>
+                  Manage
+                </button>
+                @if (scorecard.scorecardStatus !== 'Closed') {
+                <button type="button" class="dropdown-item" (click)="onEdit(scorecard, $event)">
+                  <svg lucideIcon="square-pen" size="14"></svg>
+                  Edit
+                </button>
+                @if (scorecard.scorecardStatus === 'Active') {
+                <button type="button" class="dropdown-item" (click)="onClose(scorecard, $event)">
+                  <svg lucideIcon="calendar-days" size="14"></svg>
+                  Close
+                </button>
+                }
+                <button type="button" class="dropdown-item dropdown-item-danger" (click)="onDelete(scorecard, $event)">
+                  <svg lucideIcon="trash" size="14"></svg>
+                  Delete
+                </button>
+                }
+              </div>
+              }
+            </div>
+          </div>
+        </div>
+      </div>
+
+      @if (scorecard.description) {
+      <p class="sc-card-description">{{ scorecard.description }}</p>
+      }
+
+      <div class="sc-card-stats">
+        <div class="sc-stat">
+          <span class="sc-stat-value">{{ scorecard.goalCount ?? 0 }}</span>
+          <span class="sc-stat-label">Goals</span>
+        </div>
+        <div class="sc-stat">
+          <span class="sc-stat-value">{{ scorecard.kraCount ?? 0 }}</span>
+          <span class="sc-stat-label">KRAs</span>
+        </div>
+        <div class="sc-stat">
+          <span class="sc-stat-value">{{ scorecard.kpiCount ?? 0 }}</span>
+          <span class="sc-stat-label">KPIs</span>
+        </div>
+      </div>
+
+      @if (scorecard.overallScore != null) {
+      <div class="sc-card-performance">
+        <div class="sc-performance-header">
+          <span class="sc-performance-label">Overall Score</span>
+          <span class="sc-performance-value"
+            [style.color]="scorecard.overallScore >= 70 ? 'var(--color-success)' : scorecard.overallScore >= 50 ? 'var(--color-accent-orange)' : 'var(--color-danger)'">
+            {{ scorecard.overallScore }}%
+          </span>
+        </div>
+        <div class="sc-performance-track">
+          <span class="sc-performance-fill" [style.width.%]="scorecard.overallScore"
+            [style.background]="scorecard.overallScore >= 70 ? 'var(--color-success)' : scorecard.overallScore >= 50 ? 'var(--color-accent-orange)' : 'var(--color-danger)'"></span>
+        </div>
+        @if (scorecard.scoreChange != null) {
+        <span class="sc-performance-change"
+          [style.color]="scorecard.scoreChange >= 0 ? 'var(--color-success)' : 'var(--color-danger)'">
+          <svg [lucideIcon]="scorecard.scoreChange >= 0 ? 'arrow-up' : 'arrow-down'" size="14"></svg> {{
+          scorecard.scoreChange }} pts
+        </span>
+        }
+      </div>
+      }
+
+      @if (scorecard.createdDate) {
+      <div class="sc-card-footer">
+        <span class="sc-card-date">Created {{ scorecard.createdDate | date:'mediumDate' }}</span>
+        <span class="sc-card-open-hint">Open &rarr;</span>
+      </div>
+      }
+    </div>
+    }
+  </div>
+</div>
+}
+
+<div class="sc-count">
+  Showing {{ filteredScorecards().length }} of {{ rows().length }} scorecard{{ rows().length !== 1 ? 's' : '' }}
+</div>
+}
+
+<!-- Create / Edit Scorecard Modal -->
+@if (showForm()) {
+<div class="modal-backdrop" (click)="onCancelEdit()">
+  <div class="modal-dialog" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>{{ editingId() ? 'Edit Scorecard' : 'New Scorecard' }}</h3>
+      <button type="button" class="close-btn" (click)="onCancelEdit()" aria-label="Close"><svg lucideIcon="x"
+          size="18"></svg></button>
+    </div>
+    <div class="modal-body">
+      <form [formGroup]="form" (ngSubmit)="editingId() ? onUpdate() : onSubmit()" novalidate>
+        <div class="form-group">
+          <label class="form-label" for="scorecard-fiscal-year-id">Fiscal Year</label>
+          <select id="scorecard-fiscal-year-id" class="form-control" formControlName="fiscalYearId"
+            [disabled]="!!editingId() || fiscalYearsLoading()">
+            @if (fiscalYearsLoading()) {
+            <option value="">Loading fiscal years...</option>
+            } @else {
+            <option value="">Select a fiscal year</option>
+            }
+            @for (fy of fiscalYears(); track fy.id) {
+            <option [value]="fy.id">{{ fy.label }} ({{ fy.status }})</option>
+            }
+          </select>
+          @if (form.controls.fiscalYearId.invalid && form.controls.fiscalYearId.touched) {
+          <p class="form-error">Fiscal year is required.</p>
+          }
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="scorecard-name">Name</label>
+          <input id="scorecard-name" class="form-control" type="text" formControlName="name"
+            placeholder="e.g. Corporate Scorecard 2026" />
+          @if (form.controls.name.invalid && form.controls.name.touched) {
+          <p class="form-error">
+            @if (form.controls.name.hasError('required')) {
+            Name is required.
+            } @else if (form.controls.name.hasError('maxlength')) {
+            Name must be at most 200 characters.
+            }
+          </p>
+          }
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="scorecard-description">Description</label>
+          <textarea id="scorecard-description" class="form-control" formControlName="description"
+            placeholder="Optional description"></textarea>
+          @if (form.controls.description.invalid && form.controls.description.touched) {
+          <p class="form-error">Description must be at most 500 characters.</p>
+          }
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="scorecard-scope">Scope</label>
+          <select id="scorecard-scope" class="form-control" formControlName="scope">
+            @for (scope of scopes; track scope) {
+            <option [value]="scope">{{ scope }}</option>
+            }
+          </select>
+          @if (form.controls.scope.invalid && form.controls.scope.touched) {
+          <p class="form-error">Scope is required.</p>
+          }
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" (click)="onCancelEdit()">Cancel</button>
+          <button type="submit" class="btn btn-primary" [disabled]="form.invalid || submitting()">
+            {{ submitting() ? 'Saving...' : (editingId() ? 'Update Scorecard' : 'Save Scorecard') }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+}
+
+<!-- Create Fiscal Year Modal -->
+@if (showFiscalYearModal()) {
+<div class="modal-backdrop" (click)="closeFiscalYearModal()">
+  <div class="modal-dialog" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>New Fiscal Year</h3>
+      <button type="button" class="close-btn" (click)="closeFiscalYearModal()" aria-label="Close"><svg lucideIcon="x"
+          size="18"></svg></button>
+    </div>
+    <div class="modal-body">
+      <form [formGroup]="fiscalYearForm" (ngSubmit)="onSubmitFiscalYear()" novalidate>
+        <div class="form-group">
+          <label class="form-label" for="fy-label">Label</label>
+          <input id="fy-label" class="form-control" type="text" formControlName="label" placeholder="e.g. FY2027" />
+          @if (fiscalYearForm.controls.label.invalid && fiscalYearForm.controls.label.touched) {
+          <p class="form-error">Label is required.</p>
+          }
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="fy-start">Start Date</label>
+            <input id="fy-start" class="form-control" type="date" formControlName="startDate" />
+            @if (fiscalYearForm.controls.startDate.invalid && fiscalYearForm.controls.startDate.touched) {
+            <p class="form-error">Start date is required.</p>
+            }
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="fy-end">End Date</label>
+            <input id="fy-end" class="form-control" type="date" formControlName="endDate" />
+            @if (fiscalYearForm.controls.endDate.invalid && fiscalYearForm.controls.endDate.touched) {
+            <p class="form-error">End date is required.</p>
+            }
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" (click)="closeFiscalYearModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" [disabled]="fiscalYearForm.invalid || fiscalYearSubmitting()">
+            {{ fiscalYearSubmitting() ? 'Saving...' : 'Create Fiscal Year' }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+}

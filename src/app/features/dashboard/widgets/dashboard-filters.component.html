@@ -1,0 +1,104 @@
+<div class="filters">
+  <div class="field">
+    <label for="dx-fy">Fiscal year</label>
+    <select
+      id="dx-fy"
+      class="select"
+      [disabled]="disabled() || busy()"
+      [ngModel]="current().fiscalYearId ?? ''"
+      (ngModelChange)="onFiscalYear($event)"
+    >
+      <option value="">All fiscal years</option>
+      @for (year of fiscalYears(); track year.id) {
+        <option [value]="year.id">{{ year.label }}</option>
+      }
+    </select>
+  </div>
+
+  <div class="field">
+    <label for="dx-scorecard">Scorecard</label>
+    <select
+      id="dx-scorecard"
+      class="select"
+      [disabled]="disabled() || busy()"
+      [ngModel]="current().scorecardId ?? ''"
+      (ngModelChange)="onScorecard($event)"
+    >
+      <option value="">All scorecards</option>
+      @for (scorecard of scorecards(); track scorecard.id) {
+        <option [value]="scorecard.id">{{ scorecard.label }}</option>
+      }
+    </select>
+  </div>
+
+  <div class="field">
+    <label for="dx-period">Period</label>
+    <select
+      id="dx-period"
+      class="select"
+      [disabled]="disabled() || busy()"
+      [ngModel]="current().periodType"
+      (ngModelChange)="onPeriod($event)"
+    >
+      @for (period of periods(); track period.value) {
+        <option [value]="period.value">{{ period.label }}</option>
+      }
+    </select>
+  </div>
+
+  @if (current().periodType === 'Quarter') {
+    <div class="field field--narrow">
+      <label for="dx-quarter">Quarter</label>
+      <select
+        id="dx-quarter"
+        class="select"
+        [disabled]="disabled() || busy()"
+        [ngModel]="current().quarter ?? ''"
+        (ngModelChange)="onQuarter($event)"
+      >
+        <option value="">All quarters</option>
+        @for (q of [1, 2, 3, 4]; track q) {
+          <option [value]="q">Q{{ q }}</option>
+        }
+      </select>
+    </div>
+  }
+
+  @if (current().periodType === 'Month') {
+    <div class="field field--narrow">
+      <label for="dx-from">From month</label>
+      <select
+        id="dx-from"
+        class="select"
+        [disabled]="disabled() || busy()"
+        [ngModel]="current().fromMonth ?? ''"
+        (ngModelChange)="onMonthFrom($event)"
+      >
+        <option value="">Start</option>
+        @for (month of monthOptions; track month) {
+          <option [value]="month">{{ monthName(month) }}</option>
+        }
+      </select>
+    </div>
+
+    <div class="field field--narrow">
+      <label for="dx-to">To month</label>
+      <select
+        id="dx-to"
+        class="select"
+        [disabled]="disabled() || busy()"
+        [ngModel]="current().toMonth ?? ''"
+        (ngModelChange)="onMonthTo($event)"
+      >
+        <option value="">End</option>
+        @for (month of monthOptions; track month) {
+          <option [value]="month">{{ monthName(month) }}</option>
+        }
+      </select>
+    </div>
+  }
+
+  @if (busy()) {
+    <span class="spinner" aria-label="Refreshing"></span>
+  }
+</div>

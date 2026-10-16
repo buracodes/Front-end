@@ -1,0 +1,18 @@
+<div class="page">
+  <div class="d-flex align-center justify-between mb-4">
+    <div>
+      <h1 class="page-title">Roles</h1>
+      <p class="page-subtitle">Manage roles and permissions.</p>
+    </div>
+  </div>
+
+  @if (loadError()) {
+    <div class="alert alert-danger" role="alert">{{ loadError() }}</div>
+  }
+
+  <div class="card">
+    <div class="card-body">
+      <app-grid-table [rowData]="rows()" [columnDefs]="columnDefs" [loading]="loading()" />
+    </div>
+  </div>
+</div>

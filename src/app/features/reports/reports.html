@@ -1,0 +1,206 @@
+<div class="page">
+  <div class="d-flex align-center justify-between mb-4">
+    <div>
+      <h1 class="page-title">Reports</h1>
+      <p class="page-subtitle">Generate scorecard, division and initiative performance reports, then export to PDF, Excel or CSV.</p>
+    </div>
+  </div>
+
+  <!-- Filter panel -->
+  <section class="report-filters">
+    <div class="filter-group">
+      <label class="filter-label" for="template">Report type</label>
+      <select id="template" class="form-control" [ngModel]="templateId()" (ngModelChange)="templateId.set($event); onTemplateChange()">
+        @for (t of templates(); track t.id) {
+          <option [ngValue]="t.id">{{ t.name }}</option>
+        }
+      </select>
+      <p class="filter-hint">{{ selectedTemplate()?.description }}</p>
+    </div>
+
+    <div class="filter-group">
+      <label class="filter-label" for="fiscalYear">Fiscal year</label>
+      <select id="fiscalYear" class="form-control" [ngModel]="fiscalYearId()" (ngModelChange)="fiscalYearId.set($event); onFiscalYearChange()">
+        <option [ngValue]="null">All fiscal years</option>
+        @for (fy of fiscalYears(); track fy.id) {
+          <option [ngValue]="fy.id">{{ fy.label }}</option>
+        }
+      </select>
+    </div>
+
+    @if (showScorecard()) {
+      <div class="filter-group">
+        <label class="filter-label" for="scorecard">Scorecard</label>
+        <select id="scorecard" class="form-control" [ngModel]="scorecardId()" (ngModelChange)="scorecardId.set($event); envelope.set(null)">
+          <option [ngValue]="null">Select a scorecard</option>
+          @for (sc of scorecards(); track sc.id) {
+            <option [ngValue]="sc.id">{{ sc.name }}</option>
+          }
+        </select>
+      </div>
+    }
+
+    @if (showDivision()) {
+      <div class="filter-group">
+        <label class="filter-label" for="division">Division</label>
+        <select id="division" class="form-control" [ngModel]="divisionId()" (ngModelChange)="divisionId.set($event); envelope.set(null)">
+          <option [ngValue]="null">All divisions</option>
+          @for (d of divisions(); track d.id) {
+            <option [ngValue]="d.id">{{ d.name }}</option>
+          }
+        </select>
+      </div>
+    }
+
+    @if (showLevel()) {
+      <div class="filter-group">
+        <label class="filter-label" for="level">Breakdown</label>
+        <select id="level" class="form-control" [ngModel]="level()" (ngModelChange)="level.set($event); envelope.set(null)">
+          @for (o of levelOptions; track o.value) {
+            <option [ngValue]="o.value">{{ o.label }}</option>
+          }
+        </select>
+      </div>
+    }
+
+    @if (showGranularity()) {
+      <div class="filter-group">
+        <label class="filter-label" for="granularity">Period</label>
+        <select id="granularity" class="form-control" [ngModel]="granularity()" (ngModelChange)="granularity.set($event); onGranularityChange()">
+          @for (o of granularityOptions; track o.value) {
+            <option [ngValue]="o.value">{{ o.label }}</option>
+          }
+        </select>
+      </div>
+
+      @if (showMonthRange()) {
+        <div class="filter-group">
+          <label class="filter-label" for="fromMonth">From month</label>
+          <select id="fromMonth" class="form-control" [ngModel]="fromMonth()" (ngModelChange)="fromMonth.set($event); envelope.set(null)">
+            <option [ngValue]="null">All</option>
+            @for (m of monthOptions; track m) {
+              <option [ngValue]="m">M{{ m }}</option>
+            }
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label class="filter-label" for="toMonth">To month</label>
+          <select id="toMonth" class="form-control" [ngModel]="toMonth()" (ngModelChange)="toMonth.set($event); envelope.set(null)">
+            <option [ngValue]="null">All</option>
+            @for (m of monthOptions; track m) {
+              <option [ngValue]="m">M{{ m }}</option>
+            }
+          </select>
+        </div>
+      }
+
+      @if (showQuarter()) {
+        <div class="filter-group">
+          <label class="filter-label" for="quarter">Quarter</label>
+          <select id="quarter" class="form-control" [ngModel]="quarter()" (ngModelChange)="quarter.set($event); envelope.set(null)">
+            <option [ngValue]="null">All</option>
+            @for (q of quarterOptions; track q) {
+              <option [ngValue]="q">Q{{ q }}</option>
+            }
+          </select>
+        </div>
+      }
+    }
+
+    <div class="filter-actions">
+      <button class="btn btn-primary" (click)="generate()" [disabled]="loading() || exporting()">
+        @if (loading()) {
+          <span class="spinner-inline"></span>
+        } @else {
+          Generate
+        }
+      </button>
+    </div>
+  </section>
+
+  @if (loadError()) {
+    <div class="alert alert-danger mt-3" role="alert">{{ loadError() }}</div>
+  }
+
+  @if (envelope(); as report) {
+    <!-- Result -->
+    <section class="report-result">
+      <div class="report-result-header">
+        <div class="report-result-title-wrap">
+          <h2 class="report-result-title">{{ report.title }}</h2>
+          @if (report.subtitle) {
+            <p class="report-result-subtitle">{{ report.subtitle }}</p>
+          }
+          <p class="report-result-meta">
+            Generated {{ formatGeneratedAt(report.generatedAtUtc) }} by {{ report.generatedBy }}
+          </p>
+        </div>
+        <div class="export-actions">
+          <button class="btn btn-outline" (click)="export('pdf')" [disabled]="exporting()">PDF</button>
+          <button class="btn btn-outline" (click)="export('xlsx')" [disabled]="exporting()">Excel</button>
+          <button class="btn btn-outline" (click)="export('csv')" [disabled]="exporting()">CSV</button>
+        </div>
+      </div>
+
+      @if (summaryKeys(report).length > 0) {
+        <div class="summary-chips">
+          @for (entry of report.summary | keyvalue; track entry.key) {
+            <div class="summary-chip">
+              <span class="summary-chip-label">{{ entry.key }}</span>
+              <span class="summary-chip-value">{{ entry.value ?? '—' }}</span>
+            </div>
+          }
+        </div>
+      }
+
+      @if (report.rows.length > 0) {
+        <div class="table-wrap">
+          <table class="report-table">
+            <thead>
+              <tr>
+                @for (col of report.columns; track $index) {
+                  <th>{{ col }}</th>
+                }
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of report.rows; track $index) {
+                <tr>
+                  @for (cell of row; track $index; let cIdx = $index) {
+                    <td>
+                      @if (cIdx === ragColumnIndex()) {
+                        <span class="rag-chip" [class]="ragClass(cell)">{{ cellValue(cell) }}</span>
+                      } @else if (report.columns[cIdx] === 'Trend') {
+                        <span [class]="'trend ' + trendClass(cell)">{{ cellValue(cell) }}</span>
+                      } @else {
+                        {{ cellValue(cell) }}
+                      }
+                    </td>
+                  }
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      } @else {
+        <div class="empty-state">
+          <p>No data matches the selected filters.</p>
+        </div>
+      }
+    </section>
+  } @else if (loading()) {
+    <div class="loading-state">
+      <div class="spinner"></div>
+      <p>Generating report...</p>
+    </div>
+  } @else {
+    <div class="empty-state page-empty">
+      <p>Configure the filters above and click Generate to build a report.</p>
+    </div>
+  }
+
+  @if (exporting()) {
+    <div class="exporting-badge">Exporting report…</div>
+  }
+</div>

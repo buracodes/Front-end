@@ -1,0 +1,620 @@
+<div class="scorecard-page">
+  <!-- Top context bar: fiscal year + scorecard + scope + period switchers -->
+  <!-- <header class="workspace-topbar">
+    <div class="workspace-topbar-left">
+      <p class="breadcrumb">SPMS / Scorecards / {{ selectedFiscalYear()?.label ?? selectedScorecard()?.name ??
+        'Scorecard' }}</p>
+      <h1 class="page-title">Strategic scorecard &middot; goal, KRA &amp; KPI planning</h1>
+    </div>
+
+    <div class="workspace-topbar-right">
+      <div class="wt-field">
+        <label class="wt-label" for="wt-fiscal-year">Fiscal Year</label>
+        <div class="wt-select-wrap">
+          <select id="wt-fiscal-year" class="wt-select" [value]="fiscalYearId() ?? ''"
+            (change)="onSwitchFiscalYear($event)">
+            @for (fy of fiscalYears(); track fy.id) {
+            <option [value]="fy.id">{{ fy.label }} ({{ fy.status }})</option>
+            }
+          </select>
+          <svg class="wt-select-chevron" lucideIcon="chevron-down" size="14"></svg>
+        </div>
+      </div>
+
+      <div class="wt-field">
+        <label class="wt-label" for="wt-scorecard">Scorecard</label>
+        <div class="wt-select-wrap">
+          <select id="wt-scorecard" class="wt-select" [value]="selectedScorecard()?.id ?? ''"
+            (change)="onSwitchScorecard($event)">
+            @if (siblingLoading()) {
+            <option value="">Loading scorecards…</option>
+            } @else {
+            @for (sc of siblingsForFy(); track sc.id) {
+            <option [value]="sc.id">{{ sc.name }}</option>
+            }
+            }
+          </select>
+          <svg class="wt-select-chevron" lucideIcon="chevron-down" size="14"></svg>
+        </div>
+      </div>
+
+      <div class="wt-field">
+        <label class="wt-label" for="wt-scope">Scope</label>
+        <div class="wt-select-wrap">
+          <select id="wt-scope" class="wt-select" [value]="selectedScorecard()?.scope ?? ''"
+            (change)="onScopeChange($event)">
+            <option value="Corporate">Corporate</option>
+            <option value="Division">Division</option>
+            <option value="Department">Department</option>
+          </select>
+          <svg class="wt-select-chevron" lucideIcon="chevron-down" size="14"></svg>
+        </div>
+      </div>
+
+      <div class="wt-field">
+        <label class="wt-label" for="wt-period">Period</label>
+        <div class="wt-select-wrap">
+          <select id="wt-period" class="wt-select" [value]="periodValue()" (change)="onPeriodValueChange($event)">
+            @for (p of periodOptions(); track p.value) {
+            <option [value]="p.value">{{ p.label }}</option>
+            }
+          </select>
+          <svg class="wt-select-chevron" lucideIcon="chevron-down" size="14"></svg>
+        </div>
+      </div>
+    </div>
+  </header> -->
+
+  <!-- Stat row -->
+  <div class="stat-row">
+    <div class="stat-card">
+      <p class="stat-label">Scorecard score</p>
+      <p class="stat-value">{{ scorecardScore() | number:'1.1-1' }}%</p>
+    </div>
+    <div class="stat-card">
+      <p class="stat-label">Goals</p>
+      <p class="stat-value">{{ goals().length }}</p>
+    </div>
+    <div class="stat-card">
+      <p class="stat-label">KRAs</p>
+      <p class="stat-value">{{ totalKras() }}</p>
+    </div>
+    <div class="stat-card">
+      <p class="stat-label">KPIs</p>
+      <p class="stat-value">{{ totalKpis() }}</p>
+    </div>
+    <div class="stat-card">
+      <p class="stat-label">RAG spread</p>
+      <p class="stat-value rag-spread">
+        <span class="rag-spread-num rag-spread-green">{{ ragSpread().green }}</span> /
+        <span class="rag-spread-num rag-spread-amber">{{ ragSpread().amber }}</span> /
+        <span class="rag-spread-num rag-spread-red">{{ ragSpread().red }}</span>
+      </p>
+    </div>
+  </div>
+
+  <!-- Filter by period -->
+  <section class="card filter-bar-panel">
+    <div class="filter-bar">
+      <div class="hp-period-filter">
+        <button
+          type="button"
+          class="btn btn-secondary hp-period-btn"
+          [class.active]="periodFilterOpen()"
+          (click)="togglePeriodFilter()"
+        >
+          Filter by Period
+          @if (hasPeriodFilter()) {
+            <span class="hp-period-dot" title="Period filter active"></span>
+          }
+          <svg lucideIcon="chevron-down" size="12"></svg>
+        </button>
+
+        @if (periodFilterOpen()) {
+          <div class="hp-period-panel">
+            <div class="hp-period-types">
+              <button type="button" [class.active]="filterType() === 'ytd'" (click)="onFilterTypeChange('ytd')">YTD</button>
+              <button type="button" [class.active]="filterType() === 'month'" (click)="onFilterTypeChange('month')">Month</button>
+              <button type="button" [class.active]="filterType() === 'quarter'" (click)="onFilterTypeChange('quarter')">Quarter</button>
+              <button type="button" [class.active]="filterType() === 'year'" (click)="onFilterTypeChange('year')">Year</button>
+            </div>
+
+            @if (filterType() === 'ytd') {
+              <div class="hp-period-ytd">
+                <span class="hp-period-hint">Shows Year-to-Date (fiscal year start to current period)</span>
+              </div>
+            } @else if (filterType() === 'month') {
+              <div class="hp-period-month-row" [class.invalid]="!monthRangeValid()">
+                <select class="form-control hp-period-select" [value]="state.monthFrom()" (change)="onMonthFromChange($event)">
+                  <option value="">From</option>
+                  @for (m of monthOptions; track m.value) {
+                    <option [value]="m.value">{{ m.label }}</option>
+                  }
+                </select>
+                <span class="hp-period-sep">to</span>
+                <select class="form-control hp-period-select" [value]="state.monthTo()" (change)="onMonthToChange($event)">
+                  <option value="">To</option>
+                  @for (m of monthOptions; track m.value) {
+                    <option [value]="m.value">{{ m.label }}</option>
+                  }
+                </select>
+                @if (!monthRangeValid()) {
+                  <span class="hp-period-error">From month must be before or equal to To month</span>
+                }
+              </div>
+            } @else if (filterType() === 'quarter') {
+              <select class="form-control hp-period-select" [value]="state.quarterFilter()" (change)="onQuarterFilterChange($event)">
+                <option value="">Select Quarter</option>
+                @for (p of periodOptions(); track p.value) {
+                <option [value]="p.value">{{ p.label }}</option>
+                }
+              </select>
+            } @else if (filterType() === 'year') {
+              <select class="form-control hp-period-select" [value]="state.yearFilter()" (change)="onYearFilterChange($event)">
+                <option value="">Select Fiscal Year</option>
+                @for (y of yearOptions(); track y.value) {
+                  <option [value]="y.value">{{ y.label }}</option>
+                }
+              </select>
+            }
+
+            @if (hasPeriodFilter()) {
+              <button type="button" class="hp-period-clear" (click)="clearPeriodFilter()">Clear Period Filter</button>
+            }
+          </div>
+        }
+      </div>
+
+      @if (!isReadOnly()) {
+      <button type="button" class="btn btn-accent filter-bar-add" (click)="openAddGoal()">
+        <svg lucideIcon="plus" size="15" strokeWidth="2.4"></svg>
+        Add goal
+      </button>
+      }
+    </div>
+  </section>
+
+  @if (isReadOnly()) {
+  <div class="alert alert-warning read-only-banner" role="alert">
+    <svg lucideIcon="lock" size="16"></svg>
+    <span>
+      @if (scorecardClosed()) {
+        This scorecard is <strong>closed</strong> and read-only.
+      } @else {
+        This fiscal year has <strong>ended or is closed</strong> and is read-only.
+      }
+      Historical data remains available for viewing and reporting.
+    </span>
+  </div>
+  }
+
+  @if (!this.goalWeightValid()) {
+  <div class="hierarchy-warning">
+    <svg lucideIcon="chart-pie" size="16"></svg>
+    <span>Goal weights sum to {{ goalWeightTotal() | number:'1.0-1' }}% (should be 100%)</span>
+  </div>
+  }
+
+  @if (loading()) {
+  <div class="hierarchy-loading">
+    <div class="spinner"></div>
+  </div>
+  } @else if (goals().length === 0) {
+  <div class="hierarchy-empty card">
+    <div class="hierarchy-empty-body">
+      <svg class="hierarchy-empty-icon" lucideIcon="network" size="56" strokeWidth="1.5"></svg>
+      <p>No goals defined for this scorecard yet.</p>
+      @if (!isReadOnly()) {
+      <button type="button" class="btn btn-primary" (click)="openAddGoal()">Add First Goal</button>
+      }
+    </div>
+  </div>
+  } @else {
+  <div class="goal-list">
+    @for (goal of goals(); track goal.id; let i = $index) {
+    <div class="card goal-card">
+      <div class="goal-card-header" (click)="toggle(goal.id)">
+        <button type="button" class="expand-triangle" [class.open]="isExpanded(goal.id)" aria-label="Toggle goal">
+          <svg lucideIcon="chevron-right" size="14" strokeWidth="2.5"></svg>
+        </button>
+        <div class="goal-header-text">
+          <h2 class="goal-title">Goal {{ i + 1 }} &middot; {{ goal.name }}</h2>
+          <p class="goal-subtitle">
+            Weight {{ goal.weight }}%
+            @if (!isExpanded(goal.id)) {
+            &middot; {{ goalKraCount(goal.id) }} KRAs
+            }
+          </p>
+        </div>
+        <div class="goal-header-actions" (click)="$event.stopPropagation()">
+          <span class="score-badge" [class]="ragBadgeClass(scoreOf(goal.id, goalScores()))">
+            {{ (scoreOf(goal.id, goalScores()) ?? 0) | number:'1.0-1' }}%
+          </span>
+          @if (!isReadOnly()) {
+          <button type="button" class="btn btn-secondary btn-sm" (click)="openAddKra(goal.id)">
+            <svg lucideIcon="plus" size="13" strokeWidth="2.4"></svg>
+            Add KRA
+          </button>
+          <button type="button" class="btn btn-secondary btn-sm" (click)="openEditGoal(goal, $event)">
+            <svg lucideIcon="square-pen" size="13"></svg>
+            Edit
+          </button>
+          <button type="button" class="icon-only-btn icon-only-btn-danger" title="Delete goal"
+            (click)="onDeleteGoal(goal, $event)">
+            <svg lucideIcon="trash" size="15" strokeWidth="1.8"></svg>
+          </button>
+          }
+        </div>
+      </div>
+
+      @if (isExpanded(goal.id)) {
+      <div class="goal-card-body">
+
+        @for (kra of krasForGoal(goal.id); track kra.id) {
+        <div class="kra-section">
+          <div class="kra-header">
+            <h3 class="kra-title">KRA &middot; {{ kra.name }}</h3>
+            <div class="kra-header-actions">
+              <span class="kra-weight-text">Weight {{ kra.weight }}%</span>
+              <span class="score-badge" [class]="ragBadgeClass(scoreOf(kra.id, kraSnapshots()))">
+                {{ (scoreOf(kra.id, kraSnapshots()) ?? 0) | number:'1.0-1' }}%
+              </span>
+              @if (!isReadOnly()) {
+              <button type="button" class="btn btn-secondary btn-sm" (click)="openAddKpi(kra.id, goal.id)"><svg lucideIcon="plus" size="16"></svg> Add
+                KPI</button>
+              <button type="button" class="icon-only-btn" title="Edit KRA" (click)="openEditKra(kra, $event)">
+                <svg lucideIcon="square-pen" size="14" strokeWidth="1.8"></svg>
+              </button>
+              <button type="button" class="icon-only-btn icon-only-btn-danger" title="Delete KRA"
+                (click)="onDeleteKra(kra, $event)">
+                <svg lucideIcon="trash" size="14" strokeWidth="1.8"></svg>
+              </button>
+              }
+            </div>
+          </div>
+
+          @if (kpisForKra(kra.id).length > 0) {
+          <table class="kpi-table">
+            <thead>
+              <tr>
+                <th class="col-kpi">KPI</th>
+                <th class="col-unit">Unit</th>
+                <th class="col-type">Type</th>
+                <th class="col-method">Method</th>
+                <th class="col-weight">Weight</th>
+                <th class="col-target">Target</th>
+                <th class="col-actual">Actual</th>
+                <th class="col-score">Score</th>
+                <th class="col-row-actions"></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (kpi of kpisForKra(kra.id); track kpi.id) {
+              <tr class="kpi-row" (click)="openDetails(kpi)">
+                <td class="col-kpi">{{ kpi.name }}</td>
+                <td class="col-unit">{{ kpi.unit ?? '—' }}</td>
+                <td class="col-type">
+                  <span class="type-badge" [class]="kpi.kpiType === 'Lagging' ? 'type-lagging' : 'type-leading'">{{
+                    kpi.kpiType }}</span>
+                </td>
+                <td class="col-method">{{ kpi.optimizationType }}</td>
+                <td class="col-weight">{{ kpi.kpiType === 'Leading' ? 'n/a' : (kpi.weight + '%') }}</td>
+                <td class="col-target">{{ getKpiTarget(kpi) !== null ? (getKpiTarget(kpi)! | number:'1.0-1') : '' }}</td>
+                <td class="col-actual">{{ getKpiActual(kpi) !== null ? (getKpiActual(kpi)! | number:'1.0-1') : '—' }}</td>
+                <td class="col-score">
+                  <span class="score-badge" [class]="ragBadgeClass(kpiSnapshots().get(kpi.id)?.score ?? null)">
+                    {{ ((kpiSnapshots().get(kpi.id)?.score ?? 0) | number:'1.0-1') + '%' }}
+                  </span>
+                </td>
+                <td class="col-row-actions" (click)="$event.stopPropagation()">
+                  <div class="actions-dropdown">
+                    <button type="button" class="actions-menu-btn" (click)="toggleMenu(kpi.id, $event)"
+                      aria-label="More actions">
+                      <svg lucideIcon="ellipsis-vertical" size="16"></svg>
+                    </button>
+                    @if (isMenuOpen(kpi.id)) {
+                    <div class="actions-dropdown-menu" [class.open-up]="openUpMenuIds().has(kpi.id)">
+                      <button type="button" class="dropdown-item" (click)="openTargets(kpi, $event); closeMenu()">
+                        <svg lucideIcon="eye" size="14"></svg>
+                        View target
+                      </button>
+                      @if (!isReadOnly()) {
+                      <button type="button" class="dropdown-item" (click)="openTargets(kpi, $event)">
+                        <svg lucideIcon="settings" size="14"></svg>
+                        Set target
+                      </button>
+                      <button type="button" class="dropdown-item" (click)="openEditKpi(kpi, $event)">
+                        <svg lucideIcon="square-pen" size="14"></svg>
+                        Edit KPI
+                      </button>
+                      <button type="button" class="dropdown-item dropdown-item-danger"
+                        (click)="onDeleteKpi(kpi, $event)">
+                        <svg lucideIcon="trash" size="14"></svg>
+                        Delete KPI
+                      </button>
+                      }
+                    </div>
+                    }
+                  </div>
+                </td>
+              </tr>
+              }
+            </tbody>
+          </table>
+          } @else {
+          <p class="kra-empty">No KPIs defined for this KRA yet.</p>
+          }
+        </div>
+        }
+
+        @for (kpi of unassignedKpis(); track kpi.id) {
+        @if (kpi.goalId === goal.id) {
+        <div class="kra-section">
+          <div class="kra-header">
+            <h3 class="kra-title kra-title-unassigned">Unassigned KPIs</h3>
+          </div>
+          <table class="kpi-table">
+            <tbody>
+              <tr class="kpi-row" (click)="openDetails(kpi)">
+                <td class="col-kpi">{{ kpi.name }}</td>
+                <td class="col-unit">{{ kpi.unit ?? '—' }}</td>
+                <td class="col-type"><span class="type-badge"
+                    [class]="kpi.kpiType === 'Lagging' ? 'type-lagging' : 'type-leading'">{{ kpi.kpiType }}</span></td>
+                <td class="col-method">{{ kpi.optimizationType }}</td>
+                <td class="col-weight">{{ kpi.weight }}%</td>
+                <td class="col-target">—</td>
+                <td class="col-actual">{{ getKpiActual(kpi) !== null ? (getKpiActual(kpi)! | number:'1.0-1') : '—' }}</td>
+                <td class="col-score">
+                  <span class="score-badge" [class]="ragBadgeClass(kpiSnapshots().get(kpi.id)?.score ?? null)">
+                    {{ ((kpiSnapshots().get(kpi.id)?.score ?? 0) | number:'1.0-1') + '%' }}
+                  </span>
+                </td>
+                <td class="col-row-actions"></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        }
+        }
+      </div>
+      }
+    </div>
+    }
+  </div>
+  }
+</div>
+
+<app-kpi-details-drawer [open]="drawerOpen()" (closed)="closeDrawer()" />
+
+<!-- Goal / KRA / KPI CRUD Modal — unchanged from your existing implementation -->
+@if (showCrudModal()) {
+<div class="modal-backdrop" (click)="closeCrudModal()">
+  <div class="modal-dialog modal-lg" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>{{ crudTitle }}</h3>
+      <button type="button" class="close-btn" (click)="closeCrudModal()" aria-label="Close"><svg lucideIcon="x" size="18"></svg></button>
+    </div>
+    <div class="modal-body">
+      @if (crudKind() === 'goal') {
+      <form [formGroup]="goalForm" (ngSubmit)="onSubmitCrud()" novalidate>
+        <div class="form-group">
+          <label class="form-label">Scorecard</label>
+          <input class="form-control form-control-readonly" type="text" [value]="selectedScorecard()?.name ?? ''"
+            readonly />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Goal Name</label>
+          <input class="form-control" type="text" formControlName="name"
+            placeholder="e.g. Improve Customer Satisfaction" />
+          @if (goalForm.controls.name.invalid && goalForm.controls.name.touched) {
+          <p class="form-error">Name is required (max 200 chars).</p>
+          }
+        </div>
+        <div class="form-group">
+          <label class="form-label">Description</label>
+          <textarea class="form-control" formControlName="description" placeholder="Optional description"></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Weight (%)</label>
+            <input class="form-control" type="number" formControlName="weight" min="0" max="100" />
+            <p class="weight-remaining" [class.weight-over]="goalWeightRemaining() < 0">
+              Remaining: {{ goalWeightRemaining() | number:'1.0-1' }}%
+            </p>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" (click)="closeCrudModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" [disabled]="goalForm.invalid || crudSubmitting()">
+            {{ crudSubmitting() ? 'Saving...' : (crudEditingId() ? 'Update Goal' : 'Create Goal') }}
+          </button>
+        </div>
+      </form>
+      }
+
+      @if (crudKind() === 'kra') {
+      <form [formGroup]="kraForm" (ngSubmit)="onSubmitCrud()" novalidate>
+        <div class="form-group">
+          <label class="form-label">Goal</label>
+          <input class="form-control form-control-readonly" type="text" [value]="crudParentGoal()?.name ?? ''"
+            readonly />
+        </div>
+        <div class="form-group">
+          <label class="form-label">KRA Name</label>
+          <input class="form-control" type="text" formControlName="name" placeholder="e.g. Operational Excellence" />
+          @if (kraForm.controls.name.invalid && kraForm.controls.name.touched) {
+          <p class="form-error">Name is required (max 200 chars).</p>
+          }
+        </div>
+        <div class="form-group">
+          <label class="form-label">Description</label>
+          <textarea class="form-control" formControlName="description" placeholder="Optional description"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Weight (%)</label>
+          <input class="form-control" type="number" formControlName="weight" min="0" max="100" />
+          <p class="weight-remaining" [class.weight-over]="kraWeightRemaining() < 0">
+            Remaining: {{ kraWeightRemaining() | number:'1.0-1' }}%
+          </p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" (click)="closeCrudModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" [disabled]="kraForm.invalid || crudSubmitting()">
+            {{ crudSubmitting() ? 'Saving...' : (crudEditingId() ? 'Update KRA' : 'Create KRA') }}
+          </button>
+        </div>
+      </form>
+      }
+
+      @if (crudKind() === 'kpi') {
+      <form [formGroup]="kpiForm" (ngSubmit)="onSubmitCrud()" novalidate>
+        @if (kpiDetailLoading()) {
+        <div class="modal-loading">
+          <div class="spinner"></div><span>Loading KPI details...</span>
+        </div>
+        }
+        <div class="form-group">
+          <label class="form-label">KRA</label>
+          <input class="form-control form-control-readonly" type="text" [value]="crudParentKra()?.name ?? ''"
+            readonly />
+        </div>
+        <div class="form-group">
+          <label class="form-label">KPI Name</label>
+          <input class="form-control" type="text" formControlName="name"
+            placeholder="e.g. Customer Satisfaction Score" />
+          @if (kpiForm.controls.name.invalid && kpiForm.controls.name.touched) {
+          <p class="form-error">Name is required (max 200 chars).</p>
+          }
+        </div>
+        <div class="form-group">
+          <label class="form-label">Unit of Measurement</label>
+          <input class="form-control" type="text" formControlName="unit" placeholder="e.g. %, count, score" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Description</label>
+          <textarea class="form-control" formControlName="description" placeholder="Optional description"></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Weight (%)</label>
+            <input class="form-control" type="number" formControlName="weight" min="0" max="100" />
+            <p class="weight-remaining" [class.weight-over]="kpiWeightRemaining() < 0">
+              Remaining: {{ kpiWeightRemaining() | number:'1.0-1' }}%
+            </p>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Optimization</label>
+            <select class="form-control" formControlName="optimizationType">
+              <option value="Maximize">Maximize</option>
+              <option value="Minimize">Minimize</option>
+              <option value="ExactHit">Exact Hit</option>
+              <option value="Binary">Binary</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Owner (division)</label>
+          <select class="form-control" formControlName="divisionOwnerId">
+            <option value="">— Unassigned —</option>
+            @for (division of divisions(); track division.id) {
+            <option [value]="division.id">{{ division.name }}</option>
+            }
+          </select>
+          <p class="form-hint">The division accountable for this KPI (e.g. IT, Trade Operation). Any employee in that
+            division can enter actual data, and it is used for division planning.</p>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Indicator Type</label>
+            <select class="form-control" formControlName="kpiType">
+              <option value="Leading">Leading</option>
+              <option value="Lagging">Lagging</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Data Source</label>
+            <select class="form-control" formControlName="dataSource">
+              <option value="Manual">Manual</option>
+              <option value="Automated">Automated</option>
+              <option value="Calculated">Calculated</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="checkbox-row">
+            <input type="checkbox" formControlName="isCumulative" />
+            <span>Cumulative (sum over time)</span>
+          </label>
+          <p class="form-hint">Accumulates month over month (e.g. revenue, volumes). Uncheck to use the average of
+            monthly values instead.</p>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Baseline (optional)</label>
+            <input class="form-control" type="number" formControlName="baseline" />
+            <p class="form-hint">Starting point, typically the previous year's actual.</p>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Minimum Value (optional)</label>
+            <input class="form-control" type="number" formControlName="minValue" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Maximum Value (optional)</label>
+            <input class="form-control" type="number" formControlName="maxValue" />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" (click)="closeCrudModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary"
+            [disabled]="kpiForm.invalid || crudSubmitting() || kpiDetailLoading()">
+            {{ crudSubmitting() ? 'Saving...' : (crudEditingId() ? 'Update KPI' : 'Create KPI') }}
+          </button>
+        </div>
+      </form>
+      }
+    </div>
+  </div>
+</div>
+}
+
+<!-- Scorecard metadata edit modal (rename / description / scope) -->
+@if (showScorecardModal()) {
+<div class="modal-backdrop" (click)="closeScorecardModal()">
+  <div class="modal-dialog" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>Edit Scorecard</h3>
+      <button type="button" class="close-btn" (click)="closeScorecardModal()" aria-label="Close"><svg lucideIcon="x" size="18"></svg></button>
+    </div>
+    <div class="modal-body">
+      <form [formGroup]="scorecardMetaForm" (ngSubmit)="onSubmitScorecardMeta()" novalidate>
+        <div class="form-group">
+          <label class="form-label">Name</label>
+          <input class="form-control" type="text" formControlName="name" />
+          @if (scorecardMetaForm.controls.name.invalid && scorecardMetaForm.controls.name.touched) {
+          <p class="form-error">Name is required (max 200 chars).</p>
+          }
+        </div>
+        <div class="form-group">
+          <label class="form-label">Description</label>
+          <textarea class="form-control" formControlName="description" placeholder="Optional description"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Scope</label>
+          <select class="form-control" formControlName="scope">
+            <option value="Corporate">Corporate</option>
+            <option value="Division">Division</option>
+            <option value="Department">Department</option>
+          </select>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" (click)="closeScorecardModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary"
+            [disabled]="scorecardMetaForm.invalid || scorecardMetaSubmitting()">
+            {{ scorecardMetaSubmitting() ? 'Saving...' : 'Save Changes' }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+}

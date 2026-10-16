@@ -1,0 +1,30 @@
+@if (dialog.state().show) {
+  <div class="cd-backdrop" (click)="dialog.onCancel()">
+    <div class="cd-dialog" (click)="$event.stopPropagation()">
+      <div class="cd-icon-area">
+        @if (dialog.state().variant === 'danger') {
+          <div class="cd-icon cd-icon-danger">
+            <svg lucideIcon="circle-x" size="28"></svg>
+          </div>
+        } @else if (dialog.state().variant === 'warning') {
+          <div class="cd-icon cd-icon-warning">
+            <svg lucideIcon="triangle-alert" size="28"></svg>
+          </div>
+        } @else {
+          <div class="cd-icon cd-icon-info">
+            <svg lucideIcon="info" size="28"></svg>
+          </div>
+        }
+      </div>
+      <h3 class="cd-title">{{ dialog.state().title }}</h3>
+      <p class="cd-message">{{ dialog.state().message }}</p>
+      <div class="cd-actions">
+        <button class="cd-btn cd-btn-cancel" (click)="dialog.onCancel()">{{ dialog.state().cancelText }}</button>
+        @if (dialog.state().extraText) {
+          <button [class.cd-btn-info]="dialog.state().extraVariant === 'info'" [class.cd-btn-warning]="dialog.state().extraVariant === 'warning'" [class.cd-btn-danger]="dialog.state().extraVariant === 'danger'" class="cd-btn cd-btn-confirm" (click)="dialog.onExtra()">{{ dialog.state().extraText }}</button>
+        }
+        <button class="cd-btn cd-btn-confirm" [class.cd-btn-danger]="dialog.state().variant === 'danger'" [class.cd-btn-warning]="dialog.state().variant === 'warning'" [class.cd-btn-info]="dialog.state().variant === 'info'" (click)="dialog.onConfirm()">{{ dialog.state().confirmText }}</button>
+      </div>
+    </div>
+  </div>
+}

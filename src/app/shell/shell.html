@@ -1,0 +1,208 @@
+<div class="shell">
+  <aside class="sidebar" [class.collapsed]="sidebarCollapsed()" [class.mobile-open]="mobileMenuOpen()">
+    <div class="brand">
+      <img class="brand-mark" src="../../assets/ECXLogo.jpg" alt="SPMS Logo">
+      @if (!sidebarCollapsed()) {
+        <div class="brand-text">
+          <span class="brand-title">SPMS</span>
+          <span class="brand-subtitle">Ethiopian Commodity Exchange</span>
+        </div>
+      }
+      <button
+        class="sidebar-collapse-btn"
+        (click)="toggleSidebar()"
+        [title]="sidebarCollapsed() ? 'Expand sidebar' : 'Collapse sidebar'"
+        [attr.aria-label]="sidebarCollapsed() ? 'Expand sidebar' : 'Collapse sidebar'"
+      >
+        <svg [lucideIcon]="sidebarCollapsed() ? 'chevron-right' : 'chevron-left'" size="20"></svg>
+      </button>
+    </div>
+
+    <nav class="nav" aria-label="Main navigation">
+      @for (item of visibleNavItems(); track item.label) {
+        @if (item.children && item.children.length) {
+          <div class="nav-group">
+            <button
+              type="button"
+              class="nav-group-header"
+              [class.open]="isGroupExpanded(item.label)"
+              [title]="sidebarCollapsed() ? item.label : ''"
+              (click)="isGroupExpanded(item.label) ? toggleGroup(item.label) : toggleGroup(item.label)"
+            >
+              <svg class="nav-icon" [lucideIcon]="item.icon" aria-hidden="true"></svg>
+              @if (!sidebarCollapsed()) {
+                <span class="nav-group-label">{{ item.label }}</span>
+                <svg class="chevron" lucideIcon="chevron-down" size="14" aria-hidden="true"></svg>
+              }
+            </button>
+            @if (isGroupExpanded(item.label) && !sidebarCollapsed()) {
+              <div class="nav-group-children">
+                @for (child of item.children; track child.label) {
+                  <a
+                    class="nav-item nav-child"
+                    routerLink="{{ child.route }}"
+                    routerLinkActive="active"
+                    [routerLinkActiveOptions]="{ exact: false }"
+                    [title]="child.label"
+                    (click)="closeMobileMenu()"
+                  >
+                    <svg class="nav-icon" [lucideIcon]="child.icon" aria-hidden="true"></svg>
+                    <span>{{ child.label }}</span>
+                  </a>
+                }
+              </div>
+            }
+          </div>
+        } @else {
+          <a
+            class="nav-item"
+            routerLink="{{ item.route }}"
+            routerLinkActive="active"
+            [routerLinkActiveOptions]="{ exact: false }"
+            [title]="sidebarCollapsed() ? item.label : ''"
+            (click)="closeMobileMenu()"
+          >
+            <svg class="nav-icon" [lucideIcon]="item.icon" aria-hidden="true"></svg>
+            @if (!sidebarCollapsed()) {
+              <span>{{ item.label }}</span>
+            }
+          </a>
+        }
+      }
+    </nav>
+
+    <div class="sidebar-footer">
+      @if (!sidebarCollapsed()) {
+        <p class="footer-text">Strategic Planning &amp; Monitoring System</p>
+      }
+    </div>
+  </aside>
+
+  <div class="mobile-overlay" [class.show]="mobileMenuOpen()" (click)="closeMobileMenu()"></div>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="topbar-left">
+        <button class="mobile-hamburger" (click)="toggleMobileMenu()" title="Menu" aria-label="Open navigation menu">
+          <svg lucideIcon="menu" size="22"></svg>
+        </button>
+        <span class="topbar-page"></span>
+      </div>
+      <div class="topbar-right">
+        <div class="user-menu">
+          <div
+            class="profile-trigger"
+            [class.open]="profileOpen()"
+            role="button"
+            tabindex="0"
+            aria-haspopup="menu"
+            [attr.aria-expanded]="profileOpen()"
+            (click)="toggleProfile()"
+            (keydown.enter)="toggleProfile()"
+            (keydown.escape)="closeProfile()"
+          >
+            <span class="avatar">{{ initials }}</span>
+            <div class="user-info">
+              <span class="user-name">{{ userStore.user()?.fullName }}</span>
+              <span class="user-role">{{ userStore.user()?.roles?.join(', ') }}</span>
+            </div>
+            <svg class="profile-chevron" lucideIcon="chevron-down" size="14"></svg>
+          </div>
+          @if (profileOpen()) {
+            <div class="profile-backdrop" (click)="closeProfile()"></div>
+            <div class="profile-menu" role="menu" aria-label="Account menu">
+              <button type="button" role="menuitem" (click)="closeProfile(); openPasswordModal()">
+                <svg lucideIcon="settings" size="15"></svg>
+                Settings
+              </button>
+              <button type="button" role="menuitem" (click)="closeProfile(); openNotifications()">
+                <svg lucideIcon="bell" size="15"></svg>
+                Notifications
+              </button>
+              <button type="button" role="menuitem" class="sign-out" (click)="closeProfile(); logout()">
+                <svg lucideIcon="log-out" size="15"></svg>
+                Sign out
+              </button>
+            </div>
+          }
+        </div>
+      </div>
+    </header>
+
+    <main class="content">
+      <router-outlet />
+    </main>
+  </div>
+</div>
+
+<app-confirm-dialog />
+<app-toaster />
+
+@if (showPasswordForm()) {
+  <div class="modal-backdrop" (click)="closePasswordModal()">
+    <div class="modal-dialog" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Change Password</h3>
+        <button type="button" class="close-btn" aria-label="Close" (click)="closePasswordModal()"><svg lucideIcon="x" size="18"></svg></button>
+      </div>
+      <div class="modal-body">
+        <form [formGroup]="passwordForm" (ngSubmit)="changePassword()" novalidate>
+          <div class="form-group">
+            <label class="form-label" for="current-password">Current Password</label>
+            <input
+              id="current-password"
+              class="form-control"
+              type="password"
+              formControlName="currentPassword"
+              autocomplete="current-password"
+            />
+            @if (passwordForm.controls.currentPassword.invalid && passwordForm.controls.currentPassword.touched) {
+              <p class="form-error">Current password is required.</p>
+            }
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="new-password">New Password</label>
+            <input
+              id="new-password"
+              class="form-control"
+              type="password"
+              formControlName="newPassword"
+              autocomplete="new-password"
+            />
+            @if (passwordForm.controls.newPassword.invalid && passwordForm.controls.newPassword.touched) {
+              @if (passwordForm.controls.newPassword.hasError('required')) {
+                <p class="form-error">New password is required.</p>
+              } @else {
+                <p class="form-error">{{ passwordRequirementsMessage }}</p>
+              }
+            }
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="confirm-password">Confirm New Password</label>
+            <input
+              id="confirm-password"
+              class="form-control"
+              type="password"
+              formControlName="confirmPassword"
+              autocomplete="new-password"
+            />
+            @if (passwordForm.controls.confirmPassword.invalid && passwordForm.controls.confirmPassword.touched) {
+              <p class="form-error">Password confirmation is required.</p>
+            }
+          </div>
+
+          <p class="form-hint">You will be signed out after changing your password.</p>
+
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" (click)="closePasswordModal()">Cancel</button>
+            <button type="submit" class="btn btn-primary" [disabled]="passwordForm.invalid || changingPassword()">
+              {{ changingPassword() ? 'Saving…' : 'Change Password' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+}

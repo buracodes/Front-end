@@ -1,0 +1,200 @@
+<div class="target-config">
+  <header class="tc-toolbar">
+    <div class="tc-toolbar-row">
+      <button type="button" class="btn btn-secondary" (click)="goBack()">&larr; Back</button>
+      <h2>Set Targets</h2>
+      <span class="tc-spacer"></span>
+      @if (scorecard(); as sc) {
+        <span class="meta-chip">{{ sc.name }}</span>
+      }
+      @if (fiscalYears().length > 0) {
+        <div class="form-group tc-fy-switch">
+          <label class="form-label" for="target-config-fiscal-year">Fiscal Year</label>
+          <select
+            id="target-config-fiscal-year"
+            class="form-control"
+            [value]="fiscalYearIdResolved() ?? ''"
+            [disabled]="loading()"
+            (change)="onFiscalYearChange($any($event.target).value)"
+          >
+            @for (fy of fiscalYears(); track fy.id) {
+              <option [value]="fy.id">
+                {{ fy.label }}{{ fy.status === 'Closed' ? ' (closed)' : '' }}
+              </option>
+            }
+          </select>
+        </div>
+      }
+    </div>
+  </header>
+
+  @if (loadError(); as err) {
+    <div class="tc-body">
+      <div class="tc-error-banner">{{ err }}</div>
+    </div>
+  } @else if (loading()) {
+    <div class="tc-body">
+      <p class="tc-loading">Loading KPI and existing targets&hellip;</p>
+    </div>
+  } @else {
+    <div class="tc-body">
+      @if (isReadOnly()) {
+      <div class="alert alert-warning read-only-banner" role="alert">
+        This fiscal year has <strong>ended or is closed</strong> and is read-only. Targets remain visible but can no longer be edited.
+      </div>
+      }
+
+      <!-- KPI summary -->
+      <section class="kpi-card">
+        <div class="kpi-main">
+          <h3>{{ kpi()?.name }}</h3>
+          <p class="kpi-sub">
+            {{ kpi()?.code || 'KPI' }}
+            @if (kpi()?.unit; as u) {
+              &middot; Unit {{ u }}
+            }
+          </p>
+        </div>
+        <div class="chips">
+          <span class="meta-chip chip-tone">{{ isCumulative() ? 'Cumulative' : 'Non-cumulative' }}</span>
+          <span class="meta-chip">Opt: {{ kpi()?.optimizationType }}</span>
+          @if (kpi()?.weight) {
+            <span class="meta-chip">Weight {{ kpi()?.weight }}%</span>
+          }
+        </div>
+      </section>
+
+      <!-- Rules -->
+      <section class="rules-card">
+        <h4>Target rules for this KPI</h4>
+        @if (isCumulative()) {
+          <ul>
+            <li>Annual target is <strong>required</strong>.</li>
+            <li>The <strong>four quarterly targets must sum exactly</strong> to the annual target.</li>
+            <li>Within each quarter, the <strong>three monthly targets must sum exactly</strong> to that quarter&rsquo;s target.</li>
+            <li>Use auto-calculate to derive the quarterly targets from the monthly values.</li>
+          </ul>
+        } @else {
+          <ul>
+            <li>Annual target is <strong>required</strong>.</li>
+            <li>Every <strong>quarterly target must equal</strong> the annual target.</li>
+            <li>Every <strong>monthly target must equal</strong> its quarterly target.</li>
+            <li>Auto-calculate is <strong>not available</strong> for non-cumulative KPIs.</li>
+          </ul>
+        }
+      </section>
+
+      <!-- Annual -->
+      <section class="tc-section">
+        <div class="tc-section-head">
+          <h4>Annual Target</h4>
+          <span class="hint">Required</span>
+        </div>
+        <div class="annual-row">
+          <input
+            class="annual-input"
+            type="number"
+            inputmode="decimal"
+            placeholder="&mdash;"
+            [value]="annualTarget() ?? ''"
+            [disabled]="isReadOnly()"
+            (input)="setAnnual($event)"
+          />
+          <span class="unit">{{ kpi()?.unit }}</span>
+        </div>
+        @if (!annualValid()) {
+          <p class="tc-error">Annual target is required.</p>
+        }
+      </section>
+
+      <!-- Auto-calculate (cumulative only) -->
+      @if (isCumulative()) {
+        <section class="tc-section">
+          <label class="check-row">
+            <input type="checkbox" [checked]="autoCalc()" [disabled]="isReadOnly()" (change)="setAutoCalc($event)" />
+            <span>Auto-calculate quarterly targets from monthly values</span>
+          </label>
+          <p class="hint">
+            When enabled, each quarterly target is computed from its three monthly targets and becomes read-only.
+          </p>
+        </section>
+      }
+
+      <!-- Quarterly + monthly -->
+      <section class="tc-section">
+        <div class="tc-section-head">
+          <h4>Quarterly &amp; Monthly Targets</h4>
+        </div>
+        <div class="quarter-grid">
+          @for (q of quarterIndexes; track q) {
+            <div class="quarter-box" [class.invalid]="!qValid(q)">
+              <div class="quarter-head">
+                <span class="quarter-name">{{ quarterLabel(q) }}</span>
+                @if (qValid(q)) {
+                  <span class="quarter-status ok">&#10003;</span>
+                } @else {
+                  <span class="quarter-status bad">&#10007;</span>
+                }
+              </div>
+
+              <label class="field" [class.field-readonly]="isCumulative() && autoCalc()">
+                <span class="field-label">Quarter target</span>
+                <input
+                  type="number"
+                  inputmode="decimal"
+                  [value]="quarterDisplay(q)"
+                  [readonly]="isReadOnly() || (isCumulative() && autoCalc())"
+                  (input)="setQuarterly(q, $event)"
+                />
+              </label>
+              @if (isCumulative() && autoCalc()) {
+                <p class="auto-note">Auto: computed from month totals</p>
+              }
+
+              <div class="month-row">
+                @for (mi of monthsOfQuarter(q); track mi) {
+                  <label class="month-box">
+                    <span class="month-name">{{ monthLabel(mi) }}</span>
+                    <input
+                      type="number"
+                      inputmode="decimal"
+                      [value]="monthly()[mi]"
+                      [readonly]="isReadOnly()"
+                      (input)="setMonthly(mi, $event)"
+                    />
+                  </label>
+                }
+              </div>
+
+              @if (qError(q); as err) {
+                <p class="tc-error">{{ err }}</p>
+              } @else {
+                <p class="quarter-sum">
+                  &Sigma; months = {{ quarterSum(q) }} &middot; target = {{ quarterDisplay(q) }}
+                  @if (kpi()?.unit; as u) {
+                    &nbsp;{{ u }}
+                  }
+                </p>
+              }
+            </div>
+          }
+        </div>
+      </section>
+
+      <!-- Save -->
+      <div class="tc-footer">
+        <div class="tc-messages">
+          @if (saved()) {
+            <span class="saved-flag">Targets saved &#10003;</span>
+          }
+          @if (summaryError(); as err) {
+            <span class="summary-error">{{ err }}</span>
+          }
+        </div>
+        <button type="button" class="btn btn-primary" [disabled]="!canSave()" (click)="save()">
+          {{ saving() ? 'Saving\u2026' : 'Save Targets' }}
+        </button>
+      </div>
+    </div>
+  }
+</div>

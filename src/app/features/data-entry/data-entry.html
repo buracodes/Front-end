@@ -1,0 +1,164 @@
+<div class="entry">
+  <div class="card entry-toolbar">
+    <div class="entry-toolbar-row">
+      <div class="entry-picker">
+        <label class="slabel" for="entry-fiscal-year">Fiscal Year</label>
+        <select
+          id="entry-fiscal-year"
+          class="form-control"
+          [value]="fiscalYearId() ?? ''"
+          (change)="onFiscalYearChange($event)"
+        >
+          @for (fy of fiscalYears(); track fy.id) {
+            <option [value]="fy.id">{{ fy.label }} ({{ fy.status }})</option>
+          }
+        </select>
+      </div>
+      <div class="entry-picker">
+        <label class="slabel" for="entry-scorecard">Scorecard</label>
+        <select
+          id="entry-scorecard"
+          class="form-control"
+          [value]="scorecardId() ?? ''"
+          (change)="onScorecardChange($event)"
+        >
+          @for (sc of scorecardsForFiscalYear(); track sc.id) {
+            <option [value]="sc.id">{{ sc.name }} — {{ sc.scope }} ({{ sc.scorecardStatus }})</option>
+          }
+        </select>
+      </div>
+    </div>
+  </div>
+
+  @if (isReadOnly()) {
+  <div class="alert alert-warning read-only-banner" role="alert">
+    <span>
+      @if (scorecardClosed()) {
+        This scorecard is <strong>closed</strong> and read-only.
+      } @else {
+        This fiscal year has <strong>ended or is closed</strong> and is read-only.
+      }
+      @if (hasActualsOverride()) {
+        You hold the <strong>Actuals Override</strong> permission — provide an audited reason below to correct values.
+      }
+    </span>
+  </div>
+  }
+
+  @if (isReadOnly() && hasActualsOverride()) {
+  <div class="card entry-override">
+    <label class="slabel" for="entry-override-reason">Override reason (audited, required)</label>
+    <input
+      id="entry-override-reason"
+      class="form-control"
+      type="text"
+      maxlength="500"
+      placeholder="Explain why this closed scorecard is being corrected"
+      [value]="overrideReason()"
+      (input)="onOverrideReasonInput($event)"
+    />
+  </div>
+  }
+
+  <div class="entry-header">
+    <p class="section-intro">
+      Enter actual KPI performance for the selected fiscal year and scorecard. Cells are enabled only for
+      open periods; locked periods are read-only unless an override is configured in Data Locking.
+      @if (isReadOnly() && !hasActualsOverride()) {
+        This scorecard is closed, so all cells are read-only.
+      }
+    </p>
+    <div class="entry-actions">
+      <button type="button" class="btn btn-secondary" (click)="bulkFill()" [disabled]="!canEnterActuals() || !totalDirtyCount()">
+        Save All
+      </button>
+      <button type="button" class="btn btn-primary" (click)="recalculateScores()">
+        Recalculate Scores
+      </button>
+    </div>
+  </div>
+
+  <div class="period-ribbon">
+    @for (period of periods(); track period.month) {
+      <div
+        class="period-chip"
+        [class]="periodTone(period.state)"
+        [class.current]="period.month === currentMonth()"
+        [title]="'Entry open: ' + (period.entryOpenDate ?? 'n/a') + ' | Cutoff: ' + (period.cutoffDate ?? 'n/a')"
+      >
+        <div class="period-chip-top">
+          <span class="period-dot"></span>
+          <span class="period-name">{{ period.short }}</span>
+        </div>
+        <span class="period-fill">{{ period.counts.filled }}/{{ period.counts.filled + period.counts.unfilled }}</span>
+      </div>
+    }
+  </div>
+
+  <div class="card entry-grid-wrap">
+    @if (loadingCells()) {
+      <div class="entry-loading">
+        <div class="spinner"></div>
+        Loading actuals…
+      </div>
+    } @else if (kpis().length) {
+      <div class="entry-grid-scroll">
+        <table class="entry-grid">
+          <thead>
+            <tr>
+              <th class="col-kpi">KPI</th>
+              @for (period of periods(); track period.month) {
+                <th class="col-month">
+                  <span>{{ period.short }}</span>
+                  <span class="period-pill" [class]="periodTone(period.state)">{{ stateLabel(period.state) }}</span>
+                </th>
+              }
+              <th class="col-ytd">YTD</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (kpi of kpis(); track kpi.id) {
+              <tr>
+                <td class="col-kpi">
+                  <div class="kpi-cell">
+                    <span class="kpi-name">{{ kpi.name }}</span>
+                    <span class="kpi-unit">{{ kpi.unit ?? (kpi.optimizationType | lowercase) }}</span>
+                  </div>
+                </td>
+                @for (period of periods(); track period.month) {
+                  <td class="col-month">
+                    @if (isEditable(period.month)) {
+                      <input
+                        class="cell-input"
+                        [class.dirty]="cellValue(kpi.id, period.month)?.dirty"
+                        type="number"
+                        inputmode="decimal"
+                        step="any"
+                        [value]="cellValue(kpi.id, period.month)?.value ?? ''"
+                        (input)="setCellValue(kpi.id, period.month, $any($event.target).value)"
+                        (keydown.enter)="save(kpi, period.month)"
+                        (blur)="save(kpi, period.month)"
+                      />
+                      @if (isSaving(kpi.id, period.month)) {
+                        <span class="cell-saving"><div class="spinner"></div></span>
+                      }
+                    } @else {
+                      <span class="cell-locked" [class.soon]="period.state === 'pending'">
+                        {{ cellValue(kpi.id, period.month)?.value ?? (period.state === 'locked' ? '—' : '') }}
+                      </span>
+                    }
+                  </td>
+                }
+                <td class="col-ytd"><strong>{{ ytd(cellsFor(kpi.id)) }}</strong></td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    } @else {
+      <div class="entry-empty">
+        {{ fiscalYearId() ? 'No KPIs configured for this scorecard yet.' : 'Select a fiscal year and scorecard to begin.' }}
+      </div>
+    }
+  </div>
+</div>

@@ -1,0 +1,11 @@
+<div class="toaster">
+  @for (toast of notifications.toasts(); track toast.id) {
+    <div class="toast toast-{{ toast.type }}" role="status">
+      <div class="toast-bar"></div>
+      <p class="toast-message">{{ toast.message }}</p>
+      <button type="button" class="toast-close" (click)="notifications.dismiss(toast.id)" aria-label="Dismiss notification">
+        <svg lucideIcon="x" size="14"></svg>
+      </button>
+    </div>
+  }
+</div>

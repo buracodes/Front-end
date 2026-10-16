@@ -1,0 +1,139 @@
+<div class="page">
+  <div class="d-flex align-center justify-between mb-4">
+    <div>
+      <h1 class="page-title">Divisions</h1>
+      <p class="page-subtitle">Manage organizational divisions.</p>
+    </div>
+    <button type="button" class="btn btn-primary" (click)="openAddModal()">Add Division</button>
+  </div>
+
+  @if (showForm()) {
+    <div class="modal-backdrop" (click)="onCancelEdit()">
+      <div class="modal-dialog" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>New Division</h3>
+          <button type="button" class="close-btn" (click)="onCancelEdit()" aria-label="Close"><svg lucideIcon="x" size="18"></svg></button>
+        </div>
+        <div class="modal-body">
+          <form [formGroup]="form" (ngSubmit)="onSubmit()" novalidate>
+            <div class="form-group">
+              <label class="form-label" for="division-name">Name</label>
+              <input
+                id="division-name"
+                class="form-control"
+                type="text"
+                formControlName="name"
+                placeholder="e.g. Trading Operations"
+              />
+              @if (form.controls.name.invalid && form.controls.name.touched) {
+                <p class="form-error">
+                  @if (form.controls.name.hasError('required')) {
+                    Name is required.
+                  } @else if (form.controls.name.hasError('maxlength')) {
+                    Name must be at most 200 characters.
+                  }
+                </p>
+              }
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="division-code">Code</label>
+              <input
+                id="division-code"
+                class="form-control"
+                type="text"
+                formControlName="code"
+                placeholder="e.g. TRO"
+              />
+              @if (form.controls.code.invalid && form.controls.code.touched) {
+                @if (form.controls.code.hasError('required')) {
+                  <p class="form-error">Code is required.</p>
+                } @else {
+                  <p class="form-error">Code must be at most 50 characters.</p>
+                }
+              }
+              <p class="form-hint">
+                A Data Input User login is created automatically for this division: username = code, default password = same code.
+              </p>
+            </div>
+
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" (click)="onCancelEdit()">Cancel</button>
+              <button type="submit" class="btn btn-primary" [disabled]="form.invalid || submitting()">
+                {{ submitting() ? 'Saving…' : 'Save Division' }}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (showResetForm() && selectedDivision(); as division) {
+    <div class="modal-backdrop" (click)="onCancelReset()">
+      <div class="modal-dialog" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>Reset Password</h3>
+          <button type="button" class="close-btn" (click)="onCancelReset()" aria-label="Close"><svg lucideIcon="x" size="18"></svg></button>
+        </div>
+        <div class="modal-body">
+          <form [formGroup]="resetForm" (ngSubmit)="onResetPassword()" novalidate>
+            <p class="form-hint">
+              Set a new password for the '{{ division.code }}' Data Input login. Any active sessions for that
+              account are signed out.
+            </p>
+
+            <div class="form-group">
+              <label class="form-label" for="division-new-password">New Password</label>
+              <input
+                id="division-new-password"
+                class="form-control"
+                type="password"
+                formControlName="newPassword"
+                autocomplete="new-password"
+              />
+              @if (resetForm.controls.newPassword.invalid && resetForm.controls.newPassword.touched) {
+                @if (resetForm.controls.newPassword.hasError('required')) {
+                  <p class="form-error">New password is required.</p>
+                } @else {
+                  <p class="form-error">{{ passwordRequirementsMessage }}</p>
+                }
+              }
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="division-confirm-password">Confirm New Password</label>
+              <input
+                id="division-confirm-password"
+                class="form-control"
+                type="password"
+                formControlName="confirmPassword"
+                autocomplete="new-password"
+              />
+              @if (resetForm.controls.confirmPassword.invalid && resetForm.controls.confirmPassword.touched) {
+                <p class="form-error">Password confirmation is required.</p>
+              }
+            </div>
+
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" (click)="onCancelReset()">Cancel</button>
+              <button type="submit" class="btn btn-primary" [disabled]="resetForm.invalid || resetting()">
+                {{ resetting() ? 'Saving…' : 'Reset Password' }}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (loadError()) {
+    <div class="alert alert-danger" role="alert">{{ loadError() }}</div>
+  }
+
+  <div class="card">
+    <div class="card-body">
+      <app-grid-table [rowData]="rows()" [columnDefs]="columnDefs" [loading]="loading()" />
+    </div>
+  </div>
+</div>

@@ -1,0 +1,150 @@
+<div class="clone">
+  <p class="section-intro">
+    Copy a source scorecard and its full structure — Goals, KRAs, KPIs and KPI targets — into a target
+    fiscal year. Existing scorecards and actual performance are untouched; the clone starts as a
+    fresh <strong>Active</strong> scorecard in the target year.
+  </p>
+
+  <div class="clone-grid">
+    <div class="card clone-panel">
+      <div class="clone-panel-head">
+        <h3>Source Scorecard</h3>
+        <span class="clone-step">1</span>
+      </div>
+
+      <div class="clone-field">
+        <label class="slabel" for="clone-source">Scorecard</label>
+        <select
+          id="clone-source"
+          class="form-control"
+          [value]="sourceScorecardId() ?? ''"
+          (change)="onSourceChange($event)"
+        >
+          @for (sc of scorecards(); track sc.id) {
+            <option [value]="sc.id">{{ sc.name }} — {{ sc.scope }} ({{ sc.scorecardStatus }})</option>
+          }
+        </select>
+      </div>
+
+      @if (source()) {
+        <div class="source-box">
+          <div class="source-row">
+            <span class="source-label">Fiscal year</span>
+            <span class="source-value">{{ sourceFiscalYearLabel() }}</span>
+          </div>
+          <div class="source-row">
+            <span class="source-label">Scope</span>
+            <span class="source-value">{{ source()!.scope }}</span>
+          </div>
+          <div class="source-row">
+            <span class="source-label">Status</span>
+            <span class="source-value source-status">{{ source()!.scorecardStatus }}</span>
+          </div>
+          <div class="source-row">
+            <span class="source-label">Composition</span>
+            <span class="source-value clone-counts">
+              @for (part of cloneCounts(); track part) {
+                <span class="count-chip">{{ part }}</span>
+              }
+            </span>
+          </div>
+          @if (loadingDetail()) {
+            <div class="source-loading"><div class="spinner"></div> Loading counts…</div>
+          }
+        </div>
+      }
+    </div>
+
+    <div class="clone-arrow" aria-hidden="true"><svg lucideIcon="arrow-right" size="26"></svg></div>
+
+    <div class="card clone-panel">
+      <div class="clone-panel-head">
+        <h3>Target Fiscal Year</h3>
+        <span class="clone-step">2</span>
+      </div>
+
+      <div class="clone-field">
+        <label class="slabel" for="clone-target">Fiscal year</label>
+        <select
+          id="clone-target"
+          class="form-control"
+          [value]="targetFiscalYearId() ?? ''"
+          (change)="onTargetChange($event)"
+        >
+          @for (fy of targetYearCandidates(); track fy.id) {
+            <option [value]="fy.id">{{ fy.label }} ({{ fy.status }})</option>
+          }
+        </select>
+      </div>
+
+      <div class="clone-field">
+        <label class="slabel" for="clone-name">New scorecard name</label>
+        <input
+          id="clone-name"
+          class="form-control"
+          type="text"
+          maxlength="120"
+          [placeholder]="source()?.name ?? 'Scorecard name (defaults to source name)'"
+          [value]="newName()"
+          (input)="onNameInput($any($event.target).value)"
+        />
+        <span class="form-hint">Leave blank to reuse the source name.</span>
+      </div>
+
+      @if (nameTaken()) {
+        <div class="alert alert-danger clone-alert">
+          A scorecard named <strong>'{{ proposedName() }}'</strong> already exists in
+          {{ targetYear()?.label ?? 'that fiscal year' }}. Choose a different name.
+        </div>
+      }
+      @if (sameFiscalYear() && !nameTaken()) {
+        <div class="alert alert-warning clone-alert">
+          Source and target are the same fiscal year. The clone is only allowed if you supply a name
+          that is not already used by another scorecard in that year.
+        </div>
+      }
+    </div>
+  </div>
+
+  <div class="clone-actions">
+    <button
+      type="button"
+      class="btn btn-primary clone-run"
+      (click)="clone()"
+      [disabled]="!canClone()"
+    >
+      {{ cloning() ? 'Cloning…' : nameTaken() ? 'Fix name to clone' : 'Clone Scorecard' }}
+    </button>
+  </div>
+
+  @if (result()) {
+    <div class="card clone-result">
+      <div class="clone-result-head">
+        <h3>Clone complete</h3>
+        <span class="clone-result-name">{{ result()!.name }}</span>
+      </div>
+      <div class="clone-result-grid">
+        <div class="result-stat">
+          <span class="result-stat-value">{{ result()!.goalCount }}</span>
+          <span class="result-stat-label">Goals</span>
+        </div>
+        <div class="result-stat">
+          <span class="result-stat-value">{{ result()!.kraCount }}</span>
+          <span class="result-stat-label">KRAs</span>
+        </div>
+        <div class="result-stat">
+          <span class="result-stat-value">{{ result()!.kpiCount }}</span>
+          <span class="result-stat-label">KPIs</span>
+        </div>
+        <div class="result-stat">
+          <span class="result-stat-value">{{ result()!.targetCount }}</span>
+          <span class="result-stat-label">Targets copied</span>
+        </div>
+      </div>
+      <div class="clone-result-actions">
+        <button type="button" class="btn btn-primary" (click)="openClonedScorecard()">Open in Scorecard</button>
+        <button type="button" class="btn btn-secondary" (click)="clearResult()">Clone another</button>
+      </div>
+    </div>
+  }
+</div>

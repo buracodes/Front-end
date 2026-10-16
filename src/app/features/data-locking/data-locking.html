@@ -1,0 +1,212 @@
+<div class="locking">
+  <div class="card locking-toolbar">
+    <div class="locking-toolbar-row">
+      <div class="locking-picker">
+        <label class="slabel" for="locking-fiscal-year">Fiscal Year</label>
+        <select
+          id="locking-fiscal-year"
+          class="form-control"
+          [value]="fiscalYearId() ?? ''"
+          (change)="onFiscalYearChange($event)"
+        >
+          @for (fy of fiscalYears(); track fy.id) {
+            <option [value]="fy.id">{{ fy.label }} ({{ fy.status }})</option>
+          }
+        </select>
+      </div>
+      <div class="locking-picker">
+        <label class="slabel" for="locking-scorecard">Scorecard</label>
+        <select
+          id="locking-scorecard"
+          class="form-control"
+          [value]="scorecardId() ?? ''"
+          (change)="onScorecardChange($event)"
+        >
+          @for (sc of scorecards(); track sc.id) {
+            <option [value]="sc.id">{{ sc.name }} — {{ sc.scope }} ({{ sc.scorecardStatus }})</option>
+          }
+        </select>
+      </div>
+      <button type="button" class="btn btn-secondary" (click)="refresh()" [disabled]="loading()">Refresh</button>
+    </div>
+  </div>
+
+  <div class="locking-summary">
+    <div class="card locking-stat locking-stat--open">
+      <span class="locking-stat-value">{{ counts().open }}</span>
+      <span class="locking-stat-label">Open periods</span>
+    </div>
+    <div class="card locking-stat locking-stat--pending">
+      <span class="locking-stat-value">{{ counts().pending }}</span>
+      <span class="locking-stat-label">Not yet open</span>
+    </div>
+    <div class="card locking-stat locking-stat--locked">
+      <span class="locking-stat-value">{{ counts().locked }}</span>
+      <span class="locking-stat-label">Locked periods</span>
+    </div>
+    <p class="locking-note">
+      The lock window for each month defaults to day <strong>{{ periods()[0]?.effectiveEntryOpenDay ?? 1 }}</strong>
+      (entry opens) and day <strong>{{ periods()[0]?.effectiveCutoffDay ?? 7 }}</strong> (cutoff) after the period end.
+      Overriding a period below changes the effective window and, when locked, blocks new actual entries
+      (server-side) even where the date-based window would otherwise allow them. Manual unlocks re-open entry.
+    </p>
+  </div>
+
+  @if (loading()) {
+    <div class="card locking-loading">
+      <div class="spinner"></div>
+      <span>Loading lock status…</span>
+    </div>
+  } @else if (periods().length) {
+    <div class="card locking-table-wrap">
+      <table class="locking-table">
+        <thead>
+          <tr>
+            <th>Period</th>
+            <th>State</th>
+            <th>Entry Window (effective)</th>
+            <th>Window Config</th>
+            <th>Override</th>
+            <th class="th-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (period of periods(); track period.fiscalPeriodId) {
+            <tr [class.is-locked]="period.state === 'locked'">
+              <td>
+                <div class="period-name">{{ monthLabel(period) }}</div>
+                <div class="period-badges">
+                  @if (period.isQuarterEnd) { <span class="pill pill-q">Quarter end</span> }
+                  @if (period.isYearEnd) { <span class="pill pill-y">Year end</span> }
+                </div>
+              </td>
+              <td>
+                <span class="state-badge" [class]="'state-' + stateTone(period)">
+                  <span class="state-dot"></span>{{ stateLabel(period) }}
+                </span>
+              </td>
+              <td>
+                <div class="window-dates">
+                  <span class="wd-entry">{{ period.effectiveEntryOpenDate | date: 'MMM d, yyyy' }}</span>
+                  <span class="wd-arrow"><svg lucideIcon="arrow-right" size="16"></svg></span>
+                  <span class="wd-cutoff">{{ period.effectiveCutoffDate | date: 'MMM d, yyyy' }}</span>
+                </div>
+                <div class="window-hint">
+                  day {{ period.effectiveEntryOpenDay }} → day {{ period.effectiveCutoffDay }}
+                  @if (period.state === 'open') {
+                    · <strong>{{ period.effectiveReminderDaysBeforeCutoff }}d</strong> reminder
+                  }
+                </div>
+              </td>
+              <td>
+                @if (canManage()) {
+                  <div class="config-grid">
+                    <label class="cfg-field">
+                      <span class="cfg-label">Open +</span>
+                      <input
+                        class="form-control cfg-input"
+                        type="number" min="0" max="31"
+                        [value]="draftFor(period).entryOpenDay"
+                        (keydown.enter)="saveConfig(period)"
+                        (change)="setField(period, 'entryOpenDay', $any($event.target).value)"
+                      />
+                    </label>
+                    <label class="cfg-field">
+                      <span class="cfg-label">Cutoff +</span>
+                      <input
+                        class="form-control cfg-input"
+                        type="number" min="0" max="31"
+                        [value]="draftFor(period).cutoffDay"
+                        (keydown.enter)="saveConfig(period)"
+                        (change)="setField(period, 'cutoffDay', $any($event.target).value)"
+                      />
+                    </label>
+                    <label class="cfg-field">
+                      <span class="cfg-label">Reminder</span>
+                      <input
+                        class="form-control cfg-input"
+                        type="number" min="0" max="31"
+                        [value]="draftFor(period).reminderDaysBeforeCutoff"
+                        (keydown.enter)="saveConfig(period)"
+                        (change)="setField(period, 'reminderDaysBeforeCutoff', $any($event.target).value)"
+                      />
+                    </label>
+                  </div>
+                } @else {
+                  <span class="cfg-readonly">
+                    open {{ period.effectiveEntryOpenDay }} · cutoff {{ period.effectiveCutoffDay }}
+                    · remind {{ period.effectiveReminderDaysBeforeCutoff }}d
+                  </span>
+                }
+              </td>
+              <td>
+                @if (period.hasExplicitOverride || period.lockedAtUtc || period.unlockedAtUtc) {
+                  <div class="override-tag">
+                    <span class="pill pill-override">Manual</span>
+                    @if (period.lockedAtUtc) {
+                      <span class="override-line">Locked {{ period.lockedAtUtc | date: 'MMM d, HH:mm' }} UTC</span>
+                    }
+                    @if (period.unlockedAtUtc) {
+                      <span class="override-line">Unlocked {{ period.unlockedAtUtc | date: 'MMM d, HH:mm' }} UTC</span>
+                    }
+                  </div>
+                } @else {
+                  <span class="override-none">Auto (date-based)</span>
+                }
+              </td>
+              <td>
+                @if (canManage()) {
+                  @if (isDirty(period)) {
+                    <div class="row-actions">
+                      <button
+                        type="button"
+                        class="btn btn-primary btn-xs"
+                        (click)="saveConfig(period)"
+                        [disabled]="saving() === period.fiscalPeriodId"
+                      >Save</button>
+                      <button type="button" class="btn btn-ghost btn-xs" (click)="clearDraft(period)">Reset</button>
+                    </div>
+                  }
+@if (period.state !== 'locked') {
+                      <button
+                        type="button"
+                        class="btn btn-danger-outline btn-xs"
+                        (click)="lock(period)"
+                        [disabled]="saving() === period.fiscalPeriodId"
+                        title="Manually lock this period. Blocks entries even if the date window is open."
+                      >
+                        {{ saving() === period.fiscalPeriodId ? '…' : 'Lock' }}
+                      </button>
+                      <!-- @if (period.state !== 'open') {
+                        <button
+                          type="button"
+                          class="btn btn-success btn-xs"
+                          (click)="forceOpen(period)"
+                          [disabled]="saving() === period.fiscalPeriodId"
+                          title="Force this period open. Entries will be allowed regardless of the date window."
+                        >
+                          {{ saving() === period.fiscalPeriodId ? '…' : 'Force Open' }}
+                        </button>
+                      } -->
+                    } @else {
+                      <button
+                        type="button"
+                        class="btn btn-secondary btn-xs"
+                        (click)="unlock(period)"
+                        [disabled]="saving() === period.fiscalPeriodId"
+                        title="Re-open this period for entries."
+                      >Unlock</button>
+                    }
+                } @else {
+                  <span class="cfg-readonly">Read-only</span>
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  } @else {
+    <div class="card locking-empty">No lock configuration available for the selected scorecard.</div>
+  }
+</div>

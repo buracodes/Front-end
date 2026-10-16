@@ -1,0 +1,129 @@
+<div class="grid min-h-screen grid-cols-1 lg:grid-cols-2">
+  <div class="relative hidden flex-col justify-between overflow-hidden bg-[#122820] px-14 py-12 text-white lg:flex">
+    <div class="pointer-events-none absolute inset-0"
+      style="background: radial-gradient(ellipse at 20% 0%, #1c4635, #122820 60%);"></div>
+
+    <div class="relative flex items-center gap-3">
+      <img
+        src="/assets/ECXLogo.jpg"
+        alt="Ethiopian Commodity Exchange logo"
+        class="h-10 w-10 rounded-lg object-contain ring-1 ring-white/15"
+      />
+      <div>
+        <p class="text-base font-semibold leading-tight">SPMS</p>
+        <p class="text-xs leading-tight text-white/60">Strategic Planning &amp; Monitoring · ECX</p>
+      </div>
+    </div>
+
+    <div class="relative max-w-md">
+      <h1 class="text-4xl font-semibold leading-tight text-white">
+        One place for ECX's strategy, from goal to grain.
+      </h1>
+      <p class="mt-4 text-sm leading-relaxed text-white/65">
+        Replace scattered spreadsheets with a single source of truth — track Goals, KRAs and
+        KPIs, monitor initiatives, and report on performance in real time.
+      </p>
+
+      <div class="mt-9 flex h-28 items-end gap-2" aria-hidden="true">
+        @for (h of [40, 65, 50, 80, 60, 95, 72]; track h) {
+          <div
+            class="w-5 rounded-t bg-gradient-to-b from-brand-accent to-[#8a5a20] opacity-90"
+            [style.height.%]="h"
+          ></div>
+        }
+      </div>
+    </div>
+
+    <p class="relative text-xs text-white/45">
+      &copy; {{ year }} Ethiopian Commodity Exchange &middot; Strategic Planning &amp; Monitoring Division
+    </p>
+  </div>
+
+  <!-- Sign-in panel -->
+  <div class="flex flex-col items-center justify-center bg-slate-50 px-6 py-12 lg:bg-white">
+    <div class="w-full max-w-md">
+      <!-- Brand header (mobile / no-hero fallback) -->
+      <div class="mb-8 flex flex-col items-center text-center lg:hidden">
+        <img
+          src="/assets/ECXLogo.jpg"
+          alt="Ethiopian Commodity Exchange logo"
+          class="mb-5 h-20 w-auto object-contain"
+        />
+        <h1 class="text-2xl font-bold text-brand">Strategic Planning &amp; Monitoring System</h1>
+        <p class="mt-1 text-sm text-slate-500">Ethiopian Commodity Exchange</p>
+      </div>
+
+      <!-- Sign-in card -->
+      <div class="rounded-2xl bg-white p-8 shadow-lg ring-1 ring-slate-200 lg:shadow-none lg:ring-0">
+        <h2 class="text-2xl font-semibold text-slate-900">Sign in</h2>
+        <p class="mt-1 text-sm text-slate-500">Enter your credentials to continue to your dashboard.</p>
+
+        @if (errorMessage()) {
+          <div
+            class="mt-5 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+            role="alert"
+          >
+            <svg lucideIcon="circle-alert" size="16" class="mt-0.5 flex-shrink-0"></svg>
+            {{ errorMessage() }}
+          </div>
+        }
+
+        <form class="mt-6 space-y-5" [formGroup]="form" (ngSubmit)="onSubmit()" novalidate>
+          <div>
+            <label class="mb-1.5 block text-sm font-medium text-slate-700" for="username">Username</label>
+            <input
+              id="username"
+              class="w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+              type="text"
+              autocomplete="username"
+              formControlName="username"
+              placeholder="Enter your username"
+            />
+            @if (form.controls.username.invalid && form.controls.username.touched) {
+              <p class="mt-1.5 text-xs text-red-600">Username is required.</p>
+            }
+          </div>
+
+          <div>
+            <!-- <div class="mb-1.5 flex items-center justify-between">
+              <label class="block text-sm font-medium text-slate-700" for="password">Password</label>
+              <a routerLink="/forgot-password" class="text-xs font-medium text-brand hover:underline">
+                Forgot password?
+              </a>
+            </div> -->
+            <label class="mb-1.5 block text-sm font-medium text-slate-700" for="username">Password</label>
+            <input
+              id="password"
+              class="w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+              type="password"
+              autocomplete="current-password"
+              formControlName="password"
+              placeholder="Enter your password"
+            />
+            @if (form.controls.password.invalid && form.controls.password.touched) {
+              <p class="mt-1.5 text-xs text-red-600">Password is required.</p>
+            }
+          </div>
+
+          <button
+            type="submit"
+            class="flex w-full items-center justify-center gap-2 rounded-lg bg-[#18552c] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#154727] focus:outline-none focus:ring-2 focus:ring-[#18552c]/40 disabled:cursor-not-allowed disabled:opacity-60"
+            [disabled]="form.invalid || submitting()"
+          >
+            @if (submitting()) {
+              <svg lucideIcon="loader-circle" size="16" class="animate-spin"></svg>
+              Signing in…
+            } @else {
+              Sign in
+            }
+          </button>
+        </form>
+      </div>
+
+      <p class="mt-8 flex items-center justify-center gap-2 text-center text-xs text-slate-400 lg:hidden">
+        <span class="inline-block h-1 w-8 rounded-full bg-brand-accent"></span>
+        &copy; {{ year }} Ethiopian Commodity Exchange
+      </p>
+    </div>
+  </div>
+</div>

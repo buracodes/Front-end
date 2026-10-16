@@ -1,0 +1,53 @@
+<ag-grid-angular
+  class="grid-table"
+  [theme]="theme"
+  [rowData]="rowData()"
+  [columnDefs]="displayColumns()"
+  [defaultColDef]="defaultColDef"
+  [pagination]="true"
+  [paginationPageSize]="pageSize()"
+  [paginationPageSizeSelector]="[10, 25, 50, 100]"
+  [paginationAutoPageSize]="false"
+  [animateRows]="true"
+  [suppressCellFocus]="false"
+  [rowHeight]="48"
+  [headerHeight]="44"
+  [suppressColumnVirtualisation]="false"
+  [overlayNoRowsTemplate]="noRowsTemplate()"
+  [loading]="loading()"
+  [style.height]="height()"
+  (gridReady)="onGridReady($event)"
+  (selectionChanged)="onSelectionChanged($event)"
+  (cellValueChanged)="onCellValueChanged($event)" />
+
+@if (menu(); as m) {
+  <div class="actions-dropdown-menu"
+    role="menu"
+    [style.right.px]="m.right"
+    [style.top.px]="m.openUp ? undefined : m.top"
+    [style.bottom.px]="m.openUp ? m.bottom : undefined">
+    @for (item of m.items; track item.key) {
+      <button type="button"
+        class="dropdown-item"
+        role="menuitem"
+        [class.dropdown-item-danger]="!!item.danger"
+        [class.dropdown-item-separated]="!!item.separated"
+        (click)="runAction(m, item.key)">
+        <span class="dropdown-item-icon" [class.dropdown-item-icon-danger]="!!item.danger" aria-hidden="true">
+          @switch (item.key) {
+            @case ('edit') {
+              <svg lucideIcon="square-pen" size="15"></svg>
+            }
+            @case ('delete') {
+              <svg lucideIcon="trash" size="15"></svg>
+            }
+            @default {
+              <svg lucideIcon="circle" size="15"></svg>
+            }
+          }
+        </span>
+        {{ item.label }}
+      </button>
+    }
+  </div>
+}

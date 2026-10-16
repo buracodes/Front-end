@@ -1,0 +1,55 @@
+@if (!hasRows()) {
+  <p class="empty">{{ emptyMessage() ?? 'Nothing to show for the selected period.' }}</p>
+} @else {
+  <div class="table-wrap" [style.--dx-table-max-height]="maxHeight()">
+    <table class="table">
+      <thead>
+        <tr>
+          @for (column of columns(); track column.key) {
+            <th [class.align-right]="column.align === 'right'" [class.align-center]="column.align === 'center'">
+              {{ column.label }}
+            </th>
+          }
+        </tr>
+      </thead>
+      <tbody>
+        @for (row of rows(); track row.id ?? $index) {
+          <tr
+            class="row"
+            [class.row--link]="!!(row.route || showRowLinks())"
+            (click)="rowSelected.emit(row)"
+          >
+            @for (column of columns(); track column.key; let first = $first) {
+              <td
+                [class.align-right]="column.align === 'right'"
+                [class.align-center]="column.align === 'center'"
+              >
+                @switch (column.format) {
+                  @case ('rag') {
+                    <span [class]="'rag-pill ' + ragTone(cell(row, column))">
+                      {{ display(row, column) }}
+                    </span>
+                  }
+                  @case ('status') {
+                    <span [class]="'status-pill status-pill--' + slug(cell(row, column))">
+                      {{ display(row, column) }}
+                    </span>
+                  }
+                  @default {
+                    @if (row.route && first && showRowLinks()) {
+                      <a class="name-cell" [routerLink]="row.route">{{ display(row, column) }}</a>
+                    } @else {
+                      <span [class.name-cell]="first" [class.muted]="cell(row, column) == null">
+                        {{ display(row, column) }}
+                      </span>
+                    }
+                  }
+                }
+              </td>
+            }
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+}

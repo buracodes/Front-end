@@ -1,0 +1,15 @@
+.filters {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+
+  .filter-field {
+    min-width: 220px;
+    margin-bottom: 0;
+  }
+
+  .form-hint {
+    margin: var(--sp-1) 0 0;
+  }
+}

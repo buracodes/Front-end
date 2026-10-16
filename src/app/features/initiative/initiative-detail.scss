@@ -1,0 +1,455 @@
+.form-row {
+  display: flex;
+  gap: 1rem;
+
+  .form-group {
+    flex: 1;
+  }
+}
+
+.detail-title-row {
+  gap: 0.75rem;
+}
+
+.back-btn {
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  border-radius: 8px;
+  width: 2.25rem;
+  height: 2.25rem;
+  cursor: pointer;
+  font-size: 1rem;
+
+  &:hover {
+    background: #f2f4f7;
+  }
+}
+
+.detail-header-actions {
+  gap: 0.6rem;
+}
+
+.btn-icon {
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  border-radius: 8px;
+  width: 2.25rem;
+  height: 2.25rem;
+  cursor: pointer;
+
+  &:hover {
+    background: #f2f4f7;
+  }
+}
+
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1rem;
+}
+
+@media (max-width: 1200px) {
+  .stats-row {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .stats-row {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem;
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8a94a6;
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.stat-value-sm {
+  font-size: 1.1rem;
+}
+
+.stat-value.value-planned,
+.closure-grid dd.value-planned { color: var(--color-accent); }
+
+.stat-value.value-actual,
+.closure-grid dd.value-actual {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.stat-footnote {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* FRD progress bands. The thresholds live in the backend (DashboardRag); these only
+   paint whatever band it reports, reusing the shared --color-rag-* tokens. */
+.rag-green { color: var(--color-rag-green); }
+.rag-amber { color: var(--color-rag-yellow); }
+.rag-red { color: var(--color-rag-red); }
+.rag-gray { color: var(--color-rag-gray); }
+
+.progress-fill.rag-green { background: var(--color-primary); }
+.progress-fill.rag-amber { background: var(--color-rag-yellow); }
+.progress-fill.rag-red { background: var(--color-rag-red); }
+.progress-fill.rag-gray { background: var(--color-rag-gray); }
+
+.tabs {
+  display: flex;
+  gap: 1.5rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.tab {
+  border: none;
+  background: transparent;
+  padding: 0.6rem 0;
+  font-size: 0.95rem;
+  color: #8a94a6;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+
+  &.active {
+    color: #1c2531;
+    font-weight: 600;
+    border-bottom-color: #e2792e;
+  }
+
+  &:hover:not(.active) {
+    color: #4a5568;
+  }
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.badge-info {
+  background: #e6f0fd;
+  color: #2f6fed;
+}
+
+.badge-warning {
+  background: #fdf1e0;
+  color: #c07a1f;
+}
+
+.badge-success {
+  background: #e6f7ec;
+  color: #1f9254;
+}
+
+.badge-danger {
+  background: #fde8e8;
+  color: #c0392b;
+}
+
+.badge-neutral {
+  background: #f0f0f0;
+  color: #6b7280;
+}
+
+.milestone-table {
+  width: 100%;
+  border-collapse: collapse;
+
+  th {
+    text-align: left;
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #8a94a6;
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid #eef0f3;
+  }
+
+  td {
+    padding: 0.85rem 0.75rem;
+    border-bottom: 1px solid #eef0f3;
+    font-size: 0.9rem;
+    color: #1c2531;
+  }
+}
+
+.completion-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 160px;
+}
+
+.progress-track {
+  flex: 1;
+  height: 8px;
+  border-radius: 999px;
+  background: #eef0f3;
+  overflow: hidden;
+
+  &.small {
+    width: 100px;
+    flex: none;
+  }
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--color-primary);
+  transition: width 0.15s ease-out;
+
+  &.progress-fill-success {
+    background: #1f9254;
+  }
+}
+
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.slider-value {
+  flex: none;
+  min-width: 3.25rem;
+  text-align: right;
+  font-size: 1.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.completion-slider {
+  flex: 1;
+  height: 1.5rem;
+  margin: 0;
+  background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: 2px solid #2f6fed;
+    outline-offset: 4px;
+  }
+
+  &::-webkit-slider-runnable-track {
+    height: 8px;
+    border-radius: 999px;
+    background: #eef0f3;
+  }
+
+  &::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    margin-top: -6px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #2f6fed;
+    border: 2px solid #fff;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.35);
+  }
+
+  &::-moz-range-track {
+    height: 8px;
+    border-radius: 999px;
+    background: #eef0f3;
+  }
+
+  &::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #2f6fed;
+    border: 2px solid #fff;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.35);
+  }
+}
+
+.row-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.icon-btn {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: #8a94a6;
+  padding: 0.25rem;
+
+  &:hover {
+    color: #1c2531;
+  }
+
+  &.danger:hover {
+    color: #d64545;
+  }
+}
+
+.formula-note {
+  margin-top: 1rem;
+  font-size: 0.82rem;
+  color: #8a94a6;
+}
+
+.kebab-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.kebab-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: #8a94a6;
+  padding: 0.15rem 0.4rem;
+  border-radius: 6px;
+
+  &:hover {
+    background: #f2f4f7;
+  }
+}
+
+.kebab-menu {
+  position: absolute;
+  top: 1.75rem;
+  right: 0;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+  min-width: 150px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
+  button {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    border: none;
+    background: transparent;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    color: #1c2531;
+    cursor: pointer;
+    text-align: left;
+
+    &:hover {
+      background: #f2f4f7;
+    }
+
+    &.danger {
+      color: #c0392b;
+
+      &:hover {
+        background: #fdf0f0;
+      }
+    }
+  }
+}
+
+.budget-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+}
+
+.page-subtitles {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+@media (max-width: 900px) {
+  .budget-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.phase-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-bottom: 1.1rem;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.phase-name {
+  font-size: 0.88rem;
+  color: #1c2531;
+}
+
+.phase-value {
+  font-size: 0.85rem;
+  color: #4a5568;
+}
+
+.variance-note {
+  font-size: 0.85rem;
+  color: #8a94a6;
+  margin: 0.5rem 0 1rem;
+}
+
+.btn-block {
+  width: 100%;
+}
+
+.progress-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.progress-log-name {
+  display: block;
+  font-weight: 600;
+  color: #1c2531;
+}
+
+.progress-log-meta {
+  display: block;
+  font-size: 0.85rem;
+  color: #8a94a6;
+}
+
+.empty-state {
+  color: #8a94a6;
+  padding: 1.5rem 0;
+  text-align: center;
+}

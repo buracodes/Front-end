@@ -1,0 +1,141 @@
+@if (loading()) {
+  <div class="dx">
+    <div class="dx-loading">
+      <span class="dx-spinner"></span>
+      <span>Loading your dashboard…</span>
+    </div>
+  </div>
+} @else if (error() && !context()) {
+  <div class="dx">
+    <div class="dx-panel">
+      <div class="dx-panel-head"><h2>Dashboard unavailable</h2></div>
+      <p class="dx-empty">{{ error() }}</p>
+      <button type="button" class="dx-btn dx-btn-primary" (click)="retry()">Try again</button>
+    </div>
+  </div>
+} @else {
+  <div class="dx">
+    <!-- ── Page header: role, scope and insight ────────────── -->
+    <header class="dx-head">
+      <div class="dx-head-title">
+        <span class="dx-breadcrumb">{{ userStore.user()?.fullName || 'My workspace' }}</span>
+        <h1>{{ context()?.displayName ?? 'Dashboard' }}</h1>
+        @if (context()?.purpose) {
+          <p class="dx-subtitle">{{ context()?.purpose }}</p>
+        }
+      </div>
+
+      <div class="dx-head-controls">
+        <span class="dx-context">{{ context()?.role }} · {{ scopeLabel() }}</span>
+        @if (readOnly()) {
+          <span class="dx-badge dx-badge--readonly" title="Your role cannot change performance data">
+            Read only
+          </span>
+        }
+        <app-dashboard-filters
+          [filter]="filter()"
+          [fiscalYears]="fiscalYearOptions()"
+          [scorecards]="scorecardOptions()"
+          [periods]="periodOptions()"
+          [disabled]="refreshing()"
+          [busy]="refreshing()"
+          (filterChange)="onFilterChange($event)"
+        />
+      </div>
+    </header>
+
+    @if (error()) {
+      <p class="dx-alert dx-alert--warning">{{ error() }} — showing the last successful result.</p>
+    }
+
+    @if (fiscalYearClosed()) {
+      <p class="dx-alert dx-alert--info">
+        This fiscal year is closed. Figures are read-only and reflect the final locked state.
+      </p>
+    }
+
+    @if (context()?.insight) {
+      <section class="dx-panel dx-insight">
+        <span class="dx-eyebrow">{{ appliedPeriod() }}</span>
+        <p>{{ context()?.insight }}</p>
+      </section>
+    }
+
+    <!-- ── Quick actions: role specific, server routed ─────── -->
+    @if (quickActions().length) {
+      <section class="dx-panel">
+        <div class="dx-panel-head"><h2>Quick actions</h2></div>
+        <div class="dx-quick-grid">
+          @for (action of quickActions(); track action.key) {
+            <a class="dx-quick-tile" [routerLink]="action.route">
+              <span class="dx-quick-icon">
+                  @switch (action.icon) {
+                    @case ('plus') {
+                      <svg lucideIcon="plus" size="18"></svg>
+                    }
+                    @case ('chart') {
+                      <svg lucideIcon="chart-column" size="18"></svg>
+                    }
+                    @case ('list') {
+                      <svg lucideIcon="list" size="18"></svg>
+                    }
+                    @case ('lock') {
+                      <svg lucideIcon="lock" size="18"></svg>
+                    }
+                    @default {
+                      <svg lucideIcon="arrow-right" size="18"></svg>
+                    }
+                  }
+                </span>
+              <span>{{ action.label }}</span>
+            </a>
+          }
+        </div>
+      </section>
+    }
+
+    <!-- ── Widgets: everything below is server driven ──────── -->
+    @if (!hasWidgets()) {
+      <div class="dx-panel">
+        <p class="dx-empty">
+          There is nothing to show for {{ scopeLabel().toLowerCase() }} in the selected period.
+          Adjust the filters or add performance data to get started.
+        </p>
+      </div>
+    } @else {
+      <div class="dx-widgets">
+        @for (entry of visibleWidgets(); track entry.descriptor.key) {
+          @if (entry.payload; as payload) {
+            <section
+              class="dx-panel dx-widget"
+              [class.dx-widget--third]="entry.descriptor.span === 1"
+              [class.dx-widget--two-thirds]="entry.descriptor.span === 2"
+              [class.dx-widget--full]="entry.descriptor.span !== 1 && entry.descriptor.span !== 2"
+            >
+              @if (payload.kind !== 'statCards') {
+                <div class="dx-panel-head">
+                  <h2>{{ entry.descriptor.title }}</h2>
+                </div>
+              }
+              @if (entry.descriptor.description && payload.kind !== 'statCards') {
+                <p class="dx-widget-desc">{{ entry.descriptor.description }}</p>
+              }
+              <app-dashboard-widget
+                [payload]="payload"
+                (navigate)="onRowNavigate($event, entry.descriptor.key)"
+              />
+            </section>
+          }
+        }
+      </div>
+    }
+  </div>
+}
+
+@if (drilldown(); as goal) {
+  <app-dashboard-goal-drilldown
+    [goal]="goal"
+    [busy]="drilldownBusy()"
+    (closed)="closeDrilldown()"
+  />
+}

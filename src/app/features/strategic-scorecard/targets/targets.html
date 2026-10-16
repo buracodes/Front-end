@@ -1,0 +1,175 @@
+<div class="targets">
+  <app-plan-filter-bar [requireFiscalYear]="true" />
+
+  @if (!hasFiscalYear()) {
+    <div class="card targets-empty">
+      <strong>Choose a fiscal year to start creating targets.</strong>
+      <p class="mb-0">
+        KPI targets are set per fiscal year, so the grid opens once you pick the year you are
+        planning.
+      </p>
+    </div>
+  } @else {
+    @if (isReadOnly()) {
+    <div class="alert alert-warning read-only-banner" role="alert">
+      This fiscal year has <strong>ended or is closed</strong> and is read-only. Targets remain visible but can no longer be edited.
+    </div>
+    }
+    <div class="card targets-toolbar">
+      <div class="targets-summary">
+        <h2 class="targets-title">Create Targets</h2>
+        <p class="targets-count">
+          {{ rows().length }} KPI{{ rows().length === 1 ? '' : 's' }} in scope ·
+          {{ savedCount() }} with targets · {{ dirtyRows().length }} changed
+        </p>
+      </div>
+
+      <div class="targets-actions">
+        <button
+          type="button"
+          class="btn btn-secondary"
+          (click)="distributeAll()"
+          [disabled]="loading() || !rows().length || isReadOnly()"
+        >
+          Distribute All Evenly
+        </button>
+        <button
+          type="button"
+          class="btn btn-primary"
+          (click)="save()"
+          [disabled]="!canSave()"
+        >
+          {{ saving() ? 'Saving…' : 'Save Targets' }}
+        </button>
+      </div>
+    </div>
+
+    @if (invalidRows().length) {
+      <div class="alert alert-warning targets-blocker">
+        <strong>{{ invalidRows().length }} row(s) need attention before saving:</strong>
+        <ul class="mb-0">
+          @for (row of invalidRows(); track row.kpiId) {
+            <li>{{ row.name }} — {{ row.error }}</li>
+          }
+        </ul>
+      </div>
+    }
+
+    @if (loading()) {
+      <div class="card targets-loading"><div class="spinner"></div> Loading targets…</div>
+    } @else if (!rows().length) {
+      <div class="card targets-empty">
+        No KPIs match this selection. Widen the scorecard, goal or KRA filter, or add KPIs
+        first.
+      </div>
+    } @else {
+      <div class="card targets-grid-card">
+        <div class="targets-table-scroll">
+          <table class="targets-table">
+            <thead>
+              <tr>
+                <th class="sticky-col col-kpi" scope="col">KPI</th>
+                <th scope="col">Scorecard</th>
+                <th scope="col">Goal</th>
+                <th scope="col">KRA</th>
+                <th class="col-annual" scope="col">Annual</th>
+                @for (q of [0, 1, 2, 3]; track q) {
+                  <th class="col-quarter" scope="col">Q{{ q + 1 }}</th>
+                }
+                @for (month of monthHeaders(); track $index) {
+                  <th class="col-month" scope="col">{{ month }}</th>
+                }
+                <th class="col-sum" scope="col">Σ Months</th>
+                <th scope="col"></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of rows(); track row.kpiId) {
+                <tr
+                  [class]="'state-' + rowState(row)"
+                  [class.highlighted]="row.kpiId === highlightedKpiId()"
+                >
+                  <th class="sticky-col col-kpi" scope="row">
+                    <span class="kpi-name">{{ row.name }}</span>
+                    @if (row.unit) {
+                      <span class="kpi-unit">{{ row.unit }}</span>
+                    }
+                    @if (row.error) {
+                      <span class="kpi-error">{{ row.error }}</span>
+                    }
+                  </th>
+                  <td>{{ row.scorecardName }}</td>
+                  <td>{{ row.goalName }}</td>
+                  <td>{{ row.kraName }}</td>
+                  <td class="col-annual">
+                    <input
+                      class="form-control cell-input"
+                      type="number"
+                      min="0"
+                      step="any"
+                      inputmode="decimal"
+                      [value]="row.annual ?? ''"
+                      [attr.aria-label]="'Annual target for ' + row.name"
+                      [disabled]="isReadOnly()"
+                      (input)="onAnnualChange(row, $any($event.target).value)"
+                    />
+                    @if (annualMismatch(row)) {
+                      <span class="cell-note warn" title="Annual target differs from the sum of the monthly targets">
+                        ≠ {{ monthlyTotal(row) | number: '1.0-1' }}
+                      </span>
+                    }
+                  </td>
+                  @for (q of [0, 1, 2, 3]; track q) {
+                    <td class="col-quarter">
+                      <input
+                        class="form-control cell-input"
+                        type="number"
+                        min="0"
+                        step="any"
+                        inputmode="decimal"
+                        [value]="row.quarterly[q]"
+                        [attr.aria-label]="'Q' + (q + 1) + ' target for ' + row.name"
+                        [disabled]="isReadOnly()"
+                        (input)="onQuarterlyChange(row, q, $any($event.target).value)"
+                      />
+                    </td>
+                  }
+                  @for (month of monthHeaders(); track $index) {
+                    <td class="col-month">
+                      <input
+                        class="form-control cell-input"
+                        type="number"
+                        min="0"
+                        step="any"
+                        inputmode="decimal"
+                        [value]="row.monthly[$index]"
+                        [attr.aria-label]="month + ' target for ' + row.name"
+                        [disabled]="isReadOnly()"
+                        (input)="onMonthlyChange(row, $index, $any($event.target).value)"
+                      />
+                    </td>
+                  }
+                  <td class="col-sum">
+                    {{ monthlyTotal(row) | number: '1.0-1' }}
+                    <span class="cell-note">ΣQ {{ quarterlyTotal(row) | number: '1.0-1' }}</span>
+                  </td>
+                  <td class="col-action">
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-secondary"
+                      (click)="distribute(row)"
+                      [disabled]="row.annual === null || isReadOnly()"
+                      title="Spread the annual target evenly over the 12 months"
+                    >
+                      Fill
+                    </button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    }
+  }
+</div>

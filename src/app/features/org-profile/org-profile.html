@@ -1,0 +1,389 @@
+  <!-- Top context bar -->
+  <!-- <header class="op-topbar">
+    <div class="op-topbar-left">
+      <div class="op-breadcrumb">SPMS <span class="op-breadcrumb-sep">/</span> Organization profile</div>
+      <h1 class="op-title">Organization profile</h1>
+    </div>
+
+    <div class="op-topbar-right">
+      <!-- TODO: wire to the app's global scorecard/period context once available 
+      <div class="op-select-wrap">
+        <select class="op-select">
+          <option>ECX corporate strategy 2026/2027</option>
+        </select>
+        <svg class="op-select-chevron" lucideIcon="chevron-down" size="14"></svg>
+      </div>
+      <div class="op-select-wrap">
+        <select class="op-select">
+          <option>Q1 &middot; Jul&ndash;Sep 2026</option>
+        </select>
+        <svg class="op-select-chevron" lucideIcon="chevron-down" size="14"></svg>
+      </div>
+
+      <button class="btn btn-secondary" (click)="onExport()">Export</button>
+
+      @if (canEdit()) {
+        <div class="op-actions-dropdown">
+          <button class="btn btn-accent" (click)="toggleNewMenu()">
+            <svg lucideIcon="plus" size="15" strokeWidth="2.4"></svg>
+            New
+          </button>
+          <div class="actions-dropdown-menu" [class.show]="showNewMenu()">
+            <button class="dropdown-item" (click)="openValueModal(); closeNewMenu()">Core value</button>
+            <button class="dropdown-item" (click)="openThemeModal(); closeNewMenu()">Strategic priority</button>
+            <button class="dropdown-item" (click)="openSwotModal(); closeNewMenu()">SWOT factor</button>
+            <button class="dropdown-item" (click)="openPestelModal(); closeNewMenu()">PESTEL factor</button>
+          </div>
+        </div>
+      }
+
+      <!-- <div class="op-avatar">{{ userStore.initials() }}</div> 
+    </div>
+  </header> -->
+
+  @if (loading()) {
+    <div class="loading-state">
+      <div class="spinner"></div>
+      <p>Loading organization profile...</p>
+    </div>
+  } @else {
+
+    <!-- Organization identity -->
+    <section class="card op-identity-card">
+      <div class="op-card-head">
+        <h2 class="op-card-title">{{profile()?.name}}</h2>
+        @if (canEdit()) {
+          <button class="op-icon-btn op-edit-trigger" title="Edit identity" (click)="openEditIdentity()">
+            <svg lucideIcon="square-pen" size="15"></svg>
+          </button>
+        }
+      </div>
+
+      <div class="op-vm-grid">
+        <div>
+          <p class="op-label">Vision statement</p>
+          <p class="op-body-text">{{ profile()?.vision || 'No vision statement defined yet.' }}</p>
+        </div>
+        <div>
+          <p class="op-label">Mission statement</p>
+          <p class="op-body-text">{{ profile()?.mission || 'No mission statement defined yet.' }}</p>
+        </div>
+      </div>
+
+      <div class="op-tag-block">
+        <p class="op-label">Core values</p>
+        <div class="op-tag-row">
+          @for (val of profile()?.coreValues; track val.id) {
+            <span class="op-tag op-tag-blue" (click)="canEdit() && openValueModal(val)">
+              {{ val.title }}
+              @if (canEdit()) {
+                <button class="op-tag-delete" title="Delete" (click)="$event.stopPropagation(); deleteValue(val.id)" aria-label="Close"><svg lucideIcon="x" size="18"></svg></button>
+              }
+            </span>
+          } @empty {
+            <span class="op-empty-inline">No core values defined yet.</span>
+          }
+          @if (canEdit()) {
+            <button class="op-tag-add" (click)="openValueModal()"><svg lucideIcon="plus" size="16"></svg> Add</button>
+          }
+        </div>
+      </div>
+
+      <div class="op-tag-block">
+        <p class="op-label">Strategic Themes/ priorities</p>
+        <div class="op-tag-row">
+          @for (theme of profile()?.strategicThemes; track theme.id) {
+            <span class="op-tag op-tag-amber" (click)="canEdit() && openThemeModal(theme)">
+              {{ theme.title }}
+              @if (canEdit()) {
+                <button class="op-tag-delete" title="Delete" (click)="$event.stopPropagation(); deleteTheme(theme.id)" aria-label="Close"><svg lucideIcon="x" size="18"></svg></button>
+              }
+            </span>
+          } @empty {
+            <span class="op-empty-inline">No strategic themes defined yet.</span>
+          }
+          @if (canEdit()) {
+            <button class="op-tag-add" (click)="openThemeModal()"><svg lucideIcon="plus" size="16"></svg> Add</button>
+          }
+        </div>
+      </div>
+    </section>
+
+    <!-- SWOT analysis -->
+    <section class="op-section">
+      <h2 class="op-section-title">SWOT analysis</h2>
+      <div class="op-swot-grid">
+        @for (category of swotCategories; track category.value) {
+          <div class="card op-list-card">
+            <div class="op-list-head">
+              <h3 class="op-list-title" [ngClass]="'op-swot-' + category.key">{{ category.label }}</h3>
+              @if (canEdit()) {
+                <button class="op-icon-btn" title="Add {{ category.label }}" (click)="openSwotModal(category.value)">
+                  <svg lucideIcon="plus" size="14" strokeWidth="2.4"></svg>
+                </button>
+              }
+            </div>
+            <ul class="op-list">
+              @for (item of getSwotItemsByCategory(category.value); track item.id) {
+                <li class="op-list-item op-list-item-hoverable">
+                  <span class="op-dot" [ngClass]="'op-swot-dot-' + category.key"></span>
+                  <span class="op-item-text">{{ item.title }}</span>
+                  @if (canEdit()) {
+                    <span class="op-item-actions">
+                      <button class="op-icon-btn op-icon-btn-sm" title="Edit" (click)="openSwotModal(category.value, item)">
+                        <svg lucideIcon="square-pen" size="12"></svg>
+                      </button>
+                      <button class="op-icon-btn op-icon-btn-sm op-icon-btn-danger" title="Delete" (click)="deleteSwot(item.id)">
+                        <svg lucideIcon="trash" size="12"></svg>
+                      </button>
+                    </span>
+                  }
+                </li>
+              } @empty {
+                <li class="op-empty-row">No {{ category.label.toLowerCase() }} listed yet.</li>
+              }
+            </ul>
+          </div>
+        }
+      </div>
+    </section>
+
+    <!-- PESTEL analysis -->
+    <section class="op-section">
+      <h2 class="op-section-title">PESTEL analysis</h2>
+      <div class="op-pestel-grid">
+        @for (category of pestelCategories; track category.value) {
+          <div class="card op-list-card">
+            <div class="op-list-head">
+              <h3 class="op-list-title">{{ category.label }}</h3>
+              @if (canEdit()) {
+                <button class="op-icon-btn" title="Add {{ category.label }} factor" (click)="openPestelModal(category.value)">
+                  <svg lucideIcon="plus" size="14" strokeWidth="2.4"></svg>
+                </button>
+              }
+            </div>
+            <ul class="op-list">
+              @for (item of getPestelItemsByCategory(category.value); track item.id) {
+                <li class="op-list-item op-list-item-hoverable">
+                  <span class="op-dot op-dot-neutral"></span>
+                  <span class="op-item-text">{{ item.title }}</span>
+                  @if (canEdit()) {
+                    <span class="op-item-actions">
+                      <button class="op-icon-btn op-icon-btn-sm" title="Edit" (click)="openPestelModal(category.value, item)">
+                        <svg lucideIcon="square-pen" size="12"></svg>
+                      </button>
+                      <button class="op-icon-btn op-icon-btn-sm op-icon-btn-danger" title="Delete" (click)="deletePestel(item.id)">
+                        <svg lucideIcon="trash" size="12"></svg>
+                      </button>
+                    </span>
+                  }
+                </li>
+              } @empty {
+                <li class="op-empty-row">No {{ category.label.toLowerCase() }} factors added.</li>
+              }
+            </ul>
+          </div>
+        }
+      </div>
+    </section>
+  }
+
+  <!-- ============== MODALS (unchanged from your existing code) ============== -->
+
+  @if (showIdentityModal()) {
+    <div class="modal-backdrop" (click)="showIdentityModal.set(false)">
+      <div class="modal-dialog" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>Edit Strategic Identity</h3>
+          <button class="close-btn" (click)="showIdentityModal.set(false)" aria-label="Close"><svg lucideIcon="x" size="18"></svg></button>
+        </div>
+        <form [formGroup]="identityForm" (ngSubmit)="saveIdentity()">
+          <div class="modal-body">
+            <div class="form-group">
+              <label class="form-label">Organization Name *</label>
+              <input type="text" formControlName="name" class="form-control" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Description</label>
+              <textarea formControlName="description" class="form-control" rows="2"></textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Vision Statement *</label>
+              <textarea formControlName="vision" class="form-control" rows="3"></textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Mission Statement *</label>
+              <textarea formControlName="mission" class="form-control" rows="3"></textarea>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" (click)="showIdentityModal.set(false)">Cancel</button>
+            <button type="submit" class="btn btn-primary" [disabled]="submitting() || identityForm.invalid">Save Changes</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+
+  @if (showValueModal()) {
+    <div class="modal-backdrop" (click)="showValueModal.set(false)">
+      <div class="modal-dialog" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>{{ editingValue() ? 'Edit Core Value' : 'Add Core Value' }}</h3>
+          <button class="close-btn" (click)="showValueModal.set(false)" aria-label="Close"><svg lucideIcon="x" size="18"></svg></button>
+        </div>
+        <form [formGroup]="valueForm" (ngSubmit)="saveValue()">
+          <div class="modal-body">
+            <div class="form-group">
+              <label class="form-label">Title *</label>
+              <input type="text" formControlName="title" class="form-control" placeholder="e.g. Integrity" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Description</label>
+              <textarea formControlName="description" class="form-control" rows="3" placeholder="Description of value"></textarea>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" (click)="showValueModal.set(false)">Cancel</button>
+            <button type="submit" class="btn btn-primary" [disabled]="submitting() || valueForm.invalid">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+
+  @if (showThemeModal()) {
+    <div class="modal-backdrop" (click)="showThemeModal.set(false)">
+      <div class="modal-dialog" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>{{ editingTheme() ? 'Edit Strategic Priority' : 'Add Strategic Priority' }}</h3>
+          <button class="close-btn" (click)="showThemeModal.set(false)" aria-label="Close"><svg lucideIcon="x" size="18"></svg></button>
+        </div>
+        <form [formGroup]="themeForm" (ngSubmit)="saveTheme()">
+          <div class="modal-body">
+            <div class="d-flex gap-4">
+              <div class="form-group flex-1">
+                <label class="form-label">Title *</label>
+                <input type="text" formControlName="title" class="form-control" placeholder="e.g. Market expansion" />
+              </div>
+              <!-- <div class="form-group" style="width:120px;">
+                <label class="form-label">Code</label>
+                <input type="text" formControlName="code" class="form-control" placeholder="e.g. ST-1" />
+              </div> -->
+            </div>
+            <div class="form-group">
+              <label class="form-label">Description</label>
+              <textarea formControlName="description" class="form-control" rows="3"></textarea>
+            </div>
+            <!-- <div class="d-flex gap-4">
+              <div class="form-group flex-1">
+                <label class="form-label">Color Badge</label>
+                <input type="color" formControlName="color" class="form-control" style="padding:4px; height:40px;" />
+              </div>
+              
+            </div> -->
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" (click)="showThemeModal.set(false)">Cancel</button>
+            <button type="submit" class="btn btn-primary" [disabled]="submitting() || themeForm.invalid">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+
+  @if (showSwotModal()) {
+    <div class="modal-backdrop" (click)="showSwotModal.set(false)">
+      <div class="modal-dialog" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>{{ editingSwot() ? 'Edit SWOT Factor' : 'Add SWOT Factor' }}</h3>
+          <button class="close-btn" (click)="showSwotModal.set(false)" aria-label="Close"><svg lucideIcon="x" size="18"></svg></button>
+        </div>
+        <form [formGroup]="swotForm" (ngSubmit)="saveSwot()">
+          <div class="modal-body">
+            <div class="form-group">
+              <label class="form-label">Category *</label>
+              <select formControlName="category" class="form-control">
+                <option [value]="SwotCategory.Strength">Strength</option>
+                <option [value]="SwotCategory.Weakness">Weakness</option>
+                <option [value]="SwotCategory.Opportunity">Opportunity</option>
+                <option [value]="SwotCategory.Threat">Threat</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Title *</label>
+              <input type="text" formControlName="title" class="form-control" placeholder="Title of factor" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Description</label>
+              <textarea formControlName="description" class="form-control" rows="3"></textarea>
+            </div>
+            <div class="d-flex gap-4">
+              <div class="form-group flex-1">
+                <label class="form-label">Impact Level *</label>
+                <select formControlName="impact" class="form-control">
+                  <option [value]="ImpactLevel.High">High Impact</option>
+                  <option [value]="ImpactLevel.Medium">Medium Impact</option>
+                  <option [value]="ImpactLevel.Low">Low Impact</option>
+                </select>
+              </div>
+              
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" (click)="showSwotModal.set(false)">Cancel</button>
+            <button type="submit" class="btn btn-primary" [disabled]="submitting() || swotForm.invalid">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+
+  @if (showPestelModal()) {
+    <div class="modal-backdrop" (click)="showPestelModal.set(false)">
+      <div class="modal-dialog" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>{{ editingPestel() ? 'Edit PESTEL Factor' : 'Add PESTEL Factor' }}</h3>
+          <button class="close-btn" (click)="showPestelModal.set(false)" aria-label="Close"><svg lucideIcon="x" size="18"></svg></button>
+        </div>
+        <form [formGroup]="pestelForm" (ngSubmit)="savePestel()">
+          <div class="modal-body">
+            <div class="form-group">
+              <label class="form-label">Category *</label>
+              <select formControlName="category" class="form-control">
+                <option [value]="PestelCategory.Political">Political</option>
+                <option [value]="PestelCategory.Economic">Economic</option>
+                <option [value]="PestelCategory.Social">Social</option>
+                <option [value]="PestelCategory.Technological">Technological</option>
+                <option [value]="PestelCategory.Environmental">Environmental</option>
+                <option [value]="PestelCategory.Legal">Legal</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Title *</label>
+              <input type="text" formControlName="title" class="form-control" placeholder="Factor title" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Description</label>
+              <textarea formControlName="description" class="form-control" rows="3"></textarea>
+            </div>
+            <div class="d-flex gap-4">
+              <div class="form-group flex-1">
+                <label class="form-label">Impact Level *</label>
+                <select formControlName="impact" class="form-control">
+                  <option [value]="ImpactLevel.High">High Impact</option>
+                  <option [value]="ImpactLevel.Medium">Medium Impact</option>
+                  <option [value]="ImpactLevel.Low">Low Impact</option>
+                </select>
+              </div>
+              
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" (click)="showPestelModal.set(false)">Cancel</button>
+            <button type="submit" class="btn btn-primary" [disabled]="submitting() || pestelForm.invalid">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }

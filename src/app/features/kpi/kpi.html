@@ -1,0 +1,231 @@
+  <div class="d-flex align-center justify-between">
+    <div>
+      <h1 class="page-title">KPIs</h1>
+      <p class="page-subtitle">Key performance indicators that measure progress for each KRA.</p>
+    </div>
+    <button type="button" class="btn btn-primary" (click)="openAddModal()">Add KPI</button>
+  </div>
+
+  <app-plan-filter-bar class="mt-4" [levels]="['fiscalYear', 'scorecard', 'goal', 'kra']" />
+
+  @if (showForm()) {
+    <div class="modal-backdrop" (click)="onCancelEdit()">
+      <div class="modal-dialog modal-lg" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>{{ editingId() ? 'Edit KPI' : 'New KPI' }}</h3>
+          <button type="button" class="close-btn" (click)="onCancelEdit()" aria-label="Close"><svg lucideIcon="x" size="18"></svg></button>
+        </div>
+        <div class="modal-body">
+          <form [formGroup]="form" (ngSubmit)="editingId() ? onUpdate() : onSubmit()" novalidate>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="kpi-scorecard-id">Scorecard</label>
+                <select
+                  id="kpi-scorecard-id"
+                  class="form-control"
+                  formControlName="scorecardId"
+                  [disabled]="!!editingId()"
+                  (change)="onFormScorecardChange($any($event.target).value)"
+                >
+                  <option value="" disabled>— Select Scorecard —</option>
+                  @for (sc of formScorecards(); track sc.id) {
+                    <option [value]="sc.id">{{ planFilters.scorecardLabel(sc.id) }}</option>
+                  }
+                </select>
+                @if (formScorecards().length === 0) {
+                  <p class="form-hint">No scorecards available yet. Create a scorecard first.</p>
+                } @else if (form.controls.scorecardId.invalid && form.controls.scorecardId.touched) {
+                  <p class="form-error">Please select a scorecard.</p>
+                }
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="kpi-kra-id">KRA</label>
+                <select
+                  id="kpi-kra-id"
+                  class="form-control"
+                  formControlName="kraId"
+                  [disabled]="!!editingId() || !form.controls.scorecardId.value"
+                >
+                  <option value="">Optional — no KRA</option>
+                  @for (kra of formKras(); track kra.id) {
+                    <option [value]="kra.id">{{ kra.name }}</option>
+                  }
+                </select>
+                @if (form.controls.scorecardId.value && formKras().length === 0) {
+                  <p class="form-hint">No KRAs under this scorecard yet. Create a KRA first (optional).</p>
+                }
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="kpi-division-owner">Owner (division)</label>
+              <select id="kpi-division-owner" class="form-control" formControlName="divisionOwnerId">
+                <option value="">— Unassigned —</option>
+                @for (division of divisions(); track division.id) {
+                  <option [value]="division.id">{{ division.name }}</option>
+                }
+              </select>
+              <p class="form-hint">The division accountable for this KPI (e.g. IT, Trade Operation).</p>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="kpi-name">Name</label>
+              <input
+                id="kpi-name"
+                class="form-control"
+                type="text"
+                formControlName="name"
+                placeholder="e.g. Revenue Growth Rate"
+              />
+              @if (form.controls.name.invalid && form.controls.name.touched) {
+                <p class="form-error">
+                  @if (form.controls.name.hasError('required')) {
+                    Name is required.
+                  } @else if (form.controls.name.hasError('maxlength')) {
+                    Name must be at most 200 characters.
+                  }
+                </p>
+              }
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="kpi-description">Description</label>
+              <textarea
+                id="kpi-description"
+                class="form-control"
+                formControlName="description"
+                placeholder="Optional description"
+              ></textarea>
+              @if (form.controls.description.invalid && form.controls.description.touched) {
+                <p class="form-error">Description must be at most 500 characters.</p>
+              }
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="kpi-unit">Unit</label>
+                <input
+                  id="kpi-unit"
+                  class="form-control"
+                  type="text"
+                  formControlName="unit"
+                  placeholder="e.g. %, ETB, count"
+                />
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="kpi-weight">Weight (%)</label>
+                <input
+                  id="kpi-weight"
+                  class="form-control"
+                  type="number"
+                  formControlName="weight"
+                  min="0"
+                  max="100"
+                />
+                @if (form.controls.weight.invalid && form.controls.weight.touched) {
+                  <p class="form-error">
+                    @if (form.controls.weight.hasError('required')) {
+                      Weight is required.
+                    } @else if (form.controls.weight.hasError('min') || form.controls.weight.hasError('max')) {
+                      Weight must be between 0 and 100.
+                    }
+                  </p>
+                }
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="kpi-optimization-type">Optimization Type</label>
+                <select id="kpi-optimization-type" class="form-control" formControlName="optimizationType">
+                  @for (type of optimizationTypes; track type) {
+                    <option [value]="type">{{ type }}</option>
+                  }
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="kpi-data-source">Data Source</label>
+                <select id="kpi-data-source" class="form-control" formControlName="dataSource">
+                  @for (source of dataSources; track source) {
+                    <option [value]="source">{{ source }}</option>
+                  }
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="kpi-kpi-type">KPI Type</label>
+                <select id="kpi-kpi-type" class="form-control" formControlName="kpiType">
+                  @for (type of kpiTypes; track type) {
+                    <option [value]="type">{{ type }}</option>
+                  }
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group form-check">
+              <label class="form-label">
+                <input type="checkbox" formControlName="isCumulative" />
+                Cumulative
+              </label>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="kpi-baseline">Baseline</label>
+                <input
+                  id="kpi-baseline"
+                  class="form-control"
+                  type="number"
+                  formControlName="baseline"
+                  placeholder="Optional baseline value"
+                />
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="kpi-min-value">Min Value</label>
+                <input
+                  id="kpi-min-value"
+                  class="form-control"
+                  type="number"
+                  formControlName="minValue"
+                  placeholder="Optional minimum value"
+                />
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="kpi-max-value">Max Value</label>
+                <input
+                  id="kpi-max-value"
+                  class="form-control"
+                  type="number"
+                  formControlName="maxValue"
+                  placeholder="Optional maximum value"
+                />
+              </div>
+            </div>
+
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" (click)="onCancelEdit()">Cancel</button>
+              <button type="submit" class="btn btn-primary" [disabled]="form.invalid || submitting()">
+                {{ submitting() ? 'Saving…' : (editingId() ? 'Update KPI' : 'Save KPI') }}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (loadError()) {
+    <div class="alert alert-danger" role="alert">{{ loadError() }}</div>
+  }
+
+  <div class="card">
+    <div class="card-body grid-actions-host">
+      <app-grid-table [rowData]="rows()" [columnDefs]="columnDefs" [loading]="loading()" />
+    </div>
+  </div>
+

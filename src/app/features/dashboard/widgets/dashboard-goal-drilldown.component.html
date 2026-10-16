@@ -1,0 +1,99 @@
+<div class="drawer-backdrop" (click)="closed.emit()"></div>
+
+<aside class="drawer" role="dialog" aria-modal="true" [attr.aria-label]="goal().goalName">
+  <header class="drawer-head">
+    <div>
+      <span class="eyebrow">Goal detail</span>
+      <h2>{{ goal().goalName }}</h2>
+    </div>
+    <button type="button" class="close" aria-label="Close" (click)="closed.emit()"><svg lucideIcon="x" size="18"></svg></button>
+  </header>
+
+  <div class="drawer-body">
+    @if (busy()) {
+      <p class="empty">Loading goal detail…</p>
+    } @else {
+      <div class="headline">
+        <div>
+          <span class="headline-label">Weight</span>
+          <strong>{{ goal().weight == null ? '—' : goal().weight + '%' }}</strong>
+        </div>
+        <div>
+          <span class="headline-label">Score</span>
+          <strong>{{ goal().score == null ? '—' : goal().score + '%' }}</strong>
+        </div>
+        <div>
+          <span class="headline-label">Status</span>
+          <span [class]="'rag-pill ' + ragTone(goal().ragLabel)">{{ ragText(goal().ragLabel) }}</span>
+        </div>
+        <div>
+          <span class="headline-label">Trend</span>
+          <strong>{{ goal().trend == null ? '—' : goal().trend + ' pts' }}</strong>
+        </div>
+      </div>
+
+      @if (!goal().kras.length) {
+        <p class="empty">No KRAs for this goal.</p>
+      } @else {
+        <table class="table">
+          <thead>
+            <tr>
+              @for (column of columns; track column.key) {
+                <th [class.align-right]="column.align === 'right'" [class.align-center]="column.align === 'center'">
+                  {{ column.label }}
+                </th>
+              }
+            </tr>
+          </thead>
+          <tbody>
+            @for (kra of goal().kras; track kra.kraId) {
+              <tr class="row" (click)="toggle(kra)" [class.row--open]="isExpanded(kra)">
+                <td class="name-cell">{{ kra.name }}</td>
+                <td class="align-right">{{ kra.weight == null ? '—' : kra.weight + '%' }}</td>
+                <td class="align-right">{{ kra.kpiCount }}</td>
+                <td class="align-right">{{ kra.score == null ? '—' : kra.score + '%' }}</td>
+                <td class="align-center">
+                  <span [class]="'rag-pill ' + ragTone(kra.ragLabel)">{{ ragText(kra.ragLabel) }}</span>
+                </td>
+              </tr>
+              @if (isExpanded(kra)) {
+                <tr class="kpi-row">
+                  <td colspan="5">
+                    @if (!kra.kpis.length) {
+                      <p class="empty empty--slim">No KPIs linked to this KRA.</p>
+                    } @else {
+                      <table class="table table--nested">
+                        <thead>
+                          <tr>
+                            <th>KPI</th>
+                            <th class="align-right">Target</th>
+                            <th class="align-right">Actual</th>
+                            <th class="align-right">Score</th>
+                            <th class="align-center">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          @for (kpi of kpiCells(kra); track kpi.name) {
+                            <tr>
+                              <td>{{ kpi.name }}</td>
+                              <td class="align-right">{{ kpi.target }}</td>
+                              <td class="align-right">{{ kpi.actual }}</td>
+                              <td class="align-right">{{ kpi.score }}</td>
+                              <td class="align-center">
+                                <span [class]="'rag-pill ' + ragTone(kpi.rag)">{{ ragText(kpi.rag) }}</span>
+                              </td>
+                            </tr>
+                          }
+                        </tbody>
+                      </table>
+                    }
+                  </td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      }
+    }
+  </div>
+</aside>

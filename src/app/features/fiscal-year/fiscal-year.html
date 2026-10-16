@@ -24,12 +24,16 @@
             </div>
             <div class="form-row">
               <div class="form-group">
-                <label class="form-label" for="fy-start">Start Date</label>
-                <input id="fy-start" class="form-control" type="date" formControlName="startDate" />
+                <label class="form-label" for="fy-start">Start Month</label>
+                <input id="fy-start" class="form-control" type="month" formControlName="startMonth" />
+                @if (form.controls.startMonth.invalid && form.controls.startMonth.touched) {
+                  <p class="form-error">Start month is required.</p>
+                }
               </div>
               <div class="form-group">
-                <label class="form-label" for="fy-end">End Date</label>
-                <input id="fy-end" class="form-control" type="date" formControlName="endDate" />
+                <label class="form-label" for="fy-end">End Date (calculated)</label>
+                <input id="fy-end" class="form-control" type="date" [value]="computedEndDate()" readonly aria-readonly="true" />
+                <p class="form-hint">A fiscal year spans twelve consecutive months; the end date is set automatically.</p>
               </div>
             </div>
             <div class="modal-footer">

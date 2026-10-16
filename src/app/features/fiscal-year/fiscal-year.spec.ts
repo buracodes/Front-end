@@ -130,4 +130,51 @@ describe('FiscalYearPage FR-703 gating', () => {
       'Fiscal year FY 2026 still contains scorecards; it cannot be deleted.'
     );
   });
+
+  it('calculates the end date as the last day of the twelfth month', () => {
+    load([]);
+    page.openAddModal();
+
+    page.form.controls.startMonth.setValue('2026-09');
+
+    expect(page.computedEndDate()).toBe('2027-08-31');
+  });
+
+  it('calculates the end date across a leap February', () => {
+    load([]);
+    page.openAddModal();
+
+    page.form.controls.startMonth.setValue('2023-03');
+    expect(page.computedEndDate()).toBe('2024-02-29');
+
+    page.form.controls.startMonth.setValue('2026-01');
+    expect(page.computedEndDate()).toBe('2026-12-31');
+  });
+
+  it('submits the first day of the chosen month and the calculated end date', () => {
+    load([]);
+    page.openAddModal();
+    page.form.setValue({ label: 'FY 2026/27', startMonth: '2026-09' });
+
+    page.onSubmit();
+
+    const request = http.expectOne((r) => r.method === 'POST');
+    expect(request.request.body.startDate).toBe('2026-09-01');
+    expect(request.request.body.endDate).toBe('2027-08-31');
+    request.flush(ok(fiscalYear()));
+
+    // A successful create reloads the list; flush that follow-up request.
+    http.expectOne((r) => r.method === 'GET' && r.url.includes('/fiscalyear')).flush(ok([]));
+  });
+
+  it('renders the start and end dates with a numeric day and month letters', () => {
+    load([]);
+    const format = (field: string, value: string): string => {
+      const column = page.columnDefs.find((c) => c.field === field)!;
+      return (column.valueFormatter as (params: { value: unknown }) => string)({ value });
+    };
+
+    expect(format('startDate', '2026-06-01T00:00:00')).toBe('1 Jun 2026');
+    expect(format('endDate', '2027-08-31T00:00:00')).toBe('31 Aug 2027');
+  });
 });

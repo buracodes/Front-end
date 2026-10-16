@@ -31,9 +31,13 @@ export class FiscalYearPage {
 
   readonly form = new FormGroup({
     label: new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.maxLength(50)] }),
-    startDate: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
-    endDate: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
+    // A "YYYY-MM" month picker. The backend requires the first day of a month, so the UI can
+    // only ever produce a valid start and no free-text date can slip through.
+    startMonth: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
   });
+
+  /** End date derived from the chosen start month; shown read-only so it cannot drift. */
+  readonly computedEndDate = signal('');
 
   readonly columnDefs: ColDef[] = [
     {
@@ -51,7 +55,7 @@ export class FiscalYearPage {
       editable: (params: EditableCallbackParams<FiscalYear>) => this.isEditable(params.data),
       cellEditor: 'agDateStringCellEditor',
       cellEditorPopup: true,
-      valueFormatter: (params) => dateOnly(params.value),
+      valueFormatter: (params) => dayMonthYear(params.value),
     },
     {
       field: 'endDate',
@@ -60,7 +64,7 @@ export class FiscalYearPage {
       editable: (params: EditableCallbackParams<FiscalYear>) => this.isEditable(params.data),
       cellEditor: 'agDateStringCellEditor',
       cellEditorPopup: true,
-      valueFormatter: (params) => dateOnly(params.value),
+      valueFormatter: (params) => dayMonthYear(params.value),
     },
     { field: 'status', headerName: 'Status', sortable: true, filter: true },
     actionsColumn<FiscalYear>((key, row) => {
@@ -70,6 +74,9 @@ export class FiscalYearPage {
   ];
 
   constructor() {
+    this.form.controls.startMonth.valueChanges.subscribe((value) => {
+      this.computedEndDate.set(endDateForMonth(value));
+    });
     this.loadAll();
   }
 
@@ -97,7 +104,8 @@ export class FiscalYearPage {
 
   openAddModal(): void {
     this.editingId.set(null);
-    this.form.reset({ label: '', startDate: '', endDate: '' });
+    this.form.reset({ label: '', startMonth: '' });
+    this.computedEndDate.set('');
     this.showForm.set(true);
   }
 
@@ -107,7 +115,9 @@ export class FiscalYearPage {
       return;
     }
     this.editingId.set(item.id);
-    this.form.setValue({ label: item.label, startDate: item.startDate.split('T')[0], endDate: item.endDate.split('T')[0] });
+    const startMonth = item.startDate.split('T')[0].slice(0, 7);
+    this.form.setValue({ label: item.label, startMonth });
+    this.computedEndDate.set(endDateForMonth(startMonth));
     this.showForm.set(true);
   }
 
@@ -121,7 +131,12 @@ export class FiscalYearPage {
     if (this.form.invalid || this.submitting()) return;
     this.submitting.set(true);
 
-    this.fyService.create(this.form.value as { label: string; startDate: string; endDate: string }).subscribe({
+    const value = this.form.getRawValue();
+    this.fyService.create({
+      label: value.label,
+      startDate: `${value.startMonth}-01`,
+      endDate: this.computedEndDate(),
+    }).subscribe({
       next: () => { this.notifications.success('Fiscal year created.'); this.onCancelEdit(); this.loadAll(); },
       error: (err) => { this.notifications.error(toApiError(err).message); this.submitting.set(false); },
       complete: () => this.submitting.set(false),
@@ -133,7 +148,12 @@ export class FiscalYearPage {
     if (!id || this.form.invalid || this.submitting()) return;
     this.submitting.set(true);
 
-    this.fyService.update(id, this.form.value as { label: string; startDate: string; endDate: string }).subscribe({
+    const value = this.form.getRawValue();
+    this.fyService.update(id, {
+      label: value.label,
+      startDate: `${value.startMonth}-01`,
+      endDate: this.computedEndDate(),
+    }).subscribe({
       next: () => { this.notifications.success('Fiscal year updated.'); this.onCancelEdit(); this.loadAll(); },
       error: (err) => { this.notifications.error(toApiError(err).message); this.submitting.set(false); },
       complete: () => this.submitting.set(false),
@@ -188,6 +208,34 @@ export class FiscalYearPage {
       },
     });
   }
+}
+
+/**
+ * Last day of the twelfth consecutive month after a "YYYY-MM" fiscal-year start, as
+ * "YYYY-MM-DD". Mirrors the backend's authoritative end-date rule (start + 12 months - 1 day)
+ * so the form can show the value the server will persist.
+ */
+function endDateForMonth(monthValue: string): string {
+  const match = /^(\d{4})-(\d{2})$/.exec(monthValue);
+  if (!match) return '';
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  if (month < 1 || month > 12) return '';
+  const end = new Date(Date.UTC(year, month - 1 + 12, 0));
+  const m = String(end.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(end.getUTCDate()).padStart(2, '0');
+  return `${end.getUTCFullYear()}-${m}-${d}`;
+}
+
+const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** Grid display for a fiscal-year date: day number, month letters and year, e.g. "1 Jun 2026". */
+function dayMonthYear(value: unknown): string {
+  const iso = dateOnly(value);
+  if (!iso) return '';
+  const [year, month, day] = iso.split('-');
+  const name = MONTH_ABBR[Number(month) - 1];
+  return name && year && day ? `${Number(day)} ${name} ${year}` : iso;
 }
 
 function dateOnly(value: unknown): string {

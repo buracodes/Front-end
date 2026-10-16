@@ -5,7 +5,7 @@ import { ScorecardService } from '../../../core/service/scorecard.service';
 import { Scorecard, FiscalYear } from '../../../core/model/scorecard.model';
 import { KPI, SetKpiTargetsRequest } from '../../../core/model/goal.model';
 import { NotificationService } from '../../../core/service/notification.service';
-import { isFiscalYearClosed } from '../workspace-state.service';
+import { fiscalMonthLabel, isFiscalYearClosed } from '../workspace-state.service';
 
 const round = (n: number): number => Math.round(n * 100) / 100;
 
@@ -43,21 +43,6 @@ export class TargetConfigPage implements OnInit {
 
   /** FR-703: targets of a closed or ended fiscal year are read-only. */
   readonly isReadOnly = computed(() => isFiscalYearClosed(this.fiscalYear()));
-
-  private readonly shortMonths = [
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-  ];
 
   private kpiId = '';
   private requestedScorecardId = '';
@@ -227,10 +212,9 @@ export class TargetConfigPage implements OnInit {
   // ── Label helpers ────────────────────────────────────────────────────────
 
   monthLabel(mi: number): string {
-    const fy = this.fiscalYear();
-    const start = fy?.startDate ? Number(fy.startDate.slice(5, 7)) - 1 : -1;
-    const idx = start >= 0 && !Number.isNaN(start) ? (start + mi) % 12 : mi;
-    return this.shortMonths[idx];
+    // The fiscal month is 1-based; the shared helper derives the Gregorian month name from the
+    // fiscal-year start, so labels follow any start month instead of assuming July–June.
+    return fiscalMonthLabel(this.fiscalYear()?.startDate ?? null, mi + 1);
   }
 
   quarterLabel(q: number): string {
@@ -239,10 +223,10 @@ export class TargetConfigPage implements OnInit {
     const startMonth = Number(fy.startDate.slice(5, 7)) - 1;
     if (Number.isNaN(startMonth) || startMonth < 0) return `Q${q + 1}`;
     const startYear = Number(fy.startDate.slice(0, 4));
-    const from = (startMonth + q * 3) % 12;
-    const to = (startMonth + q * 3 + 2) % 12;
-    const toYear = to < from ? startYear + 1 : startYear;
-    return `Q${q + 1} · ${this.shortMonths[from]}–${this.shortMonths[to]} ${to < from ? toYear : startYear}`;
+    const from = fiscalMonthLabel(fy.startDate, q * 3 + 1);
+    const to = fiscalMonthLabel(fy.startDate, q * 3 + 3);
+    const toYear = startYear + Math.floor((startMonth + q * 3 + 2) / 12);
+    return `Q${q + 1} · ${from}–${to} ${toYear}`;
   }
 
   // ── Month/quarter accessors ───────────────────────────────────────────────

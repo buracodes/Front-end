@@ -174,4 +174,26 @@ describe('TargetConfigPage', () => {
 
     expect(page.isReadOnly()).toBeTruthy();
   });
+
+  it('labels months and quarters from an arbitrary fiscal-year start (September)', () => {
+    create();
+
+    kpiRequest().flush(ok(KPI));
+    scorecardRequest().flush(ok(SCORECARDS));
+    fiscalYearRequest().flush(ok(FISCAL_YEARS));
+    targetRequest().flush(ok({ targets: [] }));
+
+    page.fiscalYear.set({
+      id: 'fy-sep',
+      label: '2026/27',
+      startDate: '2026-09-01',
+      endDate: '2027-08-31',
+      status: 'Open',
+    });
+
+    expect(page.monthLabel(0)).toBe('Sep');
+    expect(page.monthLabel(11)).toBe('Aug');
+    expect(page.quarterLabel(0)).toBe('Q1 · Sep–Nov 2026');
+    expect(page.quarterLabel(3)).toBe('Q4 · Jun–Aug 2027');
+  });
 });

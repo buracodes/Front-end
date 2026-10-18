@@ -15,6 +15,7 @@ import {
 import { NotificationService } from '../../core/service/notification.service';
 import { ConfirmDialogService } from '../../shared/service/confirm-dialog.service';
 import { UserStore } from '../../core/service/user-store.service';
+import { RagThresholdStore } from '../../core/service/rag-threshold-store.service';
 import { KPIService } from '../../core/service/kpi.service';
 import { PeriodLockStatusItem } from '../../core/model/goal.model';
 import { DonutSegment } from '../dashboard/admin-dashboard.model';
@@ -73,8 +74,9 @@ export class DivisionPlanningPage {
   private readonly kpiService = inject(KPIService);
 private readonly notifications = inject(NotificationService);
   private readonly dialog = inject(ConfirmDialogService);
-  private readonly userStore = inject(UserStore);
-  private readonly reportService = inject(ReportService);
+   private readonly userStore = inject(UserStore);
+   private readonly reportService = inject(ReportService);
+   private readonly ragThresholds = inject(RagThresholdStore);
 
   readonly scorecardId = signal<string>('');
 
@@ -266,8 +268,9 @@ readonly divisionGoals = computed<DivisionGoalDto[]>(() =>
 
   readonly overallStatus = computed<RagStatus | undefined>(() => {
     const score = this.overallScore();
-    if (score >= 95) return 'green';
-    if (score >= 70) return 'amber';
+    const bands = this.ragThresholds.bands();
+    if (score >= bands.green) return 'green';
+    if (score >= bands.yellow) return 'amber';
     return 'red';
   });
 

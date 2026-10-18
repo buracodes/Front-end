@@ -4,8 +4,11 @@ import { FormControl, FormGroup, ReactiveFormsModule, FormsModule, Validators } 
 import { KpiDetailsDrawer } from '../strategic-scorecard/kpi-details/kpi-details';
 import {
   ragFromScore,
+  scoreColor,
   ScorecardWorkspaceState,
 } from '../strategic-scorecard/workspace-state.service';
+import { RagThresholdStore } from '../../core/service/rag-threshold-store.service';
+import { RagBand, ragSlug } from '../../core/model/rag-band';
 import { GoalService } from '../../core/service/goal.service';
 import { KRAService } from '../../core/service/kra.service';
 import { KPIService } from '../../core/service/kpi.service';
@@ -55,6 +58,7 @@ export class score implements OnInit {
   private readonly divisionService = inject(DivisionService);
   private readonly notifications = inject(NotificationService);
   private readonly dialog = inject(ConfirmDialogService);
+  private readonly thresholds = inject(RagThresholdStore);
 
   readonly siblingScorecards = signal<Scorecard[]>([]);
   readonly siblingLoading = signal(false);
@@ -750,8 +754,8 @@ export class score implements OnInit {
     });
   }
 
-  ragOfScore(score: number | null): 'Green' | 'Amber' | 'Red' {
-    return ragFromScore(score);
+  ragOfScore(score: number | null): RagBand {
+    return ragFromScore(score, this.thresholds.bands());
   }
 
   scoreOf(entityId: string, map: Map<string, { score?: number }>): number | null {
@@ -761,11 +765,7 @@ export class score implements OnInit {
 
   scoreTone(score: number | null): string {
     if (score === null || score === undefined) return 'var(--color-text-subtle)';
-    return ragFromScore(score) === 'Green'
-      ? '#16a34a'
-      : ragFromScore(score) === 'Amber'
-        ? '#d97706'
-        : '#dc2626';
+    return scoreColor(score, this.thresholds.bands());
   }
 
   progressWidth(score: number | null): number {
@@ -775,8 +775,8 @@ export class score implements OnInit {
 
   progressClass(score: number | null): string {
     if (score === null || score === undefined) return '';
-    const rag = ragFromScore(score);
-    return rag === 'Green' ? 'progress-green' : rag === 'Amber' ? 'progress-amber' : 'progress-red';
+    const rag = ragFromScore(score, this.thresholds.bands());
+    return rag === 'NoData' ? '' : `progress-${ragSlug(rag)}`;
   }
 
   trendArrow(trend: 'up' | 'down' | 'stable'): string {
@@ -814,26 +814,22 @@ export class score implements OnInit {
   readonly ragSpread = computed(() => {
     let green = 0,
       amber = 0,
-      red = 0;
+      red = 0,
+      gray = 0;
     for (const snapshot of this.kpiSnapshots().values()) {
       const score = snapshot?.score ?? null;
-      if (score === null) continue;
-      const rag = ragFromScore(score);
+      const rag = ragFromScore(score, this.thresholds.bands());
       if (rag === 'Green') green++;
       else if (rag === 'Amber') amber++;
-      else red++;
+      else if (rag === 'Red') red++;
+      else gray++;
     }
-    return { green, amber, red };
+    return { green, amber, red, gray };
   });
 
   ragBadgeClass(score: number | null): string {
-    if (score === null || score === undefined) return 'rag-badge-gray';
-    const rag = ragFromScore(score);
-    return rag === 'Green'
-      ? 'rag-badge-green'
-      : rag === 'Amber'
-        ? 'rag-badge-amber'
-        : 'rag-badge-red';
+    const rag = ragFromScore(score, this.thresholds.bands());
+    return `rag-badge-${ragSlug(rag)}`;
   }
 
   goalKraCount(goalId: string): number {
@@ -970,6 +966,36 @@ export class score implements OnInit {
     }
   }
 
+  /** Client-side echo of FR-301: returns false (with a notification) when the typed
+   *  weight is not in (0, 100] or would push the parent's sibling budget past 100%. */
+  private submitWeightAllowed(kind: CrudKind, weightValue: unknown): boolean {
+    const weight = Number(weightValue ?? 0);
+    if (!(weight > 0) || weight > 100) {
+      this.notifications.error('Weight must be greater than 0 and at most 100.');
+      return false;
+    }
+
+    const remaining = this.weightRemaining(kind);
+    if (remaining < -0.001) {
+      this.notifications.error(
+        'Weight budget exceeded — the sibling weights under this parent plus this value must stay within 100%.',
+      );
+      return false;
+    }
+    return true;
+  }
+
+  private weightRemaining(kind: CrudKind): number {
+    switch (kind) {
+      case 'goal':
+        return this.goalWeightRemaining();
+      case 'kra':
+        return this.kraWeightRemaining();
+      case 'kpi':
+        return this.kpiWeightRemaining();
+    }
+  }
+
   onSubmitCrud(): void {
     if (this.isReadOnly()) {
       this.notifications.error('This scorecard is closed and cannot be modified.');
@@ -978,6 +1004,13 @@ export class score implements OnInit {
     if (this.crudSubmitting()) return;
     const form = this.activeForm;
     if (form.invalid) return;
+
+    // Mirror the server-side weight rules (FR-301) before sending anything:
+    // 0 < weight <= 100 and siblings under the same parent must stay within 100%.
+    if (!this.submitWeightAllowed(this.crudKind(), form.value.weight ?? 0)) {
+      this.crudSubmitting.set(false);
+      return;
+    }
 
     this.crudSubmitting.set(true);
     const kind = this.crudKind();

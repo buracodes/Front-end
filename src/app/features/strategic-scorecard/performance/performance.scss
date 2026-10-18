@@ -274,6 +274,7 @@
   &.rag-green { background-color: var(--color-success-light); color: var(--color-success); }
   &.rag-amber { background-color: var(--color-warning-light); color: var(--color-warning); }
   &.rag-red { background-color: var(--color-danger-light); color: var(--color-danger); }
+  &.rag-gray { background-color: var(--color-rag-gray-light); color: var(--color-rag-gray); }
 }
 
 .trend-inline {

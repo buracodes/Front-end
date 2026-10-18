@@ -8,6 +8,17 @@
 
   <app-plan-filter-bar [levels]="['fiscalYear', 'scorecard', 'goal']" />
 
+  <div class="card mb-4">
+    <div class="card-body">
+      <strong>Total assigned KRA weight:</strong>
+      {{ totalAssignedWeight() }}%
+      <span class="text-muted">of 100%</span>
+      <p class="form-hint mb-0">
+        Totals below 100% are allowed; KRA weights are normalized proportionally during score calculation.
+      </p>
+    </div>
+  </div>
+
   @if (showForm()) {
     <div class="modal-backdrop" (click)="onCancelEdit()">
       <div class="modal-dialog" (click)="$event.stopPropagation()">
@@ -95,29 +106,84 @@
             </div>
 
             <div class="form-group">
-              <label class="form-label" for="kra-weight">Weight (%)</label>
+              <label class="form-label" for="kra-icon">Icon (optional)</label>
               <input
-                id="kra-weight"
+                id="kra-icon"
                 class="form-control"
-                type="number"
-                formControlName="weight"
-                min="0"
-                max="100"
+                type="text"
+                formControlName="icon"
+                placeholder="Optional visual identifier"
               />
-              @if (form.controls.weight.invalid && form.controls.weight.touched) {
-                <p class="form-error">
-                  @if (form.controls.weight.hasError('required')) {
-                    Weight is required.
-                  } @else if (form.controls.weight.hasError('min') || form.controls.weight.hasError('max')) {
-                    Weight must be between 0 and 100.
-                  }
-                </p>
+              @if (form.controls.icon.invalid && form.controls.icon.touched) {
+                <p class="form-error">Icon must be at most 50 characters.</p>
               }
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="kra-theme">Strategic Priority/Theme (optional)</label>
+                <select id="kra-theme" class="form-control" formControlName="strategicThemeId">
+                  <option value="">— None —</option>
+                  @for (theme of strategicThemes(); track theme.id) {
+                    <option [value]="theme.id">{{ theme.title }}</option>
+                  }
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="kra-unit">Unit Measure (optional)</label>
+                <input
+                  id="kra-unit"
+                  class="form-control"
+                  type="text"
+                  formControlName="unitMeasure"
+                  placeholder="e.g. %, score, $, ETB, hours"
+                />
+                @if (form.controls.unitMeasure.invalid && form.controls.unitMeasure.touched) {
+                  <p class="form-error">Unit measure must be at most 50 characters.</p>
+                }
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="kra-weight">Weight (%)</label>
+                <input
+                  id="kra-weight"
+                  class="form-control"
+                  type="number"
+                  formControlName="weight"
+                  min="0.01"
+                  max="100"
+                  step="0.01"
+                />
+                @if (form.controls.weight.invalid && form.controls.weight.touched) {
+                  <p class="form-error">
+                    @if (form.controls.weight.hasError('required')) {
+                      Weight is required and must be greater than 0.
+                    } @else if (form.controls.weight.hasError('min')) {
+                      Weight must be greater than 0.
+                    } @else if (form.controls.weight.hasError('max')) {
+                      Weight cannot exceed 100.
+                    }
+                  </p>
+                }
+              </div>
+
+              <div class="form-group">
+                @if (form.controls.goalId.value) {
+                  <p class="form-hint">
+                    KRAs under this goal total
+                    {{ formKraBudgetTotal() }}% of 100%. Totals below 100% are allowed
+                    and are normalized proportionally during score calculation.
+                  </p>
+                }
+              </div>
             </div>
 
             <div class="modal-footer">
               <button type="button" class="btn btn-secondary" (click)="onCancelEdit()">Cancel</button>
-              <button type="submit" class="btn btn-primary" [disabled]="form.invalid || submitting()">
+              <button type="submit" class="btn btn-primary" [disabled]="submitting() || (form.invalid && !form.controls.weight.invalid)">
                 {{ submitting() ? 'Saving…' : (editingId() ? 'Update KRA' : 'Save KRA') }}
               </button>
             </div>

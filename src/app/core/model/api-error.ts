@@ -44,7 +44,11 @@ export function toApiError(error: unknown): ApiError {
     if (body && typeof body === 'object') {
       const pd = body as ProblemDetails;
       if (pd.title || pd.detail) {
-        return new ApiError(error.status, pd.detail || pd.title || `Request failed (${error.status})`, {
+        // Validation failures carry the specific messages in `errors`; prefer
+        // them over the generic "One or more validation errors occurred" title.
+        const fieldMessages = pd.errors?.[Object.keys(pd.errors)[0]][0];
+        const message = pd.detail || fieldMessages || pd.title || `Request failed (${error.status})`;
+        return new ApiError(error.status, message, {
           code: pd.code,
           fieldErrors: pd.errors,
           raw: error,

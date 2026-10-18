@@ -1,5 +1,4 @@
 import { Component, inject, signal } from '@angular/core';
-import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ColDef, CellValueChangedEvent, EditableCallbackParams } from 'ag-grid-community';
 import { toApiError } from '../../core/model/api-error';
 import { FiscalYear } from './fiscal-year.model';
@@ -9,11 +8,18 @@ import { fiscalYearHasEnded } from '../strategic-scorecard/workspace-state.servi
 import { GridTable } from '../../shared/reusableComponent/grid-table/grid-table';
 import { actionsColumn } from '../../shared/reusableComponent/grid-table/grid-table-actions';
 import { ConfirmDialogService } from '../../shared/service/confirm-dialog.service';
+import {
+  FiscalYearFormComponent,
+  FiscalYearFormGroup,
+  buildCreateFiscalYearRequest,
+  buildUpdateFiscalYearRequest,
+  createFiscalYearForm,
+  fiscalYearEndDateFor,
+} from './fiscal-year-form';
 
-import { LucideDynamicIcon } from '@lucide/angular';
 @Component({
   selector: 'app-fiscal-year',
-  imports: [GridTable, ReactiveFormsModule, LucideDynamicIcon],
+  imports: [GridTable, FiscalYearFormComponent],
   templateUrl: './fiscal-year.html',
   styleUrl: './fiscal-year.scss',
 })
@@ -29,15 +35,11 @@ export class FiscalYearPage {
   readonly submitting = signal(false);
   readonly editingId = signal<string | null>(null);
 
-  readonly form = new FormGroup({
-    label: new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.maxLength(50)] }),
-    // A "YYYY-MM" month picker. The backend requires the first day of a month, so the UI can
-    // only ever produce a valid start and no free-text date can slip through.
-    startMonth: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
-  });
+  /** Shared fiscal-year form: the same component, validation and rules as the Scorecards modal. */
+  readonly fiscalYearForm: FiscalYearFormGroup = createFiscalYearForm();
 
-  /** End date derived from the chosen start month; shown read-only so it cannot drift. */
-  readonly computedEndDate = signal('');
+  /** True while editing a year that already has scorecards: its dates become read-only. */
+  readonly datesLocked = signal(false);
 
   readonly columnDefs: ColDef[] = [
     {
@@ -52,18 +54,17 @@ export class FiscalYearPage {
       field: 'startDate',
       headerName: 'Start Date',
       sortable: true,
-      editable: (params: EditableCallbackParams<FiscalYear>) => this.isEditable(params.data),
+      editable: (params: EditableCallbackParams<FiscalYear>) => this.canEditDates(params.data),
       cellEditor: 'agDateStringCellEditor',
       cellEditorPopup: true,
       valueFormatter: (params) => dayMonthYear(params.value),
     },
     {
+      // Read-only: the end date is always the last day of the twelfth month after the start and
+      // is derived by the server, so it is never edited here.
       field: 'endDate',
       headerName: 'End Date',
       sortable: true,
-      editable: (params: EditableCallbackParams<FiscalYear>) => this.isEditable(params.data),
-      cellEditor: 'agDateStringCellEditor',
-      cellEditorPopup: true,
       valueFormatter: (params) => dayMonthYear(params.value),
     },
     { field: 'status', headerName: 'Status', sortable: true, filter: true },
@@ -74,9 +75,6 @@ export class FiscalYearPage {
   ];
 
   constructor() {
-    this.form.controls.startMonth.valueChanges.subscribe((value) => {
-      this.computedEndDate.set(endDateForMonth(value));
-    });
     this.loadAll();
   }
 
@@ -92,6 +90,15 @@ export class FiscalYearPage {
     return !fiscalYearHasEnded(row.endDate);
   }
 
+  /**
+   * The start date can only be corrected while nothing is built on the year's calendar: once a
+   * scorecard exists the year's dates are read-only (the label stays editable). The backend
+   * enforces this too; here it only hides the affordance.
+   */
+  canEditDates(row: FiscalYear | null | undefined): boolean {
+    return this.isEditable(row) && !row?.hasScorecards;
+  }
+
   loadAll(): void {
     this.loading.set(true);
     this.loadError.set(null);
@@ -102,10 +109,16 @@ export class FiscalYearPage {
     });
   }
 
+  /** End date derived from the current start month; shown read-only so it cannot drift. */
+  fiscalYearEndDate(): string {
+    return fiscalYearEndDateFor(this.fiscalYearForm);
+  }
+
   openAddModal(): void {
     this.editingId.set(null);
-    this.form.reset({ label: '', startMonth: '' });
-    this.computedEndDate.set('');
+    this.fiscalYearForm.reset({ label: '', startMonth: '' });
+    this.fiscalYearForm.controls.startMonth.enable();
+    this.datesLocked.set(false);
     this.showForm.set(true);
   }
 
@@ -116,27 +129,30 @@ export class FiscalYearPage {
     }
     this.editingId.set(item.id);
     const startMonth = item.startDate.split('T')[0].slice(0, 7);
-    this.form.setValue({ label: item.label, startMonth });
-    this.computedEndDate.set(endDateForMonth(startMonth));
+    this.fiscalYearForm.setValue({ label: item.label, startMonth });
+    // A year carrying scorecards can still be relabelled, but its dates must not move.
+    const locked = !!item.hasScorecards;
+    this.datesLocked.set(locked);
+    if (locked) this.fiscalYearForm.controls.startMonth.disable();
+    else this.fiscalYearForm.controls.startMonth.enable();
     this.showForm.set(true);
   }
 
   onCancelEdit(): void {
     this.editingId.set(null);
-    this.form.reset();
+    this.fiscalYearForm.controls.startMonth.enable();
+    this.datesLocked.set(false);
+    this.fiscalYearForm.reset();
     this.showForm.set(false);
   }
 
   onSubmit(): void {
-    if (this.form.invalid || this.submitting()) return;
+    if (this.submitting()) return;
+    const request = buildCreateFiscalYearRequest(this.fiscalYearForm);
+    if (!request) return;
     this.submitting.set(true);
 
-    const value = this.form.getRawValue();
-    this.fyService.create({
-      label: value.label,
-      startDate: `${value.startMonth}-01`,
-      endDate: this.computedEndDate(),
-    }).subscribe({
+    this.fyService.create(request).subscribe({
       next: () => { this.notifications.success('Fiscal year created.'); this.onCancelEdit(); this.loadAll(); },
       error: (err) => { this.notifications.error(toApiError(err).message); this.submitting.set(false); },
       complete: () => this.submitting.set(false),
@@ -145,15 +161,14 @@ export class FiscalYearPage {
 
   onUpdate(): void {
     const id = this.editingId();
-    if (!id || this.form.invalid || this.submitting()) return;
+    if (!id || this.submitting()) return;
+    // The end date is never sent — the server derives it. When the year already has scorecards
+    // the start month is locked, so only the label is sent.
+    const payload = buildUpdateFiscalYearRequest(this.fiscalYearForm, this.datesLocked());
+    if (!payload) return;
     this.submitting.set(true);
 
-    const value = this.form.getRawValue();
-    this.fyService.update(id, {
-      label: value.label,
-      startDate: `${value.startMonth}-01`,
-      endDate: this.computedEndDate(),
-    }).subscribe({
+    this.fyService.update(id, payload).subscribe({
       next: () => { this.notifications.success('Fiscal year updated.'); this.onCancelEdit(); this.loadAll(); },
       error: (err) => { this.notifications.error(toApiError(err).message); this.submitting.set(false); },
       complete: () => this.submitting.set(false),
@@ -184,9 +199,10 @@ export class FiscalYearPage {
     const field = event.colDef.field;
     if (!row || !field) return;
 
-    // Defensive: the editable callback already blocks locked rows, but never persist an
-    // inline edit on a year that has ended or is closed/archived.
-    if (!this.isEditable(row)) {
+    // Defensive: the editable callbacks already block locked rows, but never persist an
+    // inline edit on a year that has ended or is closed/archived, nor move the dates of a
+    // year that already has scorecards.
+    if (!this.isEditable(row) || (field === 'startDate' && row.hasScorecards)) {
       row[field as keyof FiscalYear] = event.oldValue as never;
       event.api.refreshCells({ rowNodes: [event.node], columns: [field], force: true });
       this.notifications.warning('This fiscal year is read-only and cannot be edited.');
@@ -195,11 +211,15 @@ export class FiscalYearPage {
 
     row[field as keyof FiscalYear] = dateOnly(event.newValue) as never;
 
+    // The end date is never sent — the server derives it from the start.
     this.fyService.update(row.id, {
       label: row.label,
       startDate: dateOnly(row.startDate),
-      endDate: dateOnly(row.endDate),
     }).subscribe({
+      next: () => {
+        // A start-date change shifts the server-derived end date, so refresh from the source.
+        if (field === 'startDate') this.loadAll();
+      },
       error: (err) => {
         row[field as keyof FiscalYear] = event.oldValue as never;
         event.api.refreshCells({ rowNodes: [event.node], columns: [field], force: true });
@@ -211,21 +231,10 @@ export class FiscalYearPage {
 }
 
 /**
- * Last day of the twelfth consecutive month after a "YYYY-MM" fiscal-year start, as
- * "YYYY-MM-DD". Mirrors the backend's authoritative end-date rule (start + 12 months - 1 day)
- * so the form can show the value the server will persist.
+ * Last day of the twelfth consecutive month after a "YYYY-MM" fiscal-year start is derived by
+ * the shared fiscal-year form logic ({@link endDateForMonth} in `fiscal-year-form.ts`);
+ * only the grid display helpers remain here.
  */
-function endDateForMonth(monthValue: string): string {
-  const match = /^(\d{4})-(\d{2})$/.exec(monthValue);
-  if (!match) return '';
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  if (month < 1 || month > 12) return '';
-  const end = new Date(Date.UTC(year, month - 1 + 12, 0));
-  const m = String(end.getUTCMonth() + 1).padStart(2, '0');
-  const d = String(end.getUTCDate()).padStart(2, '0');
-  return `${end.getUTCFullYear()}-${m}-${d}`;
-}
 
 const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 

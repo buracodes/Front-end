@@ -1,164 +1,249 @@
 <div class="entry">
-  <div class="card entry-toolbar">
-    <div class="entry-toolbar-row">
-      <div class="entry-picker">
-        <label class="slabel" for="entry-fiscal-year">Fiscal Year</label>
-        <select
-          id="entry-fiscal-year"
-          class="form-control"
-          [value]="fiscalYearId() ?? ''"
-          (change)="onFiscalYearChange($event)"
-        >
-          @for (fy of fiscalYears(); track fy.id) {
-            <option [value]="fy.id">{{ fy.label }} ({{ fy.status }})</option>
-          }
-        </select>
-      </div>
-      <div class="entry-picker">
-        <label class="slabel" for="entry-scorecard">Scorecard</label>
-        <select
-          id="entry-scorecard"
-          class="form-control"
-          [value]="scorecardId() ?? ''"
-          (change)="onScorecardChange($event)"
-        >
-          @for (sc of scorecardsForFiscalYear(); track sc.id) {
-            <option [value]="sc.id">{{ sc.name }} — {{ sc.scope }} ({{ sc.scorecardStatus }})</option>
-          }
-        </select>
-      </div>
-    </div>
-  </div>
-
-  @if (isReadOnly()) {
-  <div class="alert alert-warning read-only-banner" role="alert">
-    <span>
-      @if (scorecardClosed()) {
-        This scorecard is <strong>closed</strong> and read-only.
-      } @else {
-        This fiscal year has <strong>ended or is closed</strong> and is read-only.
-      }
-      @if (hasActualsOverride()) {
-        You hold the <strong>Actuals Override</strong> permission — provide an audited reason below to correct values.
-      }
-    </span>
-  </div>
-  }
-
-  @if (isReadOnly() && hasActualsOverride()) {
-  <div class="card entry-override">
-    <label class="slabel" for="entry-override-reason">Override reason (audited, required)</label>
-    <input
-      id="entry-override-reason"
-      class="form-control"
-      type="text"
-      maxlength="500"
-      placeholder="Explain why this closed scorecard is being corrected"
-      [value]="overrideReason()"
-      (input)="onOverrideReasonInput($event)"
-    />
-  </div>
-  }
-
-  <div class="entry-header">
-    <p class="section-intro">
-      Enter actual KPI performance for the selected fiscal year and scorecard. Cells are enabled only for
-      open periods; locked periods are read-only unless an override is configured in Data Locking.
-      @if (isReadOnly() && !hasActualsOverride()) {
-        This scorecard is closed, so all cells are read-only.
-      }
-    </p>
-    <div class="entry-actions">
-      <button type="button" class="btn btn-secondary" (click)="bulkFill()" [disabled]="!canEnterActuals() || !totalDirtyCount()">
-        Save All
-      </button>
-      <button type="button" class="btn btn-primary" (click)="recalculateScores()">
-        Recalculate Scores
-      </button>
-    </div>
-  </div>
-
-  <div class="period-ribbon">
-    @for (period of periods(); track period.month) {
-      <div
-        class="period-chip"
-        [class]="periodTone(period.state)"
-        [class.current]="period.month === currentMonth()"
-        [title]="'Entry open: ' + (period.entryOpenDate ?? 'n/a') + ' | Cutoff: ' + (period.cutoffDate ?? 'n/a')"
+  <div class="entry-scope">
+    <div class="entry-picker">
+      <label class="entry-picker-label" for="entry-fiscal-year">Fiscal year</label>
+      <select
+        id="entry-fiscal-year"
+        class="entry-select"
+        [value]="fiscalYearId() ?? ''"
+        (change)="onFiscalYearChange($event)"
       >
-        <div class="period-chip-top">
-          <span class="period-dot"></span>
-          <span class="period-name">{{ period.short }}</span>
-        </div>
-        <span class="period-fill">{{ period.counts.filled }}/{{ period.counts.filled + period.counts.unfilled }}</span>
-      </div>
-    }
+        @for (fy of fiscalYears(); track fy.id) {
+          <option [value]="fy.id">{{ fy.label }} ({{ fy.status }})</option>
+        }
+      </select>
+    </div>
+    <div class="entry-picker">
+      <label class="entry-picker-label" for="entry-scorecard">Scorecard</label>
+      <select
+        id="entry-scorecard"
+        class="entry-select"
+        [value]="scorecardId() ?? ''"
+        (change)="onScorecardChange($event)"
+      >
+        @for (sc of scorecardsForFiscalYear(); track sc.id) {
+          <option [value]="sc.id">{{ sc.name }} — {{ sc.scope }} ({{ sc.scorecardStatus }})</option>
+        }
+      </select>
+    </div>
   </div>
 
-  <div class="card entry-grid-wrap">
+  <section class="entry-panel entry-window" aria-label="Entry window">
+    <div class="entry-window-item">
+      <span class="entry-window-label">Entry window</span>
+      <strong class="entry-window-value">{{ windowText() }}</strong>
+    </div>
+    <div class="entry-window-item">
+      <span class="entry-window-label">Reporting month</span>
+      <strong class="entry-window-value">{{ reportingLabel() || '—' }}</strong>
+    </div>
+    <div class="entry-window-item">
+      <span class="entry-window-label">Days until lock</span>
+      <strong class="entry-window-value" [class.urgent]="lockUrgent()">{{ lockText() }}</strong>
+    </div>
+    <span class="entry-badge" [class]="windowBadge().tone">{{ windowBadge().text }}</span>
+  </section>
+
+  <section class="entry-panel" aria-label="Enter actuals">
+    <header class="entry-panel-head">
+      <div>
+        <h2 class="entry-panel-title">Enter actuals · {{ reportingLabel() }}</h2>
+        <p class="entry-panel-sub">{{ entrySubtitle() }}</p>
+      </div>
+      <button
+        type="button"
+        class="entry-save"
+        (click)="saveEntries()"
+        [disabled]="!canEnter() || !dirtyCount() || savingAll()"
+      >
+        {{ savingAll() ? 'Saving…' : 'Save entries' }}
+      </button>
+    </header>
+
     @if (loadingCells()) {
-      <div class="entry-loading">
+      <div class="entry-state">
         <div class="spinner"></div>
         Loading actuals…
       </div>
     } @else if (kpis().length) {
-      <div class="entry-grid-scroll">
-        <table class="entry-grid">
+      <div class="entry-scroll">
+        <table class="entry-table entry-table-main">
+          <colgroup>
+            <col style="width: 28.5%" />
+            <col style="width: 10.5%" />
+            <col style="width: 15.4%" />
+            <col style="width: 15.6%" />
+            <col style="width: 30%" />
+          </colgroup>
           <thead>
             <tr>
-              <th class="col-kpi">KPI</th>
-              @for (period of periods(); track period.month) {
-                <th class="col-month">
-                  <span>{{ period.short }}</span>
-                  <span class="period-pill" [class]="periodTone(period.state)">{{ stateLabel(period.state) }}</span>
-                </th>
-              }
-              <th class="col-ytd">YTD</th>
+              <th>KPI</th>
+              <th>Unit</th>
+              <th>Target ({{ reportingShort() }})</th>
+              <th>Actual ({{ reportingShort() }})</th>
+              <th>Comment / evidence</th>
             </tr>
           </thead>
           <tbody>
-            @for (kpi of kpis(); track kpi.id) {
-              <tr>
-                <td class="col-kpi">
-                  <div class="kpi-cell">
-                    <span class="kpi-name">{{ kpi.name }}</span>
-                    <span class="kpi-unit">{{ kpi.unit ?? (kpi.optimizationType | lowercase) }}</span>
-                  </div>
+            @for (row of entryRows(); track row.kpi.id) {
+              <tr
+                class="entry-row"
+                (click)="selectKpi(row.kpi.id)"
+              >
+                <td class="cell-kpi">
+                  {{ row.kpi.name }}
+                  <button
+                    type="button"
+                    class="entry-history-open"
+                    [attr.aria-label]="'Revision history for ' + row.kpi.name"
+                    title="Revision history"
+                    [disabled]="!periodFor(reportingMonth()!).fiscalPeriodId"
+                    (click)="openHistory(row.kpi, reportingMonth()!); $event.stopPropagation()"
+                  >
+                    History
+                  </button>
                 </td>
-                @for (period of periods(); track period.month) {
-                  <td class="col-month">
-                    @if (isEditable(period.month)) {
-                      <input
-                        class="cell-input"
-                        [class.dirty]="cellValue(kpi.id, period.month)?.dirty"
-                        type="number"
-                        inputmode="decimal"
-                        step="any"
-                        [value]="cellValue(kpi.id, period.month)?.value ?? ''"
-                        (input)="setCellValue(kpi.id, period.month, $any($event.target).value)"
-                        (keydown.enter)="save(kpi, period.month)"
-                        (blur)="save(kpi, period.month)"
-                      />
-                      @if (isSaving(kpi.id, period.month)) {
-                        <span class="cell-saving"><div class="spinner"></div></span>
-                      }
-                    } @else {
-                      <span class="cell-locked" [class.soon]="period.state === 'pending'">
-                        {{ cellValue(kpi.id, period.month)?.value ?? (period.state === 'locked' ? '—' : '') }}
-                      </span>
-                    }
-                  </td>
-                }
-                <td class="col-ytd"><strong>{{ ytd(cellsFor(kpi.id)) }}</strong></td>
+                <td class="cell-unit">{{ row.kpi.unit ?? '' }}</td>
+                <td class="cell-target">{{ row.target === null ? '—' : (row.target | number: '1.0-2') }}</td>
+                <td>
+                  <input
+                    class="entry-input entry-input-value"
+                    [class.dirty]="row.cell?.dirty"
+                    type="number"
+                    inputmode="decimal"
+                    step="any"
+                    [attr.aria-label]="'Actual for ' + row.kpi.name"
+                    [disabled]="!canEnter()"
+                    [value]="row.cell?.value ?? ''"
+                    (input)="setCellValue(row.kpi.id, reportingMonth()!, $any($event.target).value)"
+                    (keydown.enter)="save(row.kpi, reportingMonth()!)"
+                  />
+                </td>
+                <td>
+                  <input
+                    class="entry-input entry-input-note"
+                    type="text"
+                    maxlength="500"
+                    placeholder="Add comment or evidence"
+                    [attr.aria-label]="'Comment for ' + row.kpi.name"
+                    [disabled]="!canEnter()"
+                    [value]="row.cell?.note ?? ''"
+                    (input)="setCellNote(row.kpi.id, reportingMonth()!, $any($event.target).value)"
+                    (keydown.enter)="save(row.kpi, reportingMonth()!)"
+                  />
+                </td>
               </tr>
             }
           </tbody>
         </table>
       </div>
     } @else {
-      <div class="entry-empty">
+      <div class="entry-state">
         {{ fiscalYearId() ? 'No KPIs configured for this scorecard yet.' : 'Select a fiscal year and scorecard to begin.' }}
       </div>
     }
-  </div>
+  </section>
+
+  @if (focusKpi(); as kpi) {
+    <h2 class="entry-subhead">Previous months · {{ lowerFirst(kpi.name) }}</h2>
+
+    <section class="entry-panel entry-previous" aria-label="Previous months">
+      <div class="entry-scroll">
+        <table class="entry-table entry-table-previous">
+          <colgroup>
+            <col style="width: 29.5%" />
+            <col style="width: 23%" />
+            <col style="width: 23%" />
+            <col style="width: 24.5%" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Month</th>
+              <th>Target</th>
+              <th>Actual</th>
+              <th>Score</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of previousRows(); track row.month) {
+              <tr>
+                <td class="prev-month">{{ row.label }}</td>
+                <td class="prev-target">{{ row.target === null ? '—' : (row.target | number: '1.0-2') }}</td>
+                <td class="prev-actual">
+                  {{ row.actual === null ? '—' : (row.actual | number: '1.0-2') }}
+                  @if (row.locked) {
+                    <svg class="lock-icon" viewBox="0 0 16 16" width="12" height="12" aria-label="Locked" role="img">
+                      <rect x="3" y="7" width="10" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4" />
+                      <path d="M5.2 7V5a2.8 2.8 0 0 1 5.6 0v2" fill="none" stroke="currentColor" stroke-width="1.4" />
+                    </svg>
+                  }
+                </td>
+                <td>
+                  @if (row.score === null) {
+                    <span class="score-badge none">—</span>
+                  } @else {
+                    <span class="score-badge" [class]="scoreTone(row.score)">{{ row.score | number: '1.1-1' }}%</span>
+                  }
+                </td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="4" class="prev-empty">No earlier months in this fiscal year yet.</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <footer class="entry-note">
+        <svg class="lock-icon" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+          <rect x="3" y="7" width="10" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4" />
+          <path d="M5.2 7V5a2.8 2.8 0 0 1 5.6 0v2" fill="none" stroke="currentColor" stroke-width="1.4" />
+        </svg>
+        Locked months are read-only. Admins and power users can override with an audited change.
+      </footer>
+    </section>
+  }
+
+  @if (historyState(); as history) {
+    <div class="entry-history-backdrop" (click)="closeHistory()">
+      <section class="entry-history" (click)="$event.stopPropagation()" aria-label="Actual revisions">
+        <header class="entry-history-head">
+          <div>
+            <h3 class="entry-history-title">{{ history.kpi.name }} — {{ historyRowMonthLabel(history.month) }}</h3>
+            <p class="entry-history-sub">Every recorded write for this KPI and period. Values are never overwritten.</p>
+          </div>
+          <button type="button" class="entry-history-close" (click)="closeHistory()">Close</button>
+        </header>
+
+        @if (history.loading) {
+          <div class="entry-state"><div class="spinner"></div>Loading revisions…</div>
+        } @else if (history.rows.length === 0) {
+          <div class="entry-state">No actual value has been recorded for this period yet.</div>
+        } @else {
+          <div class="entry-scroll">
+            <table class="entry-table entry-table-history">
+              <thead>
+                <tr>
+                  <th>Recorded at</th>
+                  <th>Value</th>
+                  <th>Source</th>
+                  <th>Comment</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (revision of history.rows; track revision.id) {
+                  <tr>
+                    <td class="cell-when">{{ historyRowDate(revision.asOfDate) }}</td>
+                    <td class="cell-value">{{ revision.value | number: '1.0-2' }}</td>
+                    <td class="cell-source"><span class="entry-badge" [class]="revision.dataSource === 'Automated' ? 'neutral' : 'open'">{{ revision.dataSource }}</span></td>
+                    <td class="cell-note">{{ revision.note || '—' }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </section>
+    </div>
+  }
 </div>

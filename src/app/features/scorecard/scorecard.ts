@@ -8,7 +8,15 @@ import { ScorecardService } from './scorecard.service';
 import { ScorecardService as CoreScorecardService } from '../../core/service/scorecard.service';
 import { ConfirmDialogService } from '../../shared/service/confirm-dialog.service';
 import { Scorecard, CreateScorecardRequest, UpdateScorecardRequest } from './scorecard.model';
-import { FiscalYear, CreateFiscalYearRequest } from '../../core/model/scorecard.model';
+import { FiscalYear } from '../../core/model/scorecard.model';
+import { FiscalYearService } from '../fiscal-year/fiscal-year.service';
+import {
+  FiscalYearFormComponent,
+  FiscalYearFormGroup,
+  buildCreateFiscalYearRequest,
+  createFiscalYearForm,
+  fiscalYearEndDateFor,
+} from '../fiscal-year/fiscal-year-form';
 
 import { LucideDynamicIcon } from '@lucide/angular';
 interface FiscalYearGroup {
@@ -19,13 +27,14 @@ interface FiscalYearGroup {
 
 @Component({
   selector: 'app-scorecard',
-  imports: [ReactiveFormsModule, DatePipe, LucideDynamicIcon],
+  imports: [ReactiveFormsModule, DatePipe, LucideDynamicIcon, FiscalYearFormComponent],
   templateUrl: './scorecard.html',
   styleUrl: './scorecard.scss',
 })
 export class ScorecardPage implements OnInit {
   private readonly scorecardService = inject(ScorecardService);
   private readonly coreScorecardService = inject(CoreScorecardService);
+  private readonly fiscalYearService = inject(FiscalYearService);
   private readonly notifications = inject(NotificationService);
   private readonly dialog = inject(ConfirmDialogService);
   private readonly router = inject(Router);
@@ -119,11 +128,12 @@ export class ScorecardPage implements OnInit {
     }),
   });
 
-  readonly fiscalYearForm = new FormGroup({
-    label: new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.maxLength(50)] }),
-    startDate: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
-    endDate: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
-  });
+  /**
+   * The "Add Fiscal Year" modal reuses the exact fiscal-year form component, shared form
+   * factory and twelve-month end-date logic as the Fiscal Year page — only the success
+   * behaviour differs (open "Add Scorecard" pre-selected to the new year).
+   */
+  readonly fiscalYearForm: FiscalYearFormGroup = createFiscalYearForm();
 
   ngOnInit(): void {
     this.loadFiscalYears();
@@ -366,7 +376,8 @@ export class ScorecardPage implements OnInit {
   // ── Fiscal Year creation ─────────────────────────────────────────────────
 
   openAddFiscalYearModal(): void {
-    this.fiscalYearForm.reset({ label: '', startDate: '', endDate: '' });
+    this.fiscalYearForm.reset({ label: '', startMonth: '' });
+    this.fiscalYearForm.controls.startMonth.enable();
     this.showFiscalYearModal.set(true);
   }
 
@@ -374,13 +385,18 @@ export class ScorecardPage implements OnInit {
     this.showFiscalYearModal.set(false);
   }
 
+  /** Shown read-only in the modal, derived from the picked start month. */
+  fiscalYearEndDate(): string {
+    return fiscalYearEndDateFor(this.fiscalYearForm);
+  }
+
   onSubmitFiscalYear(): void {
-    if (this.fiscalYearForm.invalid || this.fiscalYearSubmitting()) return;
+    if (this.fiscalYearSubmitting()) return;
+    const request = buildCreateFiscalYearRequest(this.fiscalYearForm);
+    if (!request) return;
 
     this.fiscalYearSubmitting.set(true);
-    const request: CreateFiscalYearRequest = this.fiscalYearForm.getRawValue();
-
-    this.coreScorecardService.createFiscalYear(request).subscribe({
+    this.fiscalYearService.create(request).subscribe({
       next: (created) => {
         this.notifications.success('Fiscal year created.');
         this.showFiscalYearModal.set(false);

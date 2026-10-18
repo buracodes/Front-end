@@ -189,6 +189,12 @@ export class ShellComponent {
           icon: 'shield',
           permission: 'admin:roles.manage',
         },
+        {
+          label: 'RAG Thresholds',
+          route: '/admin/rag-thresholds',
+          icon: 'traffic-cone',
+          permission: 'admin:rag.thresholds.manage',
+        },
       ],
     },
   ];

@@ -1,11 +1,15 @@
 import { Component, computed, effect, inject, OnInit, signal } from '@angular/core';
-import { LowerCasePipe } from '@angular/common';
+import { DecimalPipe } from '@angular/common';
+import { Observable, forkJoin, of } from 'rxjs';
+import { catchError, map } from 'rxjs/operators';
 import { KPI, KpiActualValue } from '../../core/model/goal.model';
 import { KPIService } from '../../core/service/kpi.service';
+import { UserStore } from '../../core/service/user-store.service';
 import {
   ScorecardWorkspaceState,
   fiscalMonthForDate,
   fiscalMonthLabel,
+  kpiEntries,
 } from '../strategic-scorecard/workspace-state.service';
 import { toApiError } from '../../core/model/api-error';
 import { NotificationService } from '../../core/service/notification.service';
@@ -14,6 +18,7 @@ type CellState = 'open' | 'pending' | 'locked';
 
 export interface DataCell {
   value: number | null;
+  note?: string;
   dataSource?: string;
   dirty: boolean;
 }
@@ -25,12 +30,30 @@ export interface PeriodCol {
   fiscalPeriodId: string;
   entryOpenDate?: string;
   cutoffDate?: string;
+  reminderDays: number;
   counts: { filled: number; unfilled: number };
 }
 
+export interface PreviousMonthRow {
+  month: number;
+  label: string;
+  target: number | null;
+  actual: number | null;
+  score: number | null;
+  locked: boolean;
+}
+
+const DAY_MS = 86_400_000;
+
+/** Parses the date part of an API date ('2026-08-01' or '2026-08-01T00:00:00') as a UTC calendar day. */
+function utcDay(value: string): Date {
+  return new Date(`${value.slice(0, 10)}T00:00:00Z`);
+}
+const PREVIOUS_MONTHS_SHOWN = 4;
+
 @Component({
   selector: 'app-data-entry',
-  imports: [LowerCasePipe],
+  imports: [DecimalPipe],
   templateUrl: './data-entry.html',
   styleUrl: './data-entry.scss',
 })
@@ -38,6 +61,7 @@ export class DataEntryPage implements OnInit {
   private readonly kpiService = inject(KPIService);
   private readonly state = inject(ScorecardWorkspaceState);
   private readonly notifications = inject(NotificationService);
+  private readonly userStore = inject(UserStore);
 
   ngOnInit(): void {
     this.state.loadFiscalYearsAndScorecards();
@@ -58,18 +82,11 @@ export class DataEntryPage implements OnInit {
   readonly kpis = this.state.kpis;
   readonly loading = this.state.loading;
 
-  // ── FR-703 closure gating ────────────────────────────────────────────────
-  readonly isReadOnly = this.state.isReadOnly;
-  readonly scorecardClosed = this.state.scorecardClosed;
-  readonly fiscalYearClosed = this.state.fiscalYearClosed;
-  readonly canEnterActuals = this.state.canEnterActuals;
-  readonly hasActualsOverride = this.state.hasActualsOverride;
-  /** Audited reason captured when entering actuals on a closed scorecard. */
-  readonly overrideReason = signal('');
-
   readonly grid = signal(new Map<string, DataCell[]>());
   readonly loadingCells = signal(true);
   readonly savingCell = signal<{ kpiId: string; month: number } | null>(null);
+  readonly savingAll = signal(false);
+  readonly focusKpiId = signal<string | null>(null);
   private gridRequest = 0;
 
   readonly periods = computed<PeriodCol[]>(() => {
@@ -95,6 +112,7 @@ export class DataEntryPage implements OnInit {
         fiscalPeriodId: raw?.fiscalPeriodId ?? '',
         entryOpenDate: raw?.effectiveEntryOpenDate,
         cutoffDate: raw?.effectiveCutoffDate,
+        reminderDays: raw?.effectiveReminderDaysBeforeCutoff ?? 2,
         counts: { filled, unfilled: kpiCount - filled },
       };
     });
@@ -106,6 +124,167 @@ export class DataEntryPage implements OnInit {
     return fiscalMonthForDate(fy.startDate);
   });
 
+  /**
+   * The month the user is reporting on: the earliest month whose entry window is open.
+   * When nothing is open (e.g. between windows) it falls back to the current fiscal month,
+   * which is then shown read-only.
+   */
+  readonly reportingMonth = computed<number | null>(() => {
+    const periods = this.periods();
+    if (!this.state.selectedFiscalYear()) return null;
+    const open = periods.find((p) => p.state === 'open' && !!p.fiscalPeriodId);
+    return open?.month ?? this.currentMonth();
+  });
+
+  readonly reportingPeriod = computed<PeriodCol | null>(() => {
+    const month = this.reportingMonth();
+    return month ? (this.periods()[month - 1] ?? null) : null;
+  });
+
+  readonly reportingShort = computed(() => this.reportingPeriod()?.short ?? '');
+
+  readonly reportingLabel = computed(() => {
+    const month = this.reportingMonth();
+    return month ? this.monthYearLabel(month) : '';
+  });
+
+  readonly windowText = computed(() => {
+    const p = this.reportingPeriod();
+    if (!p?.entryOpenDate || !p.cutoffDate) return '—';
+    const open = utcDay(p.entryOpenDate);
+    const cutoff = utcDay(p.cutoffDate);
+    const fmt = (d: Date, withYear: boolean) =>
+      d.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        ...(withYear ? { year: 'numeric' as const } : {}),
+        timeZone: 'UTC',
+      });
+    return open.getUTCFullYear() === cutoff.getUTCFullYear()
+      ? `${fmt(open, false)} – ${fmt(cutoff, true)}`
+      : `${fmt(open, true)} – ${fmt(cutoff, true)}`;
+  });
+
+  /** Whole days from today to the cutoff date (0 on the cutoff day), or null when not applicable. */
+  readonly daysUntilLock = computed<number | null>(() => {
+    const p = this.reportingPeriod();
+    if (!p?.cutoffDate || p.state !== 'open') return null;
+    const cutoffUtc = utcDay(p.cutoffDate).getTime();
+    const now = new Date();
+    const todayUtc = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+    return Math.max(0, Math.round((cutoffUtc - todayUtc) / DAY_MS));
+  });
+
+  readonly lockText = computed(() => {
+    const p = this.reportingPeriod();
+    if (!p) return '—';
+    if (p.state === 'locked') return 'Locked';
+    if (p.state === 'pending') return 'Not yet open';
+    const days = this.daysUntilLock();
+    if (days === null) return '—';
+    if (days === 0) return 'Last day';
+    return days === 1 ? '1 day remaining' : `${days} days remaining`;
+  });
+
+  /** Highlights the countdown once the reminder threshold configured for the period is reached. */
+  readonly lockUrgent = computed(() => {
+    const p = this.reportingPeriod();
+    const days = this.daysUntilLock();
+    return !!p && days !== null && days <= p.reminderDays;
+  });
+
+  readonly windowBadge = computed<{ text: string; tone: 'ok' | 'soon' | 'locked' | 'pending' }>(() => {
+    const p = this.reportingPeriod();
+    if (!p) return { text: 'No open period', tone: 'pending' };
+    if (p.state === 'locked') return { text: 'Entry window closed', tone: 'locked' };
+    if (p.state === 'pending') return { text: 'Entry window not open yet', tone: 'pending' };
+    return { text: 'Entry window open', tone: this.lockUrgent() ? 'soon' : 'ok' };
+  });
+
+  readonly canEnter = computed(() => {
+    const p = this.reportingPeriod();
+    return !!p && p.state === 'open' && !!p.fiscalPeriodId;
+  });
+
+  readonly canOverride = computed(() => this.userStore.hasPermission('actuals:override'));
+
+  readonly entrySubtitle = computed(() => {
+    const departments = new Set(
+      this.kpis()
+        .map((k) => k.divisionOwnerName ?? k.departmentName)
+        .filter((n): n is string => !!n)
+    );
+    const scope =
+      departments.size === 1
+        ? [...departments][0]
+        : (this.state.selectedScorecard()?.name ?? '');
+    const kpiScope = this.canOverride() ? 'All KPIs in scope' : 'KPIs assigned to me';
+    return scope ? `${scope} · ${kpiScope}` : kpiScope;
+  });
+
+  readonly entryRows = computed(() => {
+    const month = this.reportingMonth();
+    if (!month) return [];
+    return this.kpis().map((kpi) => ({
+      kpi,
+      target: this.targetFor(kpi.id, month),
+      cell: this.cellValue(kpi.id, month),
+    }));
+  });
+
+  readonly dirtyCount = computed(() => {
+    const month = this.reportingMonth();
+    if (!month) return 0;
+    let count = 0;
+    for (const cells of this.grid().values()) {
+      if (cells[month - 1]?.dirty) count++;
+    }
+    return count;
+  });
+
+  readonly focusKpi = computed<KPI | null>(
+    () => this.kpis().find((k) => k.id === this.focusKpiId()) ?? this.kpis()[0] ?? null
+  );
+
+  /** The most recent months before the reporting month, within the same fiscal year. */
+  readonly previousRows = computed<PreviousMonthRow[]>(() => {
+    const kpi = this.focusKpi();
+    const reporting = this.reportingMonth();
+    if (!kpi || !reporting) return [];
+
+    const scoreByMonth = new Map<number, { score: number; at: string }>();
+    for (const entry of kpiEntries(this.state.snapshot())) {
+      if (entry.entityId !== kpi.id || entry.isPeriodAggregate) continue;
+      if (entry.score === undefined || entry.score === null) continue;
+      const known = scoreByMonth.get(entry.fiscalMonth);
+      if (!known || entry.calculatedAt > known.at) {
+        scoreByMonth.set(entry.fiscalMonth, { score: entry.score, at: entry.calculatedAt });
+      }
+    }
+
+    const rows: PreviousMonthRow[] = [];
+    for (let month = reporting - 1; month >= 1 && rows.length < PREVIOUS_MONTHS_SHOWN; month--) {
+      rows.push({
+        month,
+        label: this.monthYearLabel(month),
+        target: this.targetFor(kpi.id, month),
+        actual: this.cellValue(kpi.id, month)?.value ?? null,
+        score: scoreByMonth.get(month)?.score ?? null,
+        locked: this.periods()[month - 1]?.state === 'locked',
+      });
+    }
+    return rows;
+  });
+
+  constructor() {
+    effect(() => {
+      const scorecardId = this.state.scorecardId();
+      const fiscalYearId = this.state.fiscalYearId();
+      const kpis = this.kpis();
+      if (scorecardId && fiscalYearId && kpis.length) this.loadGrid();
+    });
+  }
+
   onFiscalYearChange(event: Event): void {
     const id = (event.target as HTMLSelectElement).value;
     if (id) this.state.selectFiscalYear(id);
@@ -116,17 +295,8 @@ export class DataEntryPage implements OnInit {
     if (id) this.state.selectScorecard(id);
   }
 
-  onOverrideReasonInput(event: Event): void {
-    this.overrideReason.set((event.target as HTMLInputElement).value);
-  }
-
-    constructor() {
-    effect(() => {
-      const scorecardId = this.state.scorecardId();
-      const fiscalYearId = this.state.fiscalYearId();
-      const kpis = this.kpis();
-      if (scorecardId && fiscalYearId && kpis.length) this.loadGrid();
-    });
+  selectKpi(id: string): void {
+    this.focusKpiId.set(id);
   }
 
   loadGrid(): void {
@@ -150,7 +320,7 @@ export class DataEntryPage implements OnInit {
           for (const a of actuals) byMonth.set(a.fiscalMonth, a);
           for (let m = 1; m <= 12; m++) {
             const a = byMonth.get(m);
-            cells.push({ value: a?.value ?? null, dataSource: a?.dataSource, dirty: false });
+            cells.push({ value: a?.value ?? null, note: a?.note, dataSource: a?.dataSource, dirty: false });
           }
           results.set(kpi.id, cells);
           if (--pending === 0) {
@@ -178,17 +348,36 @@ export class DataEntryPage implements OnInit {
     return this.cellsFor(kpiId)[month - 1];
   }
 
+  /** Monthly target configured for the KPI in the selected fiscal year, if any. */
+  targetFor(kpiId: string, month: number): number | null {
+    const targets = this.state.kpiTargets().get(kpiId);
+    const monthly = targets?.find((t) => t.granularity === 'Monthly' && t.fiscalMonth === month);
+    return monthly ? monthly.targetValue : null;
+  }
+
+  private emptyCells(): DataCell[] {
+    return Array.from({ length: 12 }, () => ({ value: null as number | null, dirty: false }));
+  }
+
   setCellValue(kpiId: string, month: number, value: string): void {
     const map = this.grid();
-    const cells = [
-      ...(map.get(kpiId) ?? (Array.from({ length: 12 }, () => ({ value: null as number | null, dirty: false })) as DataCell[])),
-    ];
+    const cells = [...(map.get(kpiId) ?? this.emptyCells())];
     const cell = cells[month - 1];
     cells[month - 1] = {
       value: value === '' ? null : Number(value),
+      note: cell.note,
       dataSource: cell.dataSource,
       dirty: true,
     };
+    map.set(kpiId, cells);
+    this.grid.set(new Map(map));
+  }
+
+  setCellNote(kpiId: string, month: number, note: string): void {
+    const map = this.grid();
+    const cells = [...(map.get(kpiId) ?? this.emptyCells())];
+    const cell = cells[month - 1];
+    cells[month - 1] = { value: cell.value, note, dataSource: cell.dataSource, dirty: true };
     map.set(kpiId, cells);
     this.grid.set(new Map(map));
   }
@@ -198,48 +387,45 @@ export class DataEntryPage implements OnInit {
   }
 
   isEditable(month: number): boolean {
-    if (!this.canEnterActuals()) return false;
     const p = this.periodFor(month);
-    if (!p.fiscalPeriodId) return false;
-    // On a closed scorecard an audited override unlocks any existing period;
-    // otherwise only calendar-open periods accept entry.
-    if (this.isReadOnly()) return true;
-    return p.state === 'open';
+    return p.state === 'open' && !!p.fiscalPeriodId;
   }
 
+  /** Saves a single row (Enter in a value or comment field). */
   save(kpi: KPI, month: number): void {
-    if (!this.canEnterActuals()) return;
     const period = this.periodFor(month);
-    if (!period.fiscalPeriodId) return;
-    if (!this.isReadOnly() && period.state === 'locked') return;
-
-    const reason = this.overrideReason().trim();
-    if (this.isReadOnly() && !reason) {
-      this.notifications.error('An override reason is required to edit a closed scorecard.');
-      return;
-    }
-
+    if (!period.fiscalPeriodId || period.state !== 'open') return;
     const cell = this.cellValue(kpi.id, month);
     if (!cell || !cell.dirty) return;
+    if (cell.value === null) {
+      this.notifications.error(`Enter a value for ${kpi.name} before saving.`);
+      return;
+    }
 
     this.savingCell.set({ kpiId: kpi.id, month });
     this.kpiService
       .enterActual({
         kpiId: kpi.id,
         fiscalPeriodId: period.fiscalPeriodId,
-        value: cell.value ?? 0,
+        value: cell.value,
         dataSource: 'Manual',
-        overrideReason: this.isReadOnly() ? reason : undefined,
+        note: cell.note?.trim() || undefined,
       })
       .subscribe({
         next: (saved) => {
           const map = this.grid();
           const cells = [...(map.get(kpi.id) ?? [])];
-          cells[month - 1] = { value: saved.value, dataSource: saved.dataSource, dirty: false };
+          cells[month - 1] = {
+            value: saved.value,
+            note: saved.note ?? cell.note,
+            dataSource: saved.dataSource,
+            dirty: false,
+          };
           map.set(kpi.id, cells);
           this.grid.set(new Map(map));
           this.savingCell.set(null);
           this.notifications.success(`Saved ${kpi.name} for ${this.periodFor(month).short}.`);
+          this.state.reloadScores();
         },
         error: (err) => {
           this.savingCell.set(null);
@@ -248,81 +434,53 @@ export class DataEntryPage implements OnInit {
       });
   }
 
-  bulkFill(): void {
-    if (!this.canEnterActuals()) return;
-    const kpis = this.kpis();
-    const periods = this.periods();
-    const map = this.grid();
-    const readOnly = this.isReadOnly();
-    const reason = this.overrideReason().trim();
-    if (readOnly && !reason) {
-      this.notifications.error('An override reason is required to edit a closed scorecard.');
+  /** "Save entries": saves every changed row of the reporting month. */
+  saveEntries(): void {
+    const month = this.reportingMonth();
+    if (!month || this.savingAll()) return;
+    const period = this.periodFor(month);
+    if (!period.fiscalPeriodId || period.state !== 'open') return;
+
+    const jobs: Observable<string | null>[] = [];
+    let skipped = 0;
+    for (const kpi of this.kpis()) {
+      const cell = this.cellValue(kpi.id, month);
+      if (!cell?.dirty) continue;
+      if (cell.value === null) {
+        skipped++;
+        continue;
+      }
+      jobs.push(
+        this.kpiService
+          .enterActual({
+            kpiId: kpi.id,
+            fiscalPeriodId: period.fiscalPeriodId,
+            value: cell.value,
+            dataSource: 'Manual',
+            note: cell.note?.trim() || undefined,
+          })
+          .pipe(
+            map(() => null as string | null),
+            catchError((err) => of(toApiError(err).message))
+          )
+      );
+    }
+
+    if (!jobs.length) {
+      this.notifications.info(skipped ? 'Enter a value before saving.' : 'No unsaved changes.');
       return;
     }
-    let saved = 0;
-    let failed = 0;
 
-    for (const kpi of kpis) {
-      const cells = this.cellsFor(kpi.id);
-      for (const period of periods) {
-        const eligible = readOnly
-          ? !!period.fiscalPeriodId
-          : period.state === 'open' && !!period.fiscalPeriodId;
-        if (!eligible) continue;
-        const cell = cells[period.month - 1];
-        if (cell?.dirty) {
-          this.kpiService
-            .enterActual({
-              kpiId: kpi.id,
-              fiscalPeriodId: period.fiscalPeriodId,
-              value: cell.value ?? 0,
-              dataSource: 'Manual',
-              overrideReason: readOnly ? reason : undefined,
-            })
-            .subscribe({
-              next: () => {
-                saved++;
-                if (saved + failed === this.totalDirtyCount()) {
-                  if (saved) this.notifications.success(`Saved ${saved} cell(s).`);
-                  if (failed) this.notifications.error(`${failed} cell(s) could not be saved.`);
-                  this.loadGrid();
-                }
-              },
-              error: () => {
-                failed++;
-                if (saved + failed === this.totalDirtyCount()) {
-                  if (saved) this.notifications.success(`Saved ${saved} cell(s).`);
-                  if (failed) this.notifications.error(`${failed} cell(s) could not be saved.`);
-                  this.loadGrid();
-                }
-              },
-            });
-        }
-      }
-    }
-    if (!this.totalDirtyCount()) {
-      this.notifications.info('No unsaved changes.');
-    }
-  }
-
-  totalDirtyCount(): number {
-    let count = 0;
-    for (const cells of this.grid().values()) {
-      for (const c of cells) if (c.dirty) count++;
-    }
-    return count;
-  }
-
-  ytd(cells: DataCell[]): number {
-    return cells.reduce((acc, c) => acc + (c.value ?? 0), 0);
-  }
-
-  periodTone(state: CellState): string {
-    return state === 'open' ? 'ok' : state === 'pending' ? 'soon' : 'locked';
-  }
-
-  stateLabel(state: CellState): string {
-    return state === 'open' ? 'Open' : state === 'pending' ? 'Not yet open' : 'Locked';
+    this.savingAll.set(true);
+    forkJoin(jobs).subscribe((results) => {
+      const errors = results.filter((r): r is string => r !== null);
+      const saved = results.length - errors.length;
+      this.savingAll.set(false);
+      if (saved) this.notifications.success(`Saved ${saved} ${saved === 1 ? 'entry' : 'entries'}.`);
+      if (errors.length) this.notifications.error(errors[0]);
+      this.loadGrid();
+      this.state.reloadScores();
+    });
   }
 
   isSaving(kpiId: string, month: number): boolean {
@@ -330,11 +488,31 @@ export class DataEntryPage implements OnInit {
     return !!s && s.kpiId === kpiId && s.month === month;
   }
 
+  scoreTone(score: number | null): string {
+    if (score === null) return 'none';
+    if (score >= 95) return 'ok';
+    if (score >= 70) return 'warn';
+    return 'bad';
+  }
+
+  /** First letter lower-cased so the KPI name reads naturally inside the section heading. */
+  lowerFirst(text: string): string {
+    return text ? text.charAt(0).toLowerCase() + text.slice(1) : text;
+  }
+
+  private monthYearLabel(month: number): string {
+    const fy = this.state.selectedFiscalYear();
+    if (!fy?.startDate) return fiscalMonthLabel(undefined, month, true);
+    const start = utcDay(fy.startDate);
+    const date = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + month - 1, 1));
+    return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  }
+
   recalculateScores(): void {
     const scorecardId = this.state.scorecardId();
-    const current = this.currentMonth();
-    if (!scorecardId || !current) return;
-    const period = this.periodFor(current);
+    const month = this.reportingMonth();
+    if (!scorecardId || !month) return;
+    const period = this.periodFor(month);
     if (!period.fiscalPeriodId) {
       this.notifications.error('No fiscal period available to recalculate.');
       return;
@@ -351,5 +529,53 @@ export class DataEntryPage implements OnInit {
         this.notifications.error(toApiError(err).message);
       },
     });
+  }
+
+  // ── Revision history (FR-312: append-only audit trail of actual writes) ────
+
+  /** Open revisions dialog: KPI + reporting month + fetched revisions. */
+  readonly historyState = signal<{
+    kpi: KPI;
+    month: number;
+    rows: KpiActualValue[];
+    loading: boolean;
+  } | null>(null);
+
+  /** Shows every recorded write for one KPI in one fiscal period (append-only). */
+  openHistory(kpi: KPI, month: number): void {
+    const period = this.periodFor(month);
+    if (!period.fiscalPeriodId) {
+      this.notifications.error('No fiscal period is attached to that month yet.');
+      return;
+    }
+    this.historyState.set({ kpi, month, rows: [], loading: true });
+    this.kpiService.getActualHistory(kpi.id, period.fiscalPeriodId).subscribe({
+      next: (rows) => {
+        const state = this.historyState();
+        if (state?.kpi.id !== kpi.id) return;
+        this.historyState.set({ ...state, rows, loading: false });
+      },
+      error: (err) => {
+        const state = this.historyState();
+        if (state?.kpi.id !== kpi.id) return;
+        this.historyState.set({ ...state, rows: [], loading: false });
+        this.notifications.error(toApiError(err).message);
+      },
+    });
+  }
+
+  closeHistory(): void {
+    this.historyState.set(null);
+  }
+
+  historyRowDate(value: string): string {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime())
+      ? value
+      : date.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+
+  historyRowMonthLabel(month: number): string {
+    return this.monthYearLabel(month);
   }
 }

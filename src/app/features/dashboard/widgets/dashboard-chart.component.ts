@@ -115,7 +115,7 @@ export class DashboardChartComponent {
     return this.buckets().map((bucket) => ({
       name: bucket.label,
       value: bucket.count,
-      color: this.colorFor(bucket.label),
+      color: this.colorFor(bucket.token),
     }));
   }
 

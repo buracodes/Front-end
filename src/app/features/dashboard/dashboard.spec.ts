@@ -300,7 +300,7 @@ describe('DashboardPage (role driven shell)', () => {
     expect(drawer).toBeTruthy();
     expect(drawer.textContent).toContain('Grow trade volume');
     expect(drawer.textContent).toContain('Increase export volume');
-    expect(drawer.textContent).toContain('On track');
+    expect(drawer.textContent).toContain('Yellow');
   });
 
   it('hides widgets that have no data and keeps the rest', () => {
@@ -378,9 +378,10 @@ describe('DashboardPage (role driven shell)', () => {
     const legend = (fixture.nativeElement as HTMLElement).querySelector('.rag-legend');
     const text = legend?.textContent ?? '';
 
-    expect(text).toContain('On track');
-    expect(text).toContain('At risk');
-    expect(text).toContain('Off track');
+    expect(text).toContain('Green');
+    expect(text).toContain('Yellow');
+    expect(text).toContain('Red');
+    expect(text).toContain('Gray');
     expect(text).toContain('50%');
     expect(text).toContain('25%');
   });

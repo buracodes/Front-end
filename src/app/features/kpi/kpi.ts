@@ -312,8 +312,35 @@ export class KpiPage {
       });
   }
 
-  onFormScorecardChange(value: string): void {
-    this.form.controls.scorecardId.setValue(value, { emitEvent: false });
+  /** Client-side echo of the server-side weight rules (FR-301): the weight must sit in
+   *  (0, 100] and, when the KPI hangs under a KRA, the sibling budget stays within 100%. */
+  private submitWeightAllowed(): boolean {
+    const weight = Number(this.form.controls.weight.value ?? 0);
+    if (!(weight > 0) || weight > 100) {
+      this.notifications.error('Weight must be greater than 0 and at most 100.');
+      return false;
+    }
+
+    const kraId = this.form.controls.kraId.value.trim() || (this.editingId() ? this.rows().find((r) => r.id === this.editingId())?.kraId : undefined);
+    const scorecardId = this.form.controls.scorecardId.value.trim();
+    if (!kraId || !scorecardId) {
+      return true;
+    }
+
+    const editingId = this.editingId();
+    const siblingWeight = this.rows()
+      .filter((row) => row.kraId === kraId && row.id !== editingId)
+      .reduce((sum, row) => sum + (row.weight ?? 0), 0);
+    if (siblingWeight + weight > 100.001) {
+      this.notifications.error(
+        `Weight budget exceeded — only ${Math.max(0, 100 - siblingWeight).toFixed(1)}% remains under this KRA.`,
+      );
+      return false;
+    }
+    return true;
+  }
+
+  onFormScorecardChange(value: string): void {    this.form.controls.scorecardId.setValue(value, { emitEvent: false });
     this.form.controls.kraId.setValue('', { emitEvent: false });
     this.formKras.set([]);
     if (value) {
@@ -380,6 +407,9 @@ export class KpiPage {
     if (this.form.invalid || this.submitting()) {
       return;
     }
+    if (!this.submitWeightAllowed()) {
+      return;
+    }
 
     this.submitting.set(true);
 
@@ -419,6 +449,9 @@ export class KpiPage {
     if (!id || this.form.invalid || this.submitting()) {
       return;
     }
+    if (!this.submitWeightAllowed()) {
+      return;
+    }
 
     this.submitting.set(true);
 
@@ -429,6 +462,11 @@ export class KpiPage {
       weight: this.form.controls.weight.value,
       optimizationType: this.form.controls.optimizationType.value,
       kpiType: this.form.controls.kpiType.value,
+      dataSource: this.form.controls.dataSource.value,
+      isCumulative: this.form.controls.isCumulative.value,
+      baseline: this.form.controls.baseline.value ?? undefined,
+      minValue: this.form.controls.minValue.value ?? undefined,
+      maxValue: this.form.controls.maxValue.value ?? undefined,
       divisionOwnerId: this.form.controls.divisionOwnerId.value || undefined,
       isActive: this.rows().find((row) => row.id === id)?.isActive ?? true,
     };

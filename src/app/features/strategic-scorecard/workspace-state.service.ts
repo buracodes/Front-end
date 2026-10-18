@@ -8,6 +8,13 @@ import { KPIService, ScoreSnapshotDto, ScoreSnapshotEntry, KpiTargetValue, Perio
 import { ScorecardService } from '../../core/service/scorecard.service';
 import { PeriodLockStatus, PeriodLockStatusItem } from '../../core/model/goal.model';
 import { UserStore } from '../../core/service/user-store.service';
+import {
+  DEFAULT_RAG_BANDS,
+  RagBands,
+  RagBand,
+  RAG_DISPLAY_COLORS,
+  ragBandFromScore,
+} from '../../core/model/rag-band';
 
 export interface WorkspaceData {
   goals: Goal[];
@@ -151,8 +158,8 @@ export class ScorecardWorkspaceState {
 
   // ── FR-703 closure state ─────────────────────────────────────────────────
   // A scorecard becomes read-only when it is explicitly closed OR when its
-  // fiscal year has been closed/archived. The backend enforces the same rule
-  // centrally; these signals only drive the UI affordances.
+  // fiscal year's final-month grace period has expired. The backend enforces the
+  // same rule centrally; these signals only drive the UI affordances.
 
   /** True when the selected scorecard's own status is `Closed`. */
   readonly scorecardClosed = computed(
@@ -160,8 +167,8 @@ export class ScorecardWorkspaceState {
   );
 
   /**
-   * True when the selected fiscal year is closed or archived, or its end date has
-   * already passed in ECX business time (EAT) even before the closure job flips its
+   * True when the selected fiscal year is closed or archived, or its final-month grace
+   * period has expired in ECX business time (EAT) even before the closure job flips its
    * status. Reads the reactive {@link currentBusinessDate}, so it re-evaluates when the
    * EAT day rolls over or the tab regains focus.
    */
@@ -689,15 +696,15 @@ export function kpiEntries(snap: ScoreSnapshotDto | null | undefined): ScoreSnap
   return [...(snap.kpiSnapshots ?? [])];
 }
 
-export function ragFromScore(score: number | null | undefined): 'Green' | 'Amber' | 'Red' {
-  if (score === null || score === undefined) return 'Red';
-  if (score >= 70) return 'Green';
-  if (score >= 50) return 'Amber';
-  return 'Red';
+export function ragFromScore(
+  score: number | null | undefined,
+  bands: RagBands = DEFAULT_RAG_BANDS,
+): RagBand {
+  return ragBandFromScore(score, bands);
 }
 
-export function scoreColor(score: number | null | undefined): string {
-  return ragFromScore(score) === 'Green' ? '#16a34a' : ragFromScore(score) === 'Amber' ? '#d97706' : '#dc2626';
+export function scoreColor(score: number | null | undefined, bands: RagBands = DEFAULT_RAG_BANDS): string {
+  return RAG_DISPLAY_COLORS[ragFromScore(score, bands)];
 }
 
 const GREGORIAN_MONTH_NAMES = [
@@ -795,10 +802,56 @@ function compareCalendarDates(a: CalendarDate, b: CalendarDate): number {
   return a.year - b.year || a.month - b.month || a.day - b.day;
 }
 
+function addCalendarDays(parts: CalendarDate, days: number): CalendarDate {
+  // UTC math keeps the month/year rollover exact (e.g. 2027-08-31 + 7 = 2027-09-07).
+  const shifted = new Date(Date.UTC(parts.year, parts.month - 1, parts.day + days));
+  return {
+    year: shifted.getUTCFullYear(),
+    month: shifted.getUTCMonth() + 1,
+    day: shifted.getUTCDate(),
+  };
+}
+
 /**
- * Mirrors the backend `ScorecardClosureGuard.YearHasEnded`: a year has ended once its
- * end date is strictly before the EAT business date, so the end date itself is still
- * open (`EndDate.Date < businessDate.Date`).
+ * Confirmed business rule (final-month grace): the fiscal year's configured end date
+ * stays fixed, and the last reporting month accepts actual entry for seven calendar
+ * days after it, inclusive. This returns the grace deadline (end date + 7 days), or
+ * null when no end date is available.
+ */
+export function finalMonthGraceDeadlineOn(
+  endDate: string | null | undefined
+): CalendarDate | null {
+  const end = calendarDateParts(endDate);
+  return end === null ? null : addCalendarDays(end, 7);
+}
+
+/**
+ * Mirrors the backend `ScorecardClosureGuard.YearHasEnded` — the fiscal year closes
+ * once its final-month grace period has expired, i.e. the EAT business date is strictly
+ * after the end date + 7 calendar days. For a year ending 2027-08-31 the deadline is
+ * 2027-09-07 (entry still open on that day) and the year becomes read-only on 2027-09-08.
+ */
+export function finalMonthGracePeriodExpiredOn(
+  endDate: string | null | undefined,
+  businessDay: CalendarDate
+): boolean {
+  const deadline = finalMonthGraceDeadlineOn(endDate);
+  return deadline !== null && compareCalendarDates(businessDay, deadline) > 0;
+}
+
+/** {@link finalMonthGracePeriodExpiredOn} using the current (or supplied) instant. */
+export function finalMonthGracePeriodExpired(
+  endDate: string | null | undefined,
+  now: Date = new Date()
+): boolean {
+  return finalMonthGracePeriodExpiredOn(endDate, businessDate(now));
+}
+
+/**
+ * Mirrors the backend `ScorecardClosureGuard.YearHasEnded` (fiscal-calendar bookkeeping:
+ * a year whose end date is behind the EAT business date is treated as complete). Used for
+ * fiscal-year metadata management only — scorecard read-only state is governed by
+ * {@link isFiscalYearClosedOn}, which adds the final-month grace window.
  */
 export function fiscalYearHasEndedOn(
   endDate: string | null | undefined,
@@ -817,8 +870,10 @@ export function fiscalYearHasEnded(
 }
 
 /**
- * FR-703: a fiscal year is read-only when its status is Closed/Archived, or when its end
- * date has passed in ECX business time. Takes the business date explicitly so callers can
+ * FR-703: a fiscal year is read-only when its status is Closed/Archived, or when its
+ * final-month grace period has expired in ECX business time — the end date plus seven
+ * calendar days stays open for final-month actual entry, inclusive, and the year locks
+ * from the day after the deadline. Takes the business date explicitly so callers can
  * drive it from a reactive source. Keeps Angular aligned with backend closure enforcement.
  */
 export function isFiscalYearClosedOn(
@@ -828,7 +883,7 @@ export function isFiscalYearClosedOn(
   if (!fiscalYear) return false;
   const status = (fiscalYear.status ?? '').toLowerCase();
   if (status === 'closed' || status === 'archived') return true;
-  return fiscalYearHasEndedOn(fiscalYear.endDate, businessDay);
+  return finalMonthGracePeriodExpiredOn(fiscalYear.endDate, businessDay);
 }
 
 /** {@link isFiscalYearClosedOn} using the current (or supplied) instant. */

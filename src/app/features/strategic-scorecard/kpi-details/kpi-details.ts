@@ -1,17 +1,20 @@
 import { Component, computed, inject, input, output } from '@angular/core';
-import { DecimalPipe, LowerCasePipe } from '@angular/common';
+import { DecimalPipe } from '@angular/common';
 import { ScorecardWorkspaceState } from '../workspace-state.service';
+import { RagThresholdStore } from '../../../core/service/rag-threshold-store.service';
+import { ragDisplayLabel, ragSlug } from '../../../core/model/rag-band';
 import { ragFromScore, scoreColor } from '../workspace-state.service';
 
 import { LucideDynamicIcon } from '@lucide/angular';
 @Component({
   selector: 'app-kpi-details-drawer',
-  imports: [DecimalPipe, LowerCasePipe, LucideDynamicIcon],
+  imports: [DecimalPipe, LucideDynamicIcon],
   templateUrl: './kpi-details.html',
   styleUrl: './kpi-details.scss',
 })
 export class KpiDetailsDrawer {
   readonly state = inject(ScorecardWorkspaceState);
+  private readonly thresholds = inject(RagThresholdStore);
 
   open = input(false);
   closed = output<void>();
@@ -23,7 +26,11 @@ export class KpiDetailsDrawer {
     return this.state.kpiSnapshots().get(kpi.id) ?? null;
   });
 
-  readonly rag = computed(() => ragFromScore(this.snapshot()?.score ?? null));
+  readonly rag = computed(() =>
+    ragFromScore(this.snapshot()?.score ?? null, this.thresholds.bands()),
+  );
+  readonly ragLabel = computed(() => ragDisplayLabel(this.rag()));
+  readonly ragSlug = computed(() => ragSlug(this.rag()));
   readonly trend = computed(() => this.state.kpiTrends().get(this.kpi()?.id ?? '') ?? 'stable');
 
   close(): void {
@@ -35,7 +42,7 @@ export class KpiDetailsDrawer {
   }
 
   tone(score: number | null | undefined): string {
-    return scoreColor(score);
+    return scoreColor(score, this.thresholds.bands());
   }
 
   sendToManagement(): void {

@@ -1,6 +1,6 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
-import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { AbstractControl, FormControl, FormGroup, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
 import { ColDef } from 'ag-grid-community';
 import { toApiError } from '../../core/model/api-error';
 import { Goal, CreateGoalRequest, UpdateGoalRequest } from '../../core/model/goal.model';
@@ -15,6 +15,28 @@ import { actionsColumn } from '../../shared/reusableComponent/grid-table/grid-ta
 import { ConfirmDialogService } from '../../shared/service/confirm-dialog.service';
 
 import { LucideDynamicIcon } from '@lucide/angular';
+
+/**
+ * FR-302 weight range: strictly greater than 0 and at most 100. The scorecard total
+ * cap (sum <= 100) is enforced on submit and (authoritatively) by the backend.
+ */
+export const goalWeightValidator = (control: AbstractControl): ValidationErrors | null => {
+  const value = control.value;
+  if (value === null || value === undefined || (typeof value === 'number' && !Number.isFinite(value))) {
+    return { required: true };
+  }
+  if (typeof value !== 'number' || Number.isNaN(value)) {
+    return { required: true };
+  }
+  if (value <= 0) {
+    return { min: { min: 0, actual: value } };
+  }
+  if (value > 100) {
+    return { max: { max: 100, actual: value } };
+  }
+  return null;
+};
+
 @Component({
   selector: 'app-goals',
   imports: [GridTable, PlanFilterBar, ReactiveFormsModule, LucideDynamicIcon],
@@ -37,13 +59,18 @@ export class GoalsPage {
   readonly submitting = signal(false);
   readonly editingId = signal<string | null>(null);
 
+  /** Sum of all loaded goals' assigned weights (the filtered set), for the total display. */
+  readonly totalAssignedWeight = computed(() =>
+    this.rows().reduce((sum, g) => sum + (g.weight ?? 0), 0),
+  );
+
   private pendingCreateScorecardId = '';
 
   readonly form = new FormGroup({
     scorecardId: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
     name: new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.maxLength(200)] }),
     description: new FormControl('', { nonNullable: true, validators: [Validators.maxLength(500)] }),
-    weight: new FormControl(0, { nonNullable: true, validators: [Validators.min(0), Validators.max(100)] }),
+    weight: new FormControl(0, { nonNullable: true, validators: [goalWeightValidator] }),
   });
 
   readonly columnDefs: ColDef[] = [
@@ -135,6 +162,19 @@ export class GoalsPage {
     return this.planFilters.scorecardLabel(goal.scorecardId);
   }
 
+  /**
+   * Sum of the goal weights already assigned within the scorecard the form is
+   * pointing at (excluding the goal being edited). Shown as "X% of 100%" in the
+   * modal so users can plan incrementally - totals below 100% are allowed.
+   */
+  formScorecardWeightTotal(): number {
+    const scorecardId = this.form.controls.scorecardId.value;
+    const editingId = this.editingId();
+    return this.rows()
+      .filter((g) => g.scorecardId === scorecardId && g.id !== editingId)
+      .reduce((sum, g) => sum + (g.weight ?? 0), 0);
+  }
+
   openAddModal(): void {
     this.editingId.set(null);
     this.form.reset({ scorecardId: '', name: '', description: '', weight: 0 });
@@ -158,8 +198,33 @@ export class GoalsPage {
     this.showForm.set(false);
   }
 
+  /**
+   * FR-302 submissions with an out-of-range weight (0 / negative / above 100) are
+   * rejected with an explicit toast instead of being silently blocked by the
+   * disabled submit button.
+   * @returns true when the weight control is invalid.
+   */
+  private rejectInvalidWeight(): boolean {
+    const weight = this.form.controls.weight;
+    const errors = weight.errors;
+    if (!errors) {
+      return false;
+    }
+    if (errors['required']) {
+      this.notifications.error('Goal weight is required and must be greater than 0.');
+    } else if (errors['min']) {
+      this.notifications.error(`Goal weight must be greater than 0. (entered: ${weight.value}%)`);
+    } else if (errors['max']) {
+      this.notifications.error(`Goal weight cannot exceed 100. (entered: ${weight.value}%)`);
+    }
+    return true;
+  }
+
   onSubmit(): void {
-    if (this.form.invalid || this.submitting()) {
+    if (this.submitting() || this.rejectInvalidWeight()) {
+      return;
+    }
+    if (this.form.invalid) {
       return;
     }
 
@@ -207,7 +272,10 @@ export class GoalsPage {
 
   onUpdate(): void {
     const id = this.editingId();
-    if (!id || this.form.invalid || this.submitting()) {
+    if (!id || this.submitting() || this.rejectInvalidWeight()) {
+      return;
+    }
+    if (this.form.invalid) {
       return;
     }
 

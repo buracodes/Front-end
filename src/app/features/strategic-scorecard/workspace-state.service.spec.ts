@@ -4,6 +4,8 @@ import {
   ScorecardWorkspaceState,
   businessDate,
   calendarDateParts,
+  finalMonthGraceDeadlineOn,
+  finalMonthGracePeriodExpired,
   fiscalYearHasEnded,
   isFiscalYearClosed,
   msUntilNextEatMidnight,
@@ -183,20 +185,31 @@ describe('ScorecardWorkspaceState closure timing (EAT business date)', () => {
     expect(state.fiscalYearClosed()).toBe(false);
   });
 
-  it('is read-only once the end date was yesterday in EAT', () => {
-    // 10:00 UTC = 13:00 EAT the day after the end date.
+  it('is still open inside the final-month grace period (day after the end date)', () => {
+    // The 2025/26 year ends 2026-06-30; its grace deadline is 2026-07-07, so on
+    // 2026-07-01 final-month actual entry is still allowed.
     freeze('2026-07-01T10:00:00Z');
     state = start([]);
     select(state, fiscalYear({ status: 'Open', endDate: '2026-06-30' }), scorecard());
 
-    expect(state.fiscalYearClosed()).toBe(true);
-    expect(state.isReadOnly()).toBe(true);
-    expect(state.canEnterActuals()).toBe(false);
+    expect(state.fiscalYearClosed()).toBe(false);
+    expect(state.isReadOnly()).toBe(false);
+    expect(state.canEnterActuals()).toBe(true);
   });
 
-  it('closes at EAT midnight even though the UTC date has not rolled over', () => {
-    // 21:00 UTC = 00:00 EAT the next day, so the end date has already passed in EAT.
-    freeze('2026-06-30T21:00:00Z');
+  it('is read-only once the final-month grace deadline passes in EAT', () => {
+    freeze('2026-07-07T10:00:00Z');
+    state = start([]);
+    select(state, fiscalYear({ status: 'Open', endDate: '2026-06-30' }), scorecard());
+
+    // The deadline day itself (2026-07-07 in EAT) is still inclusive.
+    expect(state.fiscalYearClosed()).toBe(false);
+    expect(state.canEnterActuals()).toBe(true);
+  });
+
+  it('closes at EAT midnight on the day after the grace deadline', () => {
+    // 21:00 UTC = 00:00 EAT on 2026-07-08, the first day after the grace deadline.
+    freeze('2026-07-07T21:00:00Z');
     state = start([]);
     select(state, fiscalYear({ status: 'Open', endDate: '2026-06-30' }), scorecard());
 
@@ -215,7 +228,7 @@ describe('ScorecardWorkspaceState closure timing (EAT business date)', () => {
   });
 
   it('lets an actuals-override user correct values but keeps structure read-only after closure', () => {
-    freeze('2026-07-01T10:00:00Z');
+    freeze('2026-07-08T10:00:00Z');
     state = start(['actuals:override']);
     select(state, fiscalYear({ status: 'Open', endDate: '2026-06-30' }), scorecard());
 
@@ -225,7 +238,7 @@ describe('ScorecardWorkspaceState closure timing (EAT business date)', () => {
   });
 
   it('keeps a normal user from entering actuals after closure', () => {
-    freeze('2026-07-01T10:00:00Z');
+    freeze('2026-07-08T10:00:00Z');
     state = start([]);
     select(state, fiscalYear({ status: 'Open', endDate: '2026-06-30' }), scorecard());
 
@@ -255,13 +268,26 @@ describe('fiscal-year closure date helpers', () => {
     expect(fiscalYearHasEnded(undefined, new Date('2026-06-30T10:00:00Z'))).toBe(false);
   });
 
-  it('combines status and the date rule', () => {
-    const now = new Date('2026-07-01T10:00:00Z');
-    expect(isFiscalYearClosed({ status: 'Open', endDate: '2026-06-30' }, now)).toBe(true);
-    expect(isFiscalYearClosed({ status: 'Open', endDate: '2026-07-01' }, now)).toBe(false);
-    expect(isFiscalYearClosed({ status: 'Closed', endDate: '2099-06-30' }, now)).toBe(true);
-    expect(isFiscalYearClosed({ status: 'Archived', endDate: '2099-06-30' }, now)).toBe(true);
-    expect(isFiscalYearClosed(null, now)).toBe(false);
+  it('computes the final-month grace deadline from the configured end date', () => {
+    // Confirmed business rule: end date + 7 calendar days, inclusive; a year ending
+    // 2027-08-31 accepts final-month entry through 2027-09-07 and blocks it on 2027-09-08.
+    expect(finalMonthGraceDeadlineOn('2027-08-31')).toEqual({ year: 2027, month: 9, day: 7 });
+    expect(finalMonthGracePeriodExpired('2027-08-31', new Date('2027-09-07T10:00:00Z'))).toBe(false);
+    expect(finalMonthGracePeriodExpired('2027-08-31', new Date('2027-09-08T10:00:00Z'))).toBe(true);
+    // Month/year rollover and an unknown end date.
+    expect(finalMonthGraceDeadlineOn('2027-12-31')).toEqual({ year: 2028, month: 1, day: 7 });
+    expect(finalMonthGraceDeadlineOn(null)).toBeNull();
+  });
+
+  it('combines status and the grace-based date rule', () => {
+    const withinGrace = new Date('2026-07-07T10:00:00Z');
+    const afterGrace = new Date('2026-07-08T10:00:00Z');
+    expect(isFiscalYearClosed({ status: 'Open', endDate: '2026-06-30' }, withinGrace)).toBe(false);
+    expect(isFiscalYearClosed({ status: 'Open', endDate: '2026-06-30' }, afterGrace)).toBe(true);
+    expect(isFiscalYearClosed({ status: 'Open', endDate: '2026-07-01' }, afterGrace)).toBe(false);
+    expect(isFiscalYearClosed({ status: 'Closed', endDate: '2099-06-30' }, afterGrace)).toBe(true);
+    expect(isFiscalYearClosed({ status: 'Archived', endDate: '2099-06-30' }, afterGrace)).toBe(true);
+    expect(isFiscalYearClosed(null, afterGrace)).toBe(false);
   });
 
   it('measures the delay to the next EAT midnight', () => {
@@ -300,9 +326,10 @@ describe('ScorecardWorkspaceState EAT rollover reactiveness', () => {
     TestBed.resetTestingModule();
   });
 
-  it('re-evaluates the closure state when the EAT business date rolls at midnight', () => {
+  it('re-evaluates the closure state when the EAT business date rolls past the grace deadline', () => {
     vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
-    vi.setSystemTime(new Date('2026-06-30T20:59:00Z')); // 23:59 EAT on the end date
+    // 23:59 EAT on the grace deadline day (2026-07-07): entry is still open.
+    vi.setSystemTime(new Date('2026-07-07T20:59:00Z'));
     state = start([]);
     select(state, fiscalYear({ status: 'Open', endDate: '2026-06-30' }), scorecard());
 
@@ -316,16 +343,16 @@ describe('ScorecardWorkspaceState EAT rollover reactiveness', () => {
     expect(state.canEnterActuals()).toBe(false);
   });
 
-  it('refreshes the closure state when the tab regains focus after midnight', () => {
+  it('refreshes the closure state when the tab regains focus past the grace deadline', () => {
     vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
-    vi.setSystemTime(new Date('2026-06-30T10:00:00Z'));
+    vi.setSystemTime(new Date('2026-07-07T10:00:00Z'));
     state = start([]);
     select(state, fiscalYear({ status: 'Open', endDate: '2026-06-30' }), scorecard());
 
     expect(state.fiscalYearClosed()).toBe(false);
 
-    // The tab was backgrounded while the clock crossed EAT midnight, then refocused.
-    vi.setSystemTime(new Date('2026-07-01T10:00:00Z'));
+    // The tab was backgrounded while the clock crossed the grace deadline, then refocused.
+    vi.setSystemTime(new Date('2026-07-08T10:00:00Z'));
     window.dispatchEvent(new Event('focus'));
 
     expect(state.fiscalYearClosed()).toBe(true);

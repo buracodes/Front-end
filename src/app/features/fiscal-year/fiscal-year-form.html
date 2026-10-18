@@ -1,0 +1,41 @@
+<div class="modal-backdrop" (click)="cancelled.emit()">
+  <div class="modal-dialog" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>{{ mode() === 'edit' ? 'Edit Fiscal Year' : 'New Fiscal Year' }}</h3>
+      <button type="button" class="close-btn" (click)="cancelled.emit()" aria-label="Close"><svg lucideIcon="x" size="18"></svg></button>
+    </div>
+    <div class="modal-body">
+      <form [formGroup]="form()" (ngSubmit)="submitted.emit()" novalidate>
+        <div class="form-group">
+          <label class="form-label" for="fy-label">Label</label>
+          <input id="fy-label" class="form-control" type="text" formControlName="label" placeholder="e.g. FY2026" />
+          @if (form().controls.label.invalid && form().controls.label.touched) {
+            <p class="form-error">Label is required.</p>
+          }
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="fy-start">Start Month</label>
+            <input id="fy-start" class="form-control" type="month" formControlName="startMonth" />
+            @if (locked()) {
+              <p class="form-hint">Dates are read-only because this fiscal year already has scorecards.</p>
+            } @if (form().controls.startMonth.invalid && form().controls.startMonth.touched) {
+              <p class="form-error">Start month is required.</p>
+            }
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="fy-end">End Date (calculated)</label>
+            <input id="fy-end" class="form-control" type="date" [value]="endDate()" readonly aria-readonly="true" />
+            <p class="form-hint">A fiscal year spans twelve consecutive months; the end date is set automatically.</p>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" (click)="cancelled.emit()">Cancel</button>
+          <button type="submit" class="btn btn-primary" [disabled]="form().invalid || submitting() || (mode() === 'create' && !endDate())">
+            {{ submitting() ? 'Saving…' : (mode() === 'edit' ? 'Update' : 'Save') }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

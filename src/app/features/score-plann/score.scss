@@ -368,9 +368,10 @@
 
 .rag-spread { font-size: var(--font-size-xl); }
 .rag-spread-num { font-weight: 700; }
-.rag-spread-green { color: var(--color-rag-green); }
-.rag-spread-amber { color: var(--color-rag-yellow); }
-.rag-spread-red { color: var(--color-rag-red); }
+  .rag-spread-green { color: var(--color-rag-green); }
+  .rag-spread-amber { color: var(--color-rag-yellow); }
+  .rag-spread-red { color: var(--color-rag-red); }
+  .rag-spread-gray { color: var(--color-rag-gray); }
 
 /* ── Weight warning ──────────────────────────────────────────────────── */
 .hierarchy-warning {
@@ -386,6 +387,14 @@
   font-weight: 500;
 
   svg { flex-shrink: 0; width: 20px; height: 20px; }
+}
+
+/* Neutral variant for the below-100 informational note (totals < 100% are allowed). */
+.hierarchy-info-lite {
+  background-color: transparent;
+  color: var(--color-text-muted);
+  border-color: var(--color-border);
+  font-weight: 400;
 }
 
 /* ── Loading / empty ─────────────────────────────────────────────────── */

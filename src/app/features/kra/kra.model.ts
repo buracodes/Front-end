@@ -9,6 +9,9 @@ export interface Kra {
   weight: number;
   isActive: boolean;
   kpiCount: number;
+  icon?: string;
+  strategicThemeId?: string;
+  unitMeasure?: string;
   createdDate?: string;
 }
 
@@ -18,6 +21,9 @@ export interface CreateKraRequest {
   name: string;
   description?: string;
   weight: number;
+  icon?: string;
+  strategicThemeId?: string;
+  unitMeasure?: string;
 }
 
 export interface UpdateKraRequest {
@@ -25,4 +31,7 @@ export interface UpdateKraRequest {
   description?: string;
   weight?: number;
   isActive?: boolean;
+  icon?: string;
+  strategicThemeId?: string;
+  unitMeasure?: string;
 }

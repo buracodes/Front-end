@@ -20,21 +20,22 @@ export type MilestoneStatus = 'NotStarted' | 'InProgress' | 'Completed';
  */
 export type InitiativeRagLabel = 'Green' | 'Amber' | 'Red' | 'NoData';
 
-/** "Amber" is the FRD's yellow band; the design tokens are named --color-rag-yellow. */
+/** "Amber" is the wire token for the FRD's Yellow band; the design tokens are named --color-rag-yellow. */
 export function ragSlug(rag: InitiativeRagLabel): string {
   return rag === 'NoData' ? 'gray' : rag.toLowerCase();
 }
 
+/** User-facing band names (FRD): Amber displays as Yellow, no milestones as Gray. */
 export function ragLabel(rag: InitiativeRagLabel): string {
   switch (rag) {
     case 'Green':
-      return 'On track';
+      return 'Green';
     case 'Amber':
-      return 'At risk';
+      return 'Yellow';
     case 'Red':
-      return 'Off track';
+      return 'Red';
     default:
-      return 'No data';
+      return 'Gray';
   }
 }
 

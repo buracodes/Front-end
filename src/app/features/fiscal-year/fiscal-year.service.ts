@@ -26,8 +26,10 @@ export class FiscalYearService {
   }
 
   delete(id: string): Observable<void> {
+    // The backend answers 204 No Content: HttpClient emits a null body, which means the
+    // delete succeeded. Only an actual success=false envelope is an error.
     return this.api.delete<IResponse<void>>(`${ApiEndpoint.FiscalYear}/${id}`).pipe(
-      map((r) => { if (!r.success) throw new Error(r.message ?? 'Failed'); })
+      map((r) => { if (r && !r.success) throw new Error(r.message ?? 'Failed'); })
     );
   }
 }

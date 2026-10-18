@@ -132,6 +132,11 @@ export const routes: Routes = [
         loadComponent: () => import('./features/admin-roles/admin-roles').then((m) => m.AdminRolesPage),
       },
       {
+        path: 'admin/rag-thresholds',
+        loadComponent: () =>
+          import('./features/admin-thresholds/admin-thresholds').then((m) => m.AdminThresholdsPage),
+      },
+      {
         path: 'admin/fiscal-years',
         loadComponent: () => import('./features/fiscal-year/fiscal-year').then((m) => m.FiscalYearPage),
       },

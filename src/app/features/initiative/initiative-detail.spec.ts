@@ -255,12 +255,12 @@ describe('InitiativeDetailPage', () => {
     const green = start(['initiatives:view'], initiative({ progressPercentage: 96, progressRagStatus: 'Green' }));
     expect(green.progressRag()).toBe('Green');
     expect(green.progressRagClass()).toBe('rag-green');
-    expect(green.progressRagLabel()).toBe('On track');
+    expect(green.progressRagLabel()).toBe('Green');
 
     TestBed.resetTestingModule();
     const amber = start(['initiatives:view'], initiative({ progressPercentage: 80, progressRagStatus: 'Amber' }));
     expect(amber.progressRagClass()).toBe('rag-amber');
-    expect(amber.progressRagLabel()).toBe('At risk');
+    expect(amber.progressRagLabel()).toBe('Yellow');
 
     TestBed.resetTestingModule();
     // "Amber" is the FRD's yellow band; the paint class follows the token name.
@@ -270,7 +270,7 @@ describe('InitiativeDetailPage', () => {
     // An initiative with no milestones has no progress to band, so it stays neutral.
     const noData = start(['initiatives:view'], initiative({ progressPercentage: 0, progressRagStatus: 'NoData' }));
     expect(noData.progressRagClass()).toBe('rag-gray');
-    expect(noData.progressRagLabel()).toBe('No data');
+    expect(noData.progressRagLabel()).toBe('Gray');
   });
 
   it('drives the completion slider and reports the dragged value live', () => {

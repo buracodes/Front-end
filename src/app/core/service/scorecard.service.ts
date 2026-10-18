@@ -11,7 +11,6 @@ import {
 } from '../model/scorecard.model';
 import { IResponse } from '../model/interface/response.interface';
 import { ApiService } from './apiService/api-service';
-import { CreateFiscalYearRequest } from '../../features/fiscal-year/fiscal-year.model';
 
 @Injectable({ providedIn: 'root' })
 export class ScorecardService {
@@ -82,7 +81,4 @@ export class ScorecardService {
       )
       .pipe(map((r) => r.data!));
   }
-  createFiscalYear(model: CreateFiscalYearRequest): Observable<FiscalYear> {
-  return this.api.post<IResponse<FiscalYear>>(ApiEndpoint.FiscalYear, model).pipe(map((r) => r.data!));
-}
 }

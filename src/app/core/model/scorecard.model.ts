@@ -77,9 +77,3 @@ export interface CloneScorecardResult {
   kpiCount: number;
   targetCount: number;
 }
-
-export interface CreateFiscalYearRequest {
-  label: string;
-  startDate: string;
-  endDate: string;
-}

@@ -169,7 +169,8 @@
     color: var(--color-success);
   }
 
-  &--amber {
+  &--amber,
+  &--yellow {
     background: var(--color-warning-light);
     color: #92400e;
   }
@@ -179,7 +180,8 @@
     color: var(--color-danger);
   }
 
-  &--none {
+  &--none,
+  &--gray {
     background: var(--color-rag-gray-light);
     color: var(--color-rag-gray);
   }

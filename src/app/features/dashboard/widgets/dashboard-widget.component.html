@@ -62,10 +62,10 @@
       <div class="rag">
         <app-dashboard-chart kind="donut" [buckets]="ragBuckets()" [height]="190" />
         <ul class="rag-legend">
-          @for (bucket of ragBuckets(); track bucket.label) {
+          @for (bucket of ragBuckets(); track bucket.token) {
             <li>
-              <span class="dot" [style.background]="ragColor[bucket.label]"></span>
-              <span class="rag-name">{{ ragLabels[bucket.label] }}</span>
+              <span class="dot" [style.background]="ragColor[bucket.token]"></span>
+              <span class="rag-name">{{ bucket.label }}</span>
               <strong>{{ bucket.count }}</strong>
               <span class="rag-pct">{{ bucket.percentage }}%</span>
             </li>

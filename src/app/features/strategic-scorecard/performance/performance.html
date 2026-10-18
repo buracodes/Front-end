@@ -25,7 +25,7 @@
     <div class="card pf-card">
       <span class="pf-label">Attention Needed</span>
       <span class="pf-value pf-value--warn">{{ redFlags() + amberFlags() }}</span>
-      <span class="pf-sub">{{ redFlags() }} red / {{ amberFlags() }} amber</span>
+              <span class="pf-sub">{{ redFlags() }} red / {{ amberFlags() }} yellow</span>
     </div>
   </div>
 
@@ -130,8 +130,8 @@
             <tr>
               <td class="pf-rank">{{ i + 1 }}</td>
               <td class="pf-rag">
-                <span class="rag-inline" [class]="'rag-' + row.rag.toLowerCase()">
-                  <span class="rag-dot"></span>{{ row.rag }}
+                <span class="rag-inline" [class]="ragClass(row.rag)">
+                  <span class="rag-dot"></span>{{ ragLabel(row.rag) }}
                 </span>
               </td>
               <td class="pf-kpi-name">{{ row.kpi.name }}

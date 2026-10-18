@@ -88,7 +88,8 @@
       <p class="stat-value rag-spread">
         <span class="rag-spread-num rag-spread-green">{{ ragSpread().green }}</span> /
         <span class="rag-spread-num rag-spread-amber">{{ ragSpread().amber }}</span> /
-        <span class="rag-spread-num rag-spread-red">{{ ragSpread().red }}</span>
+        <span class="rag-spread-num rag-spread-red">{{ ragSpread().red }}</span> /
+        <span class="rag-spread-num rag-spread-gray">{{ ragSpread().gray }}</span>
       </p>
     </div>
   </div>
@@ -188,10 +189,15 @@
   </div>
   }
 
-  @if (!this.goalWeightValid()) {
+  @if (this.goalWeightTotal() > 100.01) {
   <div class="hierarchy-warning">
     <svg lucideIcon="chart-pie" size="16"></svg>
-    <span>Goal weights sum to {{ goalWeightTotal() | number:'1.0-1' }}% (should be 100%)</span>
+    <span>Goal weights sum to {{ goalWeightTotal() | number:'1.0-1' }}% — reduce them to stay within 100%.</span>
+  </div>
+  } @else if (this.goalWeightTotal() > 0.01 && this.goalWeightTotal() < 99.99) {
+  <div class="hierarchy-warning hierarchy-info-lite">
+    <svg lucideIcon="chart-pie" size="16"></svg>
+    <span>Goal weights total {{ goalWeightTotal() | number:'1.0-1' }}% of 100% — totals below 100% are allowed and are normalized proportionally during score calculation.</span>
   </div>
   }
 

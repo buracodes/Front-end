@@ -266,48 +266,14 @@
 </div>
 }
 
-<!-- Create Fiscal Year Modal -->
+<!-- Create Fiscal Year Modal: same reusable component as the Fiscal Year page -->
 @if (showFiscalYearModal()) {
-<div class="modal-backdrop" (click)="closeFiscalYearModal()">
-  <div class="modal-dialog" (click)="$event.stopPropagation()">
-    <div class="modal-header">
-      <h3>New Fiscal Year</h3>
-      <button type="button" class="close-btn" (click)="closeFiscalYearModal()" aria-label="Close"><svg lucideIcon="x"
-          size="18"></svg></button>
-    </div>
-    <div class="modal-body">
-      <form [formGroup]="fiscalYearForm" (ngSubmit)="onSubmitFiscalYear()" novalidate>
-        <div class="form-group">
-          <label class="form-label" for="fy-label">Label</label>
-          <input id="fy-label" class="form-control" type="text" formControlName="label" placeholder="e.g. FY2027" />
-          @if (fiscalYearForm.controls.label.invalid && fiscalYearForm.controls.label.touched) {
-          <p class="form-error">Label is required.</p>
-          }
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label" for="fy-start">Start Date</label>
-            <input id="fy-start" class="form-control" type="date" formControlName="startDate" />
-            @if (fiscalYearForm.controls.startDate.invalid && fiscalYearForm.controls.startDate.touched) {
-            <p class="form-error">Start date is required.</p>
-            }
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="fy-end">End Date</label>
-            <input id="fy-end" class="form-control" type="date" formControlName="endDate" />
-            @if (fiscalYearForm.controls.endDate.invalid && fiscalYearForm.controls.endDate.touched) {
-            <p class="form-error">End date is required.</p>
-            }
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" (click)="closeFiscalYearModal()">Cancel</button>
-          <button type="submit" class="btn btn-primary" [disabled]="fiscalYearForm.invalid || fiscalYearSubmitting()">
-            {{ fiscalYearSubmitting() ? 'Saving...' : 'Create Fiscal Year' }}
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
+<app-fiscal-year-form
+  [form]="fiscalYearForm"
+  mode="create"
+  [submitting]="fiscalYearSubmitting()"
+  [endDate]="fiscalYearEndDate()"
+  (submitted)="onSubmitFiscalYear()"
+  (cancelled)="closeFiscalYearModal()"
+/>
 }

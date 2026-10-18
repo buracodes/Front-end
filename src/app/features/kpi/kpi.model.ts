@@ -50,6 +50,11 @@ export interface UpdateKpiRequest {
   weight?: number;
   optimizationType?: 'Maximize' | 'Minimize' | 'ExactHit' | 'Binary';
   kpiType?: 'Leading' | 'Lagging';
+  dataSource?: 'Manual' | 'Automated' | 'Calculated';
+  isCumulative?: boolean;
+  baseline?: number;
+  minValue?: number;
+  maxValue?: number;
   isActive?: boolean;
   divisionOwnerId?: string;
 }

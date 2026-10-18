@@ -25,6 +25,7 @@ export const ApiEndpoint = {
   User: 'user',
   Role: 'role',
   ScoreSnapshot: 'scoresnapshot',
+  RagThresholds: 'ragthreshold',
   KpiActual: 'kpiactual',
   KpiTarget: 'kpitarget',
   PeriodLock: 'periodlock',

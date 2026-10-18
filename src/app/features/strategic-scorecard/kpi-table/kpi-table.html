@@ -41,8 +41,8 @@
               {{ row.score !== null ? (row.score | number: '1.0-1') : '—' }}
             </td>
             <td class="col-rag">
-              <span class="rag-badge" [class]="'rag-' + (row.rag | lowercase)">
-                <span class="rag-dot"></span>{{ ragLabel(row.rag) }}
+              <span class="rag-badge" [class]="'rag-' + row.ragSlug">
+                <span class="rag-dot"></span>{{ row.ragLabel }}
               </span>
             </td>
             <td class="col-trend">

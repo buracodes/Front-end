@@ -1,0 +1,95 @@
+<div class="thresholds-page">
+  <header class="page-header">
+    <div>
+      <h1>RAG Status Thresholds</h1>
+      <p class="page-subtitle">
+        The Green and Yellow bands used by every dashboard, report and plan. Applies to all
+        scorecards.
+      </p>
+    </div>
+    @if (config(); as config) {
+      <span class="source-pill" [class.source-pill--stored]="config.source === 'Database'">
+        {{ sourceLabel() }}
+      </span>
+    }
+  </header>
+
+  @if (loading()) {
+    <p class="empty-note">Loading thresholds…</p>
+  } @else {
+    <div class="content-grid">
+      <section class="card form-card">
+        <h2>Bands</h2>
+        <form [formGroup]="form" (ngSubmit)="save()">
+          <div class="field">
+            <label for="green">Green band starts at (%)</label>
+            <input
+              id="green"
+              type="number"
+              formControlName="green"
+              min="0"
+              max="100"
+              [readonly]="!canEdit()"
+            />
+            <span class="field-hint">Scores at or above this percentage score &ldquo;Green&rdquo;.</span>
+          </div>
+
+          <div class="field">
+            <label for="yellow">Yellow band starts at (%)</label>
+            <input
+              id="yellow"
+              type="number"
+              formControlName="yellow"
+              min="0"
+              max="100"
+              [readonly]="!canEdit()"
+            />
+            <span class="field-hint">
+              Scores from this point up to the Green band score &ldquo;Yellow&rdquo;; anything below is
+              &ldquo;Red&rdquo;. Scores without a result show as &ldquo;Gray&rdquo;.
+            </span>
+          </div>
+
+          @if (invalidPair()) {
+            <p class="pair-error">The Yellow band must start strictly below the Green band.</p>
+          }
+
+          @if (canEdit()) {
+            <button type="submit" class="save-btn" [disabled]="submitting()">
+              {{ submitting() ? 'Saving…' : 'Save thresholds' }}
+            </button>
+          } @else {
+            <p class="empty-note">Update requires the &ldquo;Manage RAG status thresholds&rdquo; permission.</p>
+          }
+        </form>
+      </section>
+
+      <section class="card preview-card">
+        <h2>Band preview</h2>
+        <p class="preview-hint">How the entered thresholds band sample scores.</p>
+        <ul class="preview-list">
+          @for (row of preview(); track row.band + '-' + row.score) {
+            <li class="preview-row">
+              <span class="preview-score">{{ row.score === null ? 'No score' : row.score + '%' }}</span>
+              <span
+                [class]="'rag-pill ' + bandTone(row.band)"
+              >                {{ bandLabel(row.band) }}
+              </span>
+            </li>
+          }
+        </ul>
+      </section>
+    </div>
+
+    @if (config()?.warnings?.length) {
+      <section class="card warnings-card">
+        <h2>Configuration warnings</h2>
+        <ul>
+          @for (warning of config()!.warnings; track warning) {
+            <li>{{ warning }}</li>
+          }
+        </ul>
+      </section>
+    }
+  }
+</div>

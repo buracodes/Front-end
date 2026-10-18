@@ -62,10 +62,10 @@ export class DashboardWidgetComponent {
       rag.total > 0 ? Math.round((count / rag.total) * 100) : 0;
 
     return [
-      { label: 'Green', count: rag.green, percentage: share(rag.green) },
-      { label: 'Amber', count: rag.amber, percentage: share(rag.amber) },
-      { label: 'Red', count: rag.red, percentage: share(rag.red) },
-      { label: 'NoData', count: rag.noData, percentage: share(rag.noData) },
+      { token: 'Green' as const, label: this.ragLabels.Green, count: rag.green, percentage: share(rag.green) },
+      { token: 'Amber' as const, label: this.ragLabels.Amber, count: rag.amber, percentage: share(rag.amber) },
+      { token: 'Red' as const, label: this.ragLabels.Red, count: rag.red, percentage: share(rag.red) },
+      { token: 'NoData' as const, label: this.ragLabels.NoData, count: rag.noData, percentage: share(rag.noData) },
     ];
   });
 

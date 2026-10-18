@@ -100,7 +100,10 @@ export interface GaugeWidget {
 }
 
 export interface RagBucket {
-  label: DashboardRagLabel;
+  /** Wire band token used for colors and lookups. */
+  token: DashboardRagLabel;
+  /** User-facing band name (Green, Yellow, Red, Gray). */
+  label: string;
   count: number;
   percentage: number;
 }

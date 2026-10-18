@@ -1,6 +1,8 @@
 import { Component, computed, inject } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 import { ScorecardWorkspaceState, fiscalMonthLabel, ragFromScore, scoreColor } from '../workspace-state.service';
+import { RagThresholdStore } from '../../../core/service/rag-threshold-store.service';
+import { ragDisplayLabel, ragSlug } from '../../../core/model/rag-band';
 
 import { LucideDynamicIcon } from '@lucide/angular';
 
@@ -12,6 +14,7 @@ import { LucideDynamicIcon } from '@lucide/angular';
 })
 export class PerformancePage {
   readonly state = inject(ScorecardWorkspaceState);
+  private readonly thresholds = inject(RagThresholdStore);
 
   readonly overall = this.state.overallScore;
   readonly delta = this.state.overallDelta;
@@ -44,36 +47,52 @@ export class PerformancePage {
   });
 
   readonly kpisRanked = computed(() => {
+    const bands = this.thresholds.bands();
     return this.kpis()
       .map((kpi) => {
         const snap = this.kpiSnapshots().get(kpi.id);
-        return { kpi, score: snap?.score ?? null, rag: ragFromScore(snap?.score ?? null), trend: this.kpiTrends().get(kpi.id) ?? 'stable' };
+        return { kpi, score: snap?.score ?? null, rag: ragFromScore(snap?.score ?? null, bands), trend: this.kpiTrends().get(kpi.id) ?? 'stable' };
       })
       .sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
   });
 
   readonly goalsBreakdown = computed(() => {
+    const bands = this.thresholds.bands();
     return this.goals()
       .map((goal) => {
         const snap = this.goalScores().get(goal.id);
-        return { goal, score: snap?.score ?? null, rag: ragFromScore(snap?.score ?? null) };
+        return { goal, score: snap?.score ?? null, rag: ragFromScore(snap?.score ?? null, bands) };
       })
       .sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
   });
 
   readonly redFlags = computed(() => this.kpisRanked().filter((k) => k.rag === 'Red').length);
   readonly amberFlags = computed(() => this.kpisRanked().filter((k) => k.rag === 'Amber').length);
-  readonly targetsHit = computed(() => this.kpisRanked().filter((k) => (k.score ?? -1) >= 70).length);
+  readonly targetsHit = computed(() =>
+    this.kpisRanked().filter((k) => (k.score ?? -1) >= this.thresholds.yellow()).length,
+  );
 
   readonly bestKpi = computed(() => this.kpisRanked()[0] ?? null);
   readonly worstKpi = computed(() => this.kpisRanked()[this.kpisRanked().length - 1] ?? null);
 
   overallRag(): string {
-    return ragFromScore(this.overall());
+    return ragFromScore(this.overall(), this.thresholds.bands());
+  }
+
+  overallRagLabel(): string {
+    return ragDisplayLabel(this.overallRag());
+  }
+
+  ragLabel(rag: string): string {
+    return ragDisplayLabel(rag);
+  }
+
+  ragClass(rag: string): string {
+    return 'rag-' + ragSlug(rag);
   }
 
   tone(score: number | null | undefined): string {
-    return scoreColor(score);
+    return scoreColor(score, this.thresholds.bands());
   }
 
   trendArrow(trend: 'up' | 'down' | 'stable'): string {
@@ -110,14 +129,14 @@ export class PerformancePage {
   }
 
   barColor(score: number | null): string {
-    return scoreColor(score);
+    return scoreColor(score, this.thresholds.bands());
   }
 
   insight(): string {
     const o = this.overall();
     const d = this.delta();
     if (o === null) return 'Not enough data to draw performance insights yet. Enter actuals and recalculate scores.';
-    const base = `Overall performance is <strong>${o.toFixed(1)}</strong> (${this.overallRag()}).`;
+    const base = `Overall performance is <strong>${o.toFixed(1)}</strong> (${this.overallRagLabel()}).`;
     if (d !== null && d !== 0) {
       return `${base} ${d > 0 ? 'Improving' : 'Declining'} by <strong>${Math.abs(d).toFixed(1)}</strong> point${Math.abs(d) === 1 ? '' : 's'} vs the previous period.`;
     }

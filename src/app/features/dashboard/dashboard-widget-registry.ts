@@ -136,10 +136,10 @@ export function isEmptyPayload(resolved: DashboardWidgetPayload | null): boolean
 }
 
 export const RAG_LABELS: Record<DashboardRagLabel, string> = {
-  Green: 'On track',
-  Amber: 'At risk',
-  Red: 'Off track',
-  NoData: 'No data',
+  Green: 'Green',
+  Amber: 'Yellow',
+  Red: 'Red',
+  NoData: 'Gray',
 };
 
 export function ragToneClass(rag: unknown): string {
@@ -147,9 +147,11 @@ export function ragToneClass(rag: unknown): string {
     case 'Green':
       return 'rag-pill--green';
     case 'Amber':
-      return 'rag-pill--amber';
+      return 'rag-pill--yellow';
     case 'Red':
       return 'rag-pill--red';
+    case 'NoData':
+      return 'rag-pill--gray';
     default:
       return 'rag-pill--none';
   }

@@ -8,6 +8,16 @@
 
   <app-plan-filter-bar [levels]="['fiscalYear', 'scorecard']" />
 
+  <div class="card mb-4">
+    <div class="card-body d-flex align-center gap-2">
+      <strong>Total assigned goal weight:</strong>
+      <span>{{ totalAssignedWeight() }}% of 100%</span>
+      <span class="text-muted">
+        Totals below 100% are allowed; goal weights are normalized proportionally during score calculation.
+      </span>
+    </div>
+  </div>
+
   @if (showForm()) {
     <div class="modal-backdrop" (click)="onCancelEdit()">
       <div class="modal-dialog" (click)="$event.stopPropagation()">
@@ -80,15 +90,31 @@
                   class="form-control"
                   type="number"
                   formControlName="weight"
-                  min="0"
+                  min="0.01"
                   max="100"
+                  step="0.01"
                 />
+                @if (form.controls.weight.invalid && form.controls.weight.touched) {
+                  <p class="form-error">
+                    @if (form.controls.weight.hasError('required')) {
+                      Weight is required.
+                    } @else if (form.controls.weight.hasError('min')) {
+                      Weight must be greater than 0.
+                    } @else if (form.controls.weight.hasError('max')) {
+                      Weight must be 100 or less.
+                    }
+                  </p>
+                }
+                <p class="form-hint">
+                  Scorecard goals total {{ formScorecardWeightTotal() }}% of 100% (this goal excluded while editing).
+                  Totals below 100% are allowed and are normalized during score calculation.
+                </p>
               </div>
             </div>
 
             <div class="modal-footer">
               <button type="button" class="btn btn-secondary" (click)="onCancelEdit()">Cancel</button>
-              <button type="submit" class="btn btn-primary" [disabled]="form.invalid || submitting()">
+              <button type="submit" class="btn btn-primary" [disabled]="submitting() || (form.invalid && !form.controls.weight.invalid)">
                 {{ submitting() ? 'Saving…' : (editingId() ? 'Update Goal' : 'Save Goal') }}
               </button>
             </div>

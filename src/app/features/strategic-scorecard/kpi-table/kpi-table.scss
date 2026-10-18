@@ -126,6 +126,10 @@
     background-color: var(--color-danger-light);
     color: var(--color-danger);
   }
+  &.rag-gray {
+    background-color: var(--color-rag-gray-light);
+    color: var(--color-rag-gray);
+  }
 }
 
 .col-score {

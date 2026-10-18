@@ -11,8 +11,8 @@
 
     <div class="drawer-body">
       <div class="kpi-hero">
-        <span class="rag-badge" [class]="'rag-' + (rag() | lowercase)">
-          <span class="rag-dot"></span>{{ rag() }}
+        <span class="rag-badge" [class]="'rag-' + ragSlug()">
+          <span class="rag-dot"></span>{{ ragLabel() }}
         </span>
         <span class="trend" [class.up]="trend() === 'up'" [class.down]="trend() === 'down'">
           {{ trendArrow(trend()) }}

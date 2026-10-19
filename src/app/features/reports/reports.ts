@@ -1,6 +1,5 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { KeyValuePipe } from '@angular/common';
 import { toApiError } from '../../core/model/api-error';
 import { ScorecardService } from '../../core/service/scorecard.service';
 import { DivisionService } from '../division/division.service';
@@ -18,11 +17,6 @@ import {
   downloadBlob,
 } from './report.service';
 
-interface LevelOption {
-  value: ReportLevel;
-  label: string;
-}
-
 interface GranularityOption {
   value: ReportGranularity;
   label: string;
@@ -30,9 +24,21 @@ interface GranularityOption {
 
 type PeriodMode = 'month' | 'quarter';
 
+type CardIcon = 'document' | 'target' | 'bars' | 'list' | 'briefcase' | 'building';
+
+/** A template card. Each card maps onto an existing backend template (and breakdown level where relevant). */
+interface ReportCard {
+  key: string;
+  templateId: string;
+  level?: ReportLevel;
+  title: string;
+  subtitle: string;
+  icon: CardIcon;
+}
+
 @Component({
   selector: 'app-reports',
-  imports: [FormsModule, KeyValuePipe],
+  imports: [FormsModule],
   templateUrl: './reports.html',
   styleUrl: './reports.scss',
 })
@@ -52,7 +58,7 @@ export class ReportsPage implements OnInit {
   readonly scorecardId = signal<string | null>(null);
   readonly divisionId = signal<string | null>(null);
   readonly level = signal<ReportLevel>('kpi');
-  readonly granularity = signal<PeriodMode>('month');
+  readonly granularity = signal<PeriodMode>('quarter');
   readonly fromMonth = signal<number | null>(null);
   readonly toMonth = signal<number | null>(null);
   readonly quarter = signal<number | null>(null);
@@ -65,12 +71,26 @@ export class ReportsPage implements OnInit {
   readonly monthOptions: number[] = Array.from({ length: 12 }, (_, i) => i + 1);
   readonly quarterOptions: number[] = [1, 2, 3, 4];
 
-  readonly levelOptions: LevelOption[] = [
-    { value: 'scorecard', label: 'Scorecard' },
-    { value: 'goal', label: 'Goal' },
-    { value: 'kra', label: 'KRA' },
-    { value: 'kpi', label: 'KPI' },
+  readonly cardDefs: ReportCard[] = [
+    { key: 'scorecard-summary', templateId: 'scorecard-performance', level: 'scorecard', title: 'Scorecard summary', subtitle: 'Overall performance by goal and KRA', icon: 'document' },
+    { key: 'goal-performance', templateId: 'scorecard-performance', level: 'goal', title: 'Goal performance report', subtitle: 'Scores per goal with trend', icon: 'target' },
+    { key: 'kpi-detail', templateId: 'kpi-detail', title: 'KPI performance detail', subtitle: 'Actuals vs targets for selected KPIs', icon: 'bars' },
+    { key: 'kra-progress', templateId: 'scorecard-performance', level: 'kra', title: 'KRA progress', subtitle: 'Weighted progress of KRAs and linked KPIs', icon: 'list' },
+    { key: 'initiative-list', templateId: 'initiative-status', title: 'Initiative list summary', subtitle: 'Status, priority, owner, budget', icon: 'briefcase' },
+    { key: 'division-performance', templateId: 'division-performance', title: 'Division performance', subtitle: 'Division goal and KPI rollup', icon: 'building' },
   ];
+
+  readonly selectedCardKey = signal<string>('scorecard-summary');
+
+  /** Only templates the backend actually offers are shown as cards. */
+  readonly cards = computed(() => {
+    const available = new Set(this.templates().map((t) => t.id));
+    return this.cardDefs.filter((c) => available.has(c.templateId));
+  });
+
+  readonly selectedCard = computed(
+    () => this.cardDefs.find((c) => c.key === this.selectedCardKey()) ?? this.cardDefs[0]
+  );
 
   readonly granularityOptions: GranularityOption[] = [
     { value: 'month', label: 'Month' },
@@ -81,7 +101,6 @@ export class ReportsPage implements OnInit {
 
   readonly showScorecard = computed(() => this.selectedTemplate()?.requiresScorecard ?? true);
   readonly showDivision = computed(() => this.templateId() === 'division-performance');
-  readonly showLevel = computed(() => this.templateId() === 'scorecard-performance');
   readonly showGranularity = computed(() => this.templateId() !== 'initiative-status');
 
   readonly showMonthRange = computed(() => this.granularity() === 'month');
@@ -99,8 +118,22 @@ export class ReportsPage implements OnInit {
     this.loadMeta();
   }
 
-  onTemplateChange(): void {
+  selectCard(card: ReportCard): void {
+    this.selectedCardKey.set(card.key);
+    this.templateId.set(card.templateId);
+    if (card.level) this.level.set(card.level);
     this.envelope.set(null);
+    this.loadError.set(null);
+  }
+
+  resetFilters(): void {
+    this.granularity.set('quarter');
+    this.fromMonth.set(null);
+    this.toMonth.set(null);
+    this.quarter.set(null);
+    this.divisionId.set(null);
+    this.envelope.set(null);
+    this.loadError.set(null);
   }
 
   onFiscalYearChange(): void {
@@ -172,7 +205,46 @@ export class ReportsPage implements OnInit {
 
   formatGeneratedAt(value: string): string {
     const date = new Date(value);
-    return date.toLocaleString();
+    const day = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const time = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+    return `${day} ${time}`;
+  }
+
+  /** "Q1 2026/2027" style label for the period select. */
+  quarterLabel(q: number): string {
+    const fy = this.fiscalYearLabel();
+    return fy ? `Q${q} ${fy}` : `Q${q}`;
+  }
+
+  /** Filters actually applied to the generated report, as returned by the API. */
+  filtersText(report: ReportEnvelope): string {
+    const values = Object.values(report.filters ?? {}).filter((v): v is string => !!v);
+    return values.length ? values.join(', ') : 'none';
+  }
+
+  headerLabel(column: string): string {
+    if (column === 'RAG') return 'Status';
+    if (column === 'Weight %') return 'Weight';
+    return column;
+  }
+
+  /** Weight and score values arrive as bare numbers; show them as percentages. */
+  cellText(column: string, value: string | null): string {
+    if (value == null || value === '') return '—';
+    if (column === 'RAG') return this.ragLabel(value);
+    if ((column === 'Weight %' || column === 'Score') && /^-?\d+(\.\d+)?$/.test(value)) return `${value}%`;
+    return value;
+  }
+
+  ragLabel(value: string | null): string {
+    if (value === 'Green') return 'On track';
+    if (value === 'Amber') return 'Warning';
+    if (value === 'Red') return 'Critical';
+    return value ?? '—';
+  }
+
+  lowerFirst(text: string): string {
+    return text ? text.charAt(0).toLowerCase() + text.slice(1) : text;
   }
 
   summaryKeys(report: ReportEnvelope): string[] {
@@ -183,8 +255,10 @@ export class ReportsPage implements OnInit {
     this.reportService.getTemplates().subscribe({
       next: (data) => {
         this.templates.set(data);
-        if (data.length > 0 && !this.templateId()) {
-          this.templateId.set(data[0].id);
+        if (!this.templateId()) {
+          const card = this.cards().find((c) => c.key === this.selectedCardKey()) ?? this.cards()[0];
+          if (card) this.selectCard(card);
+          else if (data.length > 0) this.templateId.set(data[0].id);
         }
       },
       error: (err) => this.loadError.set(toApiError(err).message),
@@ -233,7 +307,7 @@ export class ReportsPage implements OnInit {
       scorecardId: this.scorecardId() ?? undefined,
       fiscalYearId: this.fiscalYearId() ?? undefined,
       divisionId: this.templateId() === 'division-performance' && this.divisionId() ? this.divisionId()! : undefined,
-      level: this.showLevel() ? this.level() : undefined,
+      level: this.templateId() === 'scorecard-performance' ? this.level() : undefined,
       granularity: this.granularity(),
       fromMonth: this.granularity() === 'month' ? (this.fromMonth() ?? undefined) : undefined,
       toMonth: this.granularity() === 'month' ? (this.toMonth() ?? undefined) : undefined,

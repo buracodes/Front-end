@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/guard/auth.guard';
 import { guestGuard } from './core/guard/guest.guard';
+import { permissionGuard } from './core/guard/permission.guard';
 import { InitiativeDetailPage } from './features/initiative/initiative-detail';
 
 export const routes: Routes = [
@@ -122,6 +123,14 @@ export const routes: Routes = [
       {
         path: 'reports',
         loadComponent: () => import('./features/reports/reports').then((m) => m.ReportsPage),
+      },
+      {
+        path: 'admin/access-control',
+        canActivate: [permissionGuard('admin:access.view')],
+        loadComponent: () =>
+          import('./features/admin-access-control/admin-access-control').then(
+            (m) => m.AdminAccessControlPage,
+          ),
       },
       {
         path: 'admin/users',

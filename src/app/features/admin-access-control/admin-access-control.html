@@ -1,0 +1,561 @@
+<section class="acl-page">
+  <header class="page-header">
+    <div>
+      <h1>Access Control Management</h1>
+      <p class="subtitle">
+        Groups, rights and effective access are owned by the backend; precedence is
+        deny-wins on every request (deliberate ADR-011 policy).
+      </p>
+    </div>
+    @if (loading()) {
+      <span class="loading-chip">Loading…</span>
+    }
+  </header>
+
+  @if (loadError()) {
+    <div class="error-banner">{{ loadError() }}</div>
+  }
+
+  <nav class="tabs" role="tablist">
+    @for (tab of visibleTabs(); track tab.key) {
+      <button
+        type="button"
+        role="tab"
+        class="tab"
+        [class.active]="activeTab() === tab.key"
+        [attr.aria-selected]="activeTab() === tab.key"
+        (click)="selectTab(tab.key)"
+      >
+        {{ tab.label }}
+      </button>
+    }
+  </nav>
+
+  @switch (activeTab()) {
+    <!-- ── Overview ─────────────────────────────────────────────────────── -->
+    @case ('overview') {
+      <div class="cards">
+        <article class="card">
+          <span class="card-value">{{ summary()?.totalGroups ?? '—' }}</span>
+          <span class="card-label">Access groups</span>
+        </article>
+        <article class="card">
+          <span class="card-value">{{ summary()?.totalRights ?? '—' }}</span>
+          <span class="card-label">Rights in catalog</span>
+        </article>
+        <article class="card">
+          <span class="card-value">{{ summary()?.groupMembershipAssignments ?? '—' }}</span>
+          <span class="card-label">Group memberships</span>
+        </article>
+        <article class="card granted">
+          <span class="card-value">{{ summary()?.directGrantAssignments ?? '—' }}</span>
+          <span class="card-label">Direct grants</span>
+        </article>
+        <article class="card denied">
+          <span class="card-value">{{ summary()?.directDenyAssignments ?? '—' }}</span>
+          <span class="card-label">Direct denies</span>
+        </article>
+      </div>
+      <p class="policy-note">
+        Precedence (backend-computed): explicit direct deny → explicit group deny → direct
+        grant → group grant → default deny. A deactivated identity loses everything.
+      </p>
+    }
+
+    <!-- ── Groups ───────────────────────────────────────────────────────── -->
+    @case ('groups') {
+      @if (canManageGroups()) {
+        <div class="form-row">
+          <input
+            type="text"
+            placeholder="Group name (e.g. Division Coordinators)"
+            [ngModel]="newGroupName()"
+            (ngModelChange)="newGroupName.set($event)"
+          />
+          <input
+            type="text"
+            placeholder="Description (optional)"
+            [ngModel]="newGroupDescription()"
+            (ngModelChange)="newGroupDescription.set($event)"
+          />
+          <button type="button" class="btn" [disabled]="creatingGroup()" (click)="createGroup()">
+            Create group
+          </button>
+        </div>
+      }
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Description</th>
+            <th class="num">Members</th>
+            <th class="num">Grants</th>
+            <th class="num">Denies</th>
+            <th>Status</th>
+            <th>Last updated</th>
+            @if (canManageGroups()) {
+              <th>Actions</th>
+            }
+          </tr>
+        </thead>
+        <tbody>
+          @for (group of groups(); track group.id) {
+            <tr>
+              <td class="strong">{{ group.name }}</td>
+              <td>{{ group.description }}</td>
+              <td class="num">{{ group.memberCount }}</td>
+              <td class="num">{{ group.rightCount }}</td>
+              <td class="num">{{ group.denyCount }}</td>
+              <td>
+                <span
+                  class="status-pill"
+                  [class.ok]="group.isActive"
+                  [class.muted]="!group.isActive"
+                >
+                  {{ group.isActive ? 'Active' : 'Inactive' }}
+                </span>
+              </td>
+              <td>{{ group.lastUpdated | date: 'medium' }}</td>
+              @if (canManageGroups()) {
+                <td>
+                  <button
+                    type="button"
+                    class="btn small"
+                    (click)="toggleGroupStatus(group)"
+                  >
+                    {{ group.isActive ? 'Deactivate' : 'Activate' }}
+                  </button>
+                </td>
+              }
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="8" class="empty">No access groups found.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+
+    <!-- ── Group rights ─────────────────────────────────────────────────── -->
+    @case ('group-rights') {
+      <div class="form-row">
+        <select
+          [ngModel]="selectedGroupId()"
+          (ngModelChange)="onGroupSelected($event)"
+        >
+          <option value="">Select group…</option>
+          @for (group of groups(); track group.id) {
+            <option [value]="group.id">{{ group.name }}</option>
+          }
+        </select>
+      </div>
+      @if (selectedGroupId()) {
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Right</th>
+              <th>Module</th>
+              <th>Effect</th>
+              <th>Assigned at</th>
+              <th>Assigned by</th>
+              @if (canManageGroups()) {
+                <th>Actions</th>
+              }
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of groupRights(); track row.permissionId) {
+              <tr>
+                <td class="strong">{{ row.permissionName }}</td>
+                <td>{{ row.module }}</td>
+                <td>
+                  <span
+                    class="status-pill"
+                    [class.ok]="row.effect === 'Grant'"
+                    [class.denied]="row.effect === 'Deny'"
+                  >
+                    {{ row.effect }}
+                  </span>
+                </td>
+                <td>{{ row.assignedAt | date: 'medium' }}</td>
+                <td>{{ row.assignedByName }}</td>
+                @if (canManageGroups()) {
+                  <td>
+                    <button
+                      type="button"
+                      class="btn small"
+                      (click)="removeGroupRight(row)"
+                    >
+                      Remove
+                    </button>
+                  </td>
+                }
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="6" class="empty">No rights assigned to this group yet.</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+
+        @if (canManageGroups() && rights().length > 0) {
+          <h3 class="section-title">Assign a right to this group</h3>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Right</th>
+                <th>Module</th>
+                <th>Effect</th>
+                <th>Set</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (right of selectableRights(); track right.id) {
+                <tr>
+                  <td class="strong">{{ right.name }}</td>
+                  <td>{{ right.module }}</td>
+                  <td>
+                    <span
+                      class="status-pill"
+                      [class.ok]="groupRightEffectOf(right.id) === 'Grant'"
+                      [class.denied]="groupRightEffectOf(right.id) === 'Deny'"
+                      [class.muted]="groupRightEffectOf(right.id) === null"
+                    >
+                      {{ groupRightEffectOf(right.id) ?? 'Not assigned' }}
+                    </span>
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      class="btn small"
+                      (click)="setGroupRight(right.id, 'Grant')"
+                    >
+                      Grant
+                    </button>
+                    <button
+                      type="button"
+                      class="btn small danger"
+                      (click)="setGroupRight(right.id, 'Deny')"
+                    >
+                      Deny
+                    </button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        }
+      } @else {
+          <p class="empty">Select an access group to manage its rights.</p>
+      }
+    }
+
+    <!-- ── Memberships ──────────────────────────────────────────────────── -->
+    @case ('memberships') {
+      @if (canManageGroups() && groups().length > 0) {
+        <div class="form-row">
+          <select [ngModel]="selectedGroupId()" (ngModelChange)="selectedGroupId.set($event)">
+            <option value="">Choose group…</option>
+            @for (group of groups(); track group.id) {
+              <option [value]="group.id">{{ group.name }}</option>
+            }
+          </select>
+          <select
+            [ngModel]="selectedMembershipUserId()"
+            (ngModelChange)="selectedMembershipUserId.set($event)"
+          >
+            <option value="">Choose employee…</option>
+            @for (user of directory(); track user.id) {
+              <option [value]="user.id">{{ user.fullName }} ({{ user.username }})</option>
+            }
+          </select>
+          <button type="button" class="btn" (click)="assignMembership()">Assign member</button>
+        </div>
+      }
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Employee</th>
+            <th>Username</th>
+            <th>Group</th>
+            <th>Assigned at</th>
+            <th>Assigned by</th>
+            @if (canManageGroups()) {
+              <th>Actions</th>
+            }
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of memberships(); track row.userId + '-' + row.roleId) {
+            <tr>
+              <td class="strong">{{ row.fullName }}</td>
+              <td>{{ row.username }}</td>
+              <td>{{ row.roleName }}</td>
+              <td>{{ row.assignedAt | date: 'medium' }}</td>
+              <td>{{ row.assignedByName }}</td>
+              @if (canManageGroups()) {
+                <td>
+                  <button type="button" class="btn small danger" (click)="removeMembership(row)">
+                    Remove
+                  </button>
+                </td>
+              }
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="6" class="empty">No memberships recorded.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+
+    <!-- ── Rights catalog ──────────────────────────────────────────────── -->
+    @case ('rights') {
+      @if (canManageRights()) {
+        <div class="form-row">
+          <input
+            type="text"
+            placeholder="Right key (module:resource.action)"
+            [ngModel]="newRightName()"
+            (ngModelChange)="newRightName.set($event)"
+          />
+          <input
+            type="text"
+            placeholder="Module"
+            [ngModel]="newRightModule()"
+            (ngModelChange)="newRightModule.set($event)"
+          />
+          <input
+            type="text"
+            placeholder="Description (optional)"
+            [ngModel]="newRightDescription()"
+            (ngModelChange)="newRightDescription.set($event)"
+          />
+          <button type="button" class="btn" [disabled]="creatingRight()" (click)="createRight()">
+            Create right
+          </button>
+        </div>
+      }
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Key</th>
+            <th>Module</th>
+            <th>Description</th>
+            <th class="num">Group assignments</th>
+            <th class="num">Direct assignments</th>
+            <th>Status</th>
+            @if (canManageRights()) {
+              <th>Actions</th>
+            }
+          </tr>
+        </thead>
+        <tbody>
+          @for (right of rights(); track right.id) {
+            <tr>
+              <td class="strong">{{ right.name }}</td>
+              <td>{{ right.module }}</td>
+              <td>{{ right.description }}</td>
+              <td class="num">{{ right.groupAssignments }}</td>
+              <td class="num">{{ right.directAssignments }}</td>
+              <td>
+                <span class="status-pill" [class.ok]="right.status === 'Active'" [class.muted]="right.status !== 'Active'">
+                  {{ right.status }}
+                </span>
+              </td>
+              @if (canManageRights()) {
+                <td>
+                  <button
+                    type="button"
+                    class="btn small danger"
+                    [disabled]="right.referenced"
+                    (click)="deleteRight(right)"
+                  >
+                    Delete
+                  </button>
+                </td>
+              }
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="8" class="empty">Rights catalog is empty.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+
+    <!-- ── User rights ─────────────────────────────────────────────────── -->
+    @case ('user-rights') {
+      <div class="form-row">
+        <select [ngModel]="selectedUserId()" (ngModelChange)="onUserSelected($event)">
+          <option value="">Select employee…</option>
+          @for (user of directory(); track user.id) {
+            <option [value]="user.id">{{ user.fullName }} ({{ user.username }})</option>
+          }
+        </select>
+      </div>
+      @if (canManageUserRights() && selectedUserId()) {
+        <div class="form-row">
+          <select
+            [ngModel]="userRightPermissionId()"
+            (ngModelChange)="userRightPermissionId.set($event)"
+          >
+            <option value="">Choose right…</option>
+            @for (right of rights(); track right.id) {
+              <option [value]="right.id">{{ right.module }} → {{ right.name }}</option>
+            }
+          </select>
+          <select
+            [ngModel]="userRightEffect()"
+            (ngModelChange)="userRightEffect.set($event)"
+          >
+            <option value="Grant">Grant</option>
+            <option value="Deny">Deny</option>
+          </select>
+          <input
+            type="text"
+            placeholder="Reason (required)"
+            [ngModel]="userRightReason()"
+            (ngModelChange)="userRightReason.set($event)"
+          />
+          <button type="button" class="btn" [disabled]="savingUserRight()" (click)="saveUserRight()">
+            Save
+          </button>
+        </div>
+      }
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Employee</th>
+            <th>Right</th>
+            <th>Module</th>
+            <th>Effect</th>
+            <th>Reason</th>
+            <th>Assigned at</th>
+            @if (canManageUserRights()) {
+              <th>Actions</th>
+            }
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of userRights(); track row.permissionId) {
+            <tr>
+              <td class="strong">{{ row.fullName }}</td>
+              <td>{{ row.permissionName }}</td>
+              <td>{{ row.module }}</td>
+              <td>
+                <span
+                  class="status-pill"
+                  [class.ok]="row.effect === 'Grant'"
+                  [class.denied]="row.effect === 'Deny'"
+                >
+                  {{ row.effect }}
+                </span>
+              </td>
+              <td>{{ row.reason }}</td>
+              <td>{{ row.assignedAt | date: 'medium' }}</td>
+              @if (canManageUserRights()) {
+                <td>
+                  <button type="button" class="btn small danger" (click)="removeUserRight(row)">
+                    Remove
+                  </button>
+                </td>
+              }
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="8" class="empty">
+                No direct user rights for this employee — effective access comes only from groups.
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+
+    <!-- ── Effective access ────────────────────────────────────────────── -->
+    @case ('effective-access') {
+      <div class="form-row">
+        <select [ngModel]="selectedUserId()" (ngModelChange)="onUserSelected($event)">
+          <option value="">Select employee…</option>
+          @for (user of directory(); track user.id) {
+            <option [value]="user.id">{{ user.fullName }} ({{ user.username }})</option>
+          }
+        </select>
+        <button type="button" class="btn" (click)="evaluateEffective()">Evaluate</button>
+      </div>
+      @if (effective(); as result) {
+        <p class="policy-note">
+          Backend-computed (ADR-011). Groups:
+          {{ result.groupNames.length > 0 ? result.groupNames.join(', ') : 'none' }}.
+          Identity is {{ result.isActive ? 'active' : 'inactive or deactivated — every right is denied' }}.
+        </p>
+        <p class="policy-note">
+          {{ grantedCount(result.rights) }} of {{ result.rights.length }} rights granted.
+        </p>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Right</th>
+              <th>Module</th>
+              <th>Result</th>
+              <th>Source</th>
+              <th>Explanation</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (entry of result.rights; track entry.permissionId) {
+              <tr>
+                <td class="strong">{{ entry.permissionName }}</td>
+                <td>{{ entry.module }}</td>
+                <td>
+                  <span class="status-pill" [class.ok]="entry.result === 'Granted'" [class.denied]="entry.result !== 'Granted'">
+                    {{ entry.result }}
+                  </span>
+                </td>
+                <td>{{ entry.source }}</td>
+                <td class="explanation">{{ entry.explanation }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      } @else {
+        <p class="empty">Select an employee and evaluate to see their effective access.</p>
+      }
+    }
+
+    <!-- ── Authorization audit ─────────────────────────────────────────── -->
+    @case ('audit') {
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>When</th>
+            <th>Entity</th>
+            <th>Action</th>
+            <th>Performed by</th>
+            <th>Reason</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (entry of audit(); track entry.id) {
+            <tr>
+              <td>{{ entry.performedAt | date: 'medium' }}</td>
+              <td class="strong">{{ entry.entityType }}</td>
+              <td>{{ entry.action }}</td>
+              <td>{{ entry.performedByName }}</td>
+              <td>{{ entry.reason }}</td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="5" class="empty">No authorization audit entries yet.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+  }
+</section>

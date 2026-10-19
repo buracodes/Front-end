@@ -1,37 +1,28 @@
-<div class="page">
-  <div class="d-flex align-center justify-between mb-4">
-    <div>
-      <h1 class="page-title">Reports</h1>
-      <p class="page-subtitle">Generate scorecard, division and initiative performance reports, then export to PDF, Excel or CSV.</p>
-    </div>
-  </div>
-
-  <!-- Filter panel -->
-  <section class="report-filters">
-    <div class="filter-group">
-      <label class="filter-label" for="template">Report type</label>
-      <select id="template" class="form-control" [ngModel]="templateId()" (ngModelChange)="templateId.set($event); onTemplateChange()">
-        @for (t of templates(); track t.id) {
-          <option [ngValue]="t.id">{{ t.name }}</option>
-        }
-      </select>
-      <p class="filter-hint">{{ selectedTemplate()?.description }}</p>
-    </div>
-
-    <div class="filter-group">
-      <label class="filter-label" for="fiscalYear">Fiscal year</label>
-      <select id="fiscalYear" class="form-control" [ngModel]="fiscalYearId()" (ngModelChange)="fiscalYearId.set($event); onFiscalYearChange()">
+<div class="reports">
+  <div class="reports-scope">
+    <div class="reports-picker">
+      <label class="reports-picker-label" for="rp-fiscal-year">Fiscal year</label>
+      <select
+        id="rp-fiscal-year"
+        class="reports-scope-select"
+        [ngModel]="fiscalYearId()"
+        (ngModelChange)="fiscalYearId.set($event); onFiscalYearChange()"
+      >
         <option [ngValue]="null">All fiscal years</option>
         @for (fy of fiscalYears(); track fy.id) {
           <option [ngValue]="fy.id">{{ fy.label }}</option>
         }
       </select>
     </div>
-
     @if (showScorecard()) {
-      <div class="filter-group">
-        <label class="filter-label" for="scorecard">Scorecard</label>
-        <select id="scorecard" class="form-control" [ngModel]="scorecardId()" (ngModelChange)="scorecardId.set($event); envelope.set(null)">
+      <div class="reports-picker">
+        <label class="reports-picker-label" for="rp-scorecard">Scorecard</label>
+        <select
+          id="rp-scorecard"
+          class="reports-scope-select"
+          [ngModel]="scorecardId()"
+          (ngModelChange)="scorecardId.set($event); envelope.set(null)"
+        >
           <option [ngValue]="null">Select a scorecard</option>
           @for (sc of scorecards(); track sc.id) {
             <option [ngValue]="sc.id">{{ sc.name }}</option>
@@ -39,128 +30,152 @@
         </select>
       </div>
     }
+  </div>
 
-    @if (showDivision()) {
-      <div class="filter-group">
-        <label class="filter-label" for="division">Division</label>
-        <select id="division" class="form-control" [ngModel]="divisionId()" (ngModelChange)="divisionId.set($event); envelope.set(null)">
-          <option [ngValue]="null">All divisions</option>
-          @for (d of divisions(); track d.id) {
-            <option [ngValue]="d.id">{{ d.name }}</option>
-          }
-        </select>
-      </div>
-    }
+  <h2 class="reports-heading">Report templates</h2>
 
-    @if (showLevel()) {
-      <div class="filter-group">
-        <label class="filter-label" for="level">Breakdown</label>
-        <select id="level" class="form-control" [ngModel]="level()" (ngModelChange)="level.set($event); envelope.set(null)">
-          @for (o of levelOptions; track o.value) {
-            <option [ngValue]="o.value">{{ o.label }}</option>
-          }
-        </select>
-      </div>
-    }
-
-    @if (showGranularity()) {
-      <div class="filter-group">
-        <label class="filter-label" for="granularity">Period</label>
-        <select id="granularity" class="form-control" [ngModel]="granularity()" (ngModelChange)="granularity.set($event); onGranularityChange()">
-          @for (o of granularityOptions; track o.value) {
-            <option [ngValue]="o.value">{{ o.label }}</option>
-          }
-        </select>
-      </div>
-
-      @if (showMonthRange()) {
-        <div class="filter-group">
-          <label class="filter-label" for="fromMonth">From month</label>
-          <select id="fromMonth" class="form-control" [ngModel]="fromMonth()" (ngModelChange)="fromMonth.set($event); envelope.set(null)">
-            <option [ngValue]="null">All</option>
-            @for (m of monthOptions; track m) {
-              <option [ngValue]="m">M{{ m }}</option>
+  <div class="template-grid" role="radiogroup" aria-label="Report templates">
+    @for (card of cards(); track card.key) {
+      <button
+        type="button"
+        class="template-card"
+        role="radio"
+        [class.selected]="card.key === selectedCardKey()"
+        [attr.aria-checked]="card.key === selectedCardKey()"
+        (click)="selectCard(card)"
+      >
+        <svg class="template-icon" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          @switch (card.icon) {
+            @case ('document') {
+              <rect x="5" y="2.5" width="14" height="19" rx="1.6" />
+              <path d="M8.8 8h6.4M8.8 12h6.4M8.8 16h3.4" />
             }
-          </select>
-        </div>
-
-        <div class="filter-group">
-          <label class="filter-label" for="toMonth">To month</label>
-          <select id="toMonth" class="form-control" [ngModel]="toMonth()" (ngModelChange)="toMonth.set($event); envelope.set(null)">
-            <option [ngValue]="null">All</option>
-            @for (m of monthOptions; track m) {
-              <option [ngValue]="m">M{{ m }}</option>
+            @case ('target') {
+              <circle cx="12" cy="12" r="8.6" />
+              <circle cx="12" cy="12" r="4.4" />
+              <circle cx="12" cy="12" r="0.9" fill="currentColor" />
             }
-          </select>
-        </div>
-      }
-
-      @if (showQuarter()) {
-        <div class="filter-group">
-          <label class="filter-label" for="quarter">Quarter</label>
-          <select id="quarter" class="form-control" [ngModel]="quarter()" (ngModelChange)="quarter.set($event); envelope.set(null)">
-            <option [ngValue]="null">All</option>
-            @for (q of quarterOptions; track q) {
-              <option [ngValue]="q">Q{{ q }}</option>
+            @case ('bars') {
+              <path d="M5 19V9.5M12 19V4M19 19v-6.5" />
             }
-          </select>
-        </div>
-      }
-    }
-
-    <div class="filter-actions">
-      <button class="btn btn-primary" (click)="generate()" [disabled]="loading() || exporting()">
-        @if (loading()) {
-          <span class="spinner-inline"></span>
-        } @else {
-          Generate
-        }
+            @case ('list') {
+              <path d="M8 6h13M8 12h13M8 18h13" />
+              <path d="M3 6h.01M3 12h.01M3 18h.01" stroke-width="2.8" />
+            }
+            @case ('briefcase') {
+              <rect x="3" y="7.5" width="18" height="12.5" rx="1.6" />
+              <path d="M8.6 7.5V5.6A1.6 1.6 0 0 1 10.2 4h3.6a1.6 1.6 0 0 1 1.6 1.6v1.9" />
+            }
+            @case ('building') {
+              <rect x="4.5" y="2.5" width="15" height="19" rx="1.6" />
+              <path d="M9.4 8h.01M14.6 8h.01M9.4 12h.01M14.6 12h.01M9.4 16h.01M14.6 16h.01" stroke-width="2.8" />
+            }
+          }
+        </svg>
+        <span class="template-title">{{ card.title }}</span>
+        <span class="template-sub">{{ card.subtitle }}</span>
       </button>
+    }
+  </div>
+
+  <section class="reports-panel filters" aria-label="Report filters">
+    <h2 class="filters-title">Filters · {{ lowerFirst(selectedCard().title) }}</h2>
+
+    <div class="filters-grid">
+      @if (showGranularity()) {
+        <div class="filter-field">
+          <label class="filter-label" for="rp-granularity">Granularity</label>
+          <select id="rp-granularity" class="filter-select" [ngModel]="granularity()" (ngModelChange)="granularity.set($event); onGranularityChange()">
+            @for (o of granularityOptions; track o.value) {
+              <option [ngValue]="o.value">{{ o.label }}</option>
+            }
+          </select>
+        </div>
+
+        @if (showQuarter()) {
+          <div class="filter-field">
+            <label class="filter-label" for="rp-period">Period</label>
+            <select id="rp-period" class="filter-select" [ngModel]="quarter()" (ngModelChange)="quarter.set($event); envelope.set(null)">
+              <option [ngValue]="null">All quarters</option>
+              @for (q of quarterOptions; track q) {
+                <option [ngValue]="q">{{ quarterLabel(q) }}</option>
+              }
+            </select>
+          </div>
+        } @else {
+          <div class="filter-field">
+            <label class="filter-label" for="rp-from">From month</label>
+            <select id="rp-from" class="filter-select" [ngModel]="fromMonth()" (ngModelChange)="fromMonth.set($event); envelope.set(null)">
+              <option [ngValue]="null">All</option>
+              @for (m of monthOptions; track m) {
+                <option [ngValue]="m">M{{ m }}</option>
+              }
+            </select>
+          </div>
+          <div class="filter-field">
+            <label class="filter-label" for="rp-to">To month</label>
+            <select id="rp-to" class="filter-select" [ngModel]="toMonth()" (ngModelChange)="toMonth.set($event); envelope.set(null)">
+              <option [ngValue]="null">All</option>
+              @for (m of monthOptions; track m) {
+                <option [ngValue]="m">M{{ m }}</option>
+              }
+            </select>
+          </div>
+        }
+      }
+
+      <div class="filter-field">
+        <label class="filter-label" for="rp-goal">Goal</label>
+        <select id="rp-goal" class="filter-select" disabled title="Filtering by goal is not supported by the reporting API yet">
+          <option>All goals</option>
+        </select>
+      </div>
+
+      <div class="filter-field">
+        <label class="filter-label" for="rp-department">Department / owner</label>
+        @if (showDivision()) {
+          <select id="rp-department" class="filter-select" [ngModel]="divisionId()" (ngModelChange)="divisionId.set($event); envelope.set(null)">
+            <option [ngValue]="null">All departments</option>
+            @for (d of divisions(); track d.id) {
+              <option [ngValue]="d.id">{{ d.name }}</option>
+            }
+          </select>
+        } @else {
+          <select id="rp-department" class="filter-select" disabled title="This report cannot be filtered by department yet">
+            <option>All departments</option>
+          </select>
+        }
+      </div>
+    </div>
+
+    <div class="filters-actions">
+      <button type="button" class="rp-btn primary" (click)="generate()" [disabled]="loading() || exporting()">
+        {{ loading() ? 'Generating…' : 'Generate report' }}
+      </button>
+      <button type="button" class="rp-btn" (click)="resetFilters()" [disabled]="loading() || exporting()">Reset filters</button>
     </div>
   </section>
 
   @if (loadError()) {
-    <div class="alert alert-danger mt-3" role="alert">{{ loadError() }}</div>
+    <div class="reports-error" role="alert">{{ loadError() }}</div>
   }
 
   @if (envelope(); as report) {
-    <!-- Result -->
-    <section class="report-result">
-      <div class="report-result-header">
-        <div class="report-result-title-wrap">
-          <h2 class="report-result-title">{{ report.title }}</h2>
-          @if (report.subtitle) {
-            <p class="report-result-subtitle">{{ report.subtitle }}</p>
-          }
-          <p class="report-result-meta">
-            Generated {{ formatGeneratedAt(report.generatedAtUtc) }} by {{ report.generatedBy }}
-          </p>
-        </div>
-        <div class="export-actions">
-          <button class="btn btn-outline" (click)="export('pdf')" [disabled]="exporting()">PDF</button>
-          <button class="btn btn-outline" (click)="export('xlsx')" [disabled]="exporting()">Excel</button>
-          <button class="btn btn-outline" (click)="export('csv')" [disabled]="exporting()">CSV</button>
-        </div>
-      </div>
-
-      @if (summaryKeys(report).length > 0) {
-        <div class="summary-chips">
-          @for (entry of report.summary | keyvalue; track entry.key) {
-            <div class="summary-chip">
-              <span class="summary-chip-label">{{ entry.key }}</span>
-              <span class="summary-chip-value">{{ entry.value ?? '—' }}</span>
-            </div>
-          }
-        </div>
-      }
+    <section class="reports-panel result" aria-label="Generated report">
+      <header class="result-head">
+        <h2 class="result-title">{{ report.title }}</h2>
+        <p class="result-meta">
+          Generated {{ formatGeneratedAt(report.generatedAtUtc) }} by {{ report.generatedBy }} · Filters: {{ filtersText(report) }}
+        </p>
+      </header>
 
       @if (report.rows.length > 0) {
-        <div class="table-wrap">
-          <table class="report-table">
+        <div class="result-scroll">
+          <table class="result-table">
             <thead>
               <tr>
                 @for (col of report.columns; track $index) {
-                  <th>{{ col }}</th>
+                  <th>{{ headerLabel(col) }}</th>
                 }
               </tr>
             </thead>
@@ -169,12 +184,14 @@
                 <tr>
                   @for (cell of row; track $index; let cIdx = $index) {
                     <td>
-                      @if (cIdx === ragColumnIndex()) {
-                        <span class="rag-chip" [class]="ragClass(cell)">{{ cellValue(cell) }}</span>
+                      @if (report.columns[cIdx] === 'RAG') {
+                        <span class="pill" [class]="ragClass(cell)">{{ ragLabel(cell) }}</span>
+                      } @else if (report.columns[cIdx] === 'Score' && ragColumnIndex() >= 0) {
+                        <span class="pill" [class]="ragClass(row[ragColumnIndex()])">{{ cellText('Score', cell) }}</span>
                       } @else if (report.columns[cIdx] === 'Trend') {
-                        <span [class]="'trend ' + trendClass(cell)">{{ cellValue(cell) }}</span>
+                        <span [class]="'trend ' + trendClass(cell)">{{ cellText('Trend', cell) }}</span>
                       } @else {
-                        {{ cellValue(cell) }}
+                        {{ cellText(report.columns[cIdx], cell) }}
                       }
                     </td>
                   }
@@ -183,21 +200,24 @@
             </tbody>
           </table>
         </div>
+        <footer class="result-actions">
+          <button type="button" class="rp-btn" (click)="export('pdf')" [disabled]="exporting()">Export to PDF</button>
+          <button type="button" class="rp-btn" (click)="export('xlsx')" [disabled]="exporting()">Export to Excel</button>
+          <button type="button" class="rp-btn" (click)="export('csv')" [disabled]="exporting()">Export to CSV</button>
+        </footer>
       } @else {
-        <div class="empty-state">
-          <p>No data matches the selected filters.</p>
-        </div>
+        <p class="reports-state">No data matches the selected filters.</p>
       }
     </section>
   } @else if (loading()) {
-    <div class="loading-state">
+    <section class="reports-panel reports-state">
       <div class="spinner"></div>
-      <p>Generating report...</p>
-    </div>
+      Generating report…
+    </section>
   } @else {
-    <div class="empty-state page-empty">
-      <p>Configure the filters above and click Generate to build a report.</p>
-    </div>
+    <section class="reports-panel reports-state">
+      Choose a template, set the filters and select Generate report.
+    </section>
   }
 
   @if (exporting()) {

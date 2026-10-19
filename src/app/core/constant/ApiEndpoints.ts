@@ -31,4 +31,15 @@ export const ApiEndpoint = {
   PeriodLock: 'periodlock',
   Reports: 'reports',
   ResetDivisionPassword: 'user/divisions/reset-password',
+  AccessControl: {
+    Tier: 'accesscontrol',
+    Root: 'accesscontrol',
+    Summary: 'accesscontrol/summary',
+    Groups: 'accesscontrol/groups',
+    GroupRights: 'accesscontrol/groups', // + /{id}/rights
+    Memberships: 'accesscontrol/memberships',
+    Rights: 'accesscontrol/rights',
+    Directory: 'accesscontrol/directory',
+    Audit: 'accesscontrol/audit',
+  },
 };

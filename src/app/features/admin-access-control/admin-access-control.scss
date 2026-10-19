@@ -1,0 +1,234 @@
+// Access Control Management scss — mirrors the admin thresholds page
+// (css custom properties + scoped styles). HMR context is isolated per page.
+.acl-page {
+  padding: 1.5rem 2rem;
+  max-width: 72rem;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+
+  h1 {
+    margin: 0 0 0.25rem;
+    font-size: 1.35rem;
+  }
+
+  .subtitle {
+    margin: 0;
+    color: var(--text-muted, #6b7280);
+    font-size: 0.875rem;
+  }
+
+  .loading-chip {
+    align-self: center;
+    padding: 0.25rem 0.75rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: var(--slate-100, #f1f5f9);
+    color: var(--slate-700, #475569);
+  }
+}
+
+.error-banner {
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid #fecaca;
+  background: rgba(239, 68, 68, 0.08);
+  color: #b91c1c;
+  font-size: 0.875rem;
+}
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  padding-bottom: 0.25rem;
+
+  .tab {
+    appearance: none;
+    border: none;
+    background: transparent;
+    padding: 0.5rem 0.9rem;
+    border-radius: 999px 999px 0 0;
+    font-size: 0.875rem;
+    color: var(--text-muted, #475569);
+    cursor: pointer;
+
+    &:hover {
+      background: var(--surface-2, #f8fafc);
+    }
+
+    &.active {
+      color: var(--brand, #1e40af);
+      font-weight: 600;
+      border-bottom: 2px solid var(--brand, #1e40af);
+    }
+  }
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 1rem;
+}
+
+.card {
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 0.75rem;
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+
+  .card-value {
+    font-size: 1.75rem;
+    font-weight: 700;
+  }
+
+  .card-label {
+    color: var(--text-muted, #6b7280);
+    font-size: 0.8125rem;
+  }
+
+  &.granted .card-value {
+    color: #15803d;
+  }
+
+  &.denied .card-value {
+    color: #b91c1c;
+  }
+}
+
+.form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+
+  input,
+  select {
+    flex: 1 1 12rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border, #d1d5db);
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    background: var(--surface, #fff);
+  }
+}
+
+.btn {
+  appearance: none;
+  border: 1px solid var(--border, #d1d5db);
+  background: var(--surface, #fff);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: var(--surface-2, #f8fafc);
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  &.small {
+    padding: 0.3rem 0.65rem;
+    font-size: 0.8125rem;
+  }
+
+  &.danger {
+    color: #b91c1c;
+    border-color: #fecaca;
+
+    &:hover:not(:disabled) {
+      background: rgba(239, 68, 68, 0.08);
+    }
+  }
+}
+
+.section-title {
+  margin: 1.25rem 0 0.5rem;
+  font-size: 1rem;
+}
+
+.policy-note {
+  margin: 0;
+  color: var(--text-muted, #6b7280);
+  font-size: 0.8125rem;
+}
+
+.explanation {
+  color: var(--text-muted, #6b7280);
+  font-size: 0.8125rem;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+
+  th,
+  td {
+    text-align: left;
+    padding: 0.55rem 0.75rem;
+    border-bottom: 1px solid var(--border, #e5e7eb);
+  }
+
+  th {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted, #6b7280);
+  }
+
+  .num {
+    text-align: right;
+  }
+
+  .strong {
+    font-weight: 600;
+  }
+
+  .empty {
+    color: var(--text-muted, #6b7280);
+    font-style: italic;
+    text-align: center;
+    padding: 1.25rem;
+  }
+}
+
+.status-pill {
+  display: inline-block;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+
+  &.ok {
+    background: rgba(22, 163, 74, 0.12);
+    color: #15803d;
+  }
+
+  &.denied {
+    background: rgba(239, 68, 68, 0.12);
+    color: #b91c1c;
+  }
+
+  &.muted {
+    background: var(--slate-100, #f1f5f9);
+    color: var(--slate-600, #64748b);
+  }
+}

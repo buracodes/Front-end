@@ -178,6 +178,12 @@ export class ShellComponent {
       isGroup: true,
       children: [
         {
+          label: 'Access Control',
+          route: '/admin/access-control',
+          icon: 'key-square',
+          permission: 'admin:access.view',
+        },
+        {
           label: 'Users',
           route: '/admin/users',
           icon: 'users',

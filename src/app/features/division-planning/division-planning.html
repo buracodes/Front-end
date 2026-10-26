@@ -75,10 +75,10 @@
   <!-- Division / scorecard filter -->
   <div class="dp-filters">
     <label class="dp-filter">
-      <span class="dp-filter-label">Scorecard</span>
+      <span class="dp-filter-label">Corporate scorecard</span>
       <select class="form-control dp-filter-control" [ngModel]="scorecardFilter()" (ngModelChange)="scorecardFilter.set($event); onScorecardChange()">
         @if (scorecards().length === 0) {
-          <option value="">No scorecards</option>
+          <option value="">No corporate scorecards</option>
         }
         @for (s of scorecards(); track s.id) {
           <option [value]="s.id">{{ s.name }}{{ s.fiscalYearName ? ' · ' + s.fiscalYearName : '' }}</option>
@@ -96,6 +96,13 @@
     </label>
   </div>
 
+  @if (loadError(); as error) {
+    <div class="dp-error" role="alert">
+      <span>{{ error }}</span>
+      <button type="button" class="btn btn-secondary" (click)="retryLoad()">Retry</button>
+    </div>
+  }
+
   <!-- Two-column plan area -->
   <div class="dp-columns">
     <!-- Corporate goals checklist -->
@@ -106,7 +113,7 @@
           Corporate goals this division contributes to
         </h2>
         <p class="dp-cg-summary">
-          {{ selectedCorporateGoalCount() }} of {{ corporateGoals().length }} selected · tick a goal to link it to this division’s plan
+          {{ selectedCorporateGoalCount() }} of {{ corporateGoals().length }} linked · tick a goal to link it to this division’s plan, untick to remove it
         </p>
       </div>
 
@@ -121,7 +128,7 @@
               <input
                 type="checkbox"
                 [checked]="selectedIds().has(goal.id)"
-                [disabled]="!canEdit()"
+                [disabled]="!canEdit() || selectionSaving() || !hasDivision()"
                 (change)="toggleContribution(goal.id, $any($event.target).checked)"
               />
               <span class="dp-goal-row-meta">
@@ -136,23 +143,15 @@
 
         @if (canEdit()) {
           <div class="dp-cg-actions">
-            <span class="dp-cg-dirty-hint" [class.is-dirty]="selectionDirty()">
-              @if (selectionDirty()) {
-                Save your changes to link or remove corporate goals.
-              } @else {
-                All changes saved.
-              }
-            </span>
-            <button type="button" class="btn btn-primary" [disabled]="!selectionDirty() || crudSubmitting()" (click)="saveSelection()">
-              @if (crudSubmitting()) {
+            @if (!hasDivision()) {
+              <span class="dp-cg-dirty-hint">Select a division above to link corporate goals.</span>
+            } @else if (selectionSaving()) {
+              <span class="dp-cg-dirty-hint">
                 <span class="dp-spinner" aria-hidden="true"></span>
-                Saving…
-              } @else {
-                Save selection
-              }
-            </button>
-            @if (selectionDirty()) {
-              <button type="button" class="btn btn-secondary" [disabled]="crudSubmitting()" (click)="revertSelection()">Revert</button>
+                Saving your selection…
+              </span>
+            } @else {
+              <span class="dp-cg-dirty-hint">Changes are saved automatically.</span>
             }
           </div>
         }
@@ -172,7 +171,13 @@
       @if (loading()) {
         <div class="dp-loading">Loading division goals…</div>
       } @else if (divisionGoals().length === 0) {
-        <p class="dp-empty">No division goals yet. Add one to start building the plan.</p>
+        <p class="dp-empty">
+          @if (loadError()) {
+            The division plan could not be loaded, so its goals and KPIs are unavailable.
+          } @else {
+            No division goals yet. Add one to start building the plan.
+          }
+        </p>
       } @else {
         <div class="dp-goal-panels">
           @for (goal of divisionGoals(); track goal.id) {
@@ -219,12 +224,17 @@
                     }
                   </span>
                 }
-                @if (canEdit()) {
-                  <button type="button" class="dp-add-kpi" (click)="openCreateKpi(goal)"><svg aria-hidden="true" lucideIcon="plus" size="14" strokeWidth="3"></svg>
-                    Add KPI
-                  </button>
+                @if (canEdit() && goal.kpis.length === 0) {
+                  <span class="dp-kpi-empty">No KPIs yet for this goal.</span>
                 }
               </div>
+
+              @if (canEdit()) {
+                <button type="button" class="dp-add-kpi" (click)="openCreateKpi(goal)">
+                  <svg aria-hidden="true" lucideIcon="plus" size="14" strokeWidth="3"></svg>
+                  Add KPI
+                </button>
+              }
 
               @if (goal.contributionDescription) {
                 <p class="dp-goal-contribution">{{ goal.contributionDescription }}</p>
@@ -235,16 +245,23 @@
       }
 
       @if (canEdit()) {
-        <button type="button" class="dp-add-goal" (click)="openCreateGoal()"><svg aria-hidden="true" lucideIcon="plus" size="14" strokeWidth="3"></svg>
+        <button
+          type="button"
+          class="dp-add-goal"
+          [disabled]="!hasDivision() || selectedCorporateGoalCount() === 0 || selectionSaving()"
+          (click)="openCreateGoal()"
+        >
+          <svg aria-hidden="true" lucideIcon="plus" size="14" strokeWidth="3"></svg>
           Add division goal
         </button>
+        @if (!hasDivision()) {
+          <p class="dp-cg-dirty-hint">Select a division to build its plan.</p>
+        } @else if (selectedCorporateGoalCount() === 0) {
+          <p class="dp-cg-dirty-hint">Tick at least one corporate goal above before adding a division goal.</p>
+        }
       }
     </section>
   </div>
-
-  @if (loadError(); as error) {
-    <div class="dp-error" role="alert">{{ error }}</div>
-  }
 
   <!-- Division performance report -->
   <section class="card dp-report">
@@ -442,13 +459,19 @@
               <input id="dp-goal-name" class="form-control" formControlName="name" placeholder="e.g. Grow trading volume" />
             </div>
             <div class="form-group">
-              <label class="form-label" for="dp-goal-parent">Corporate goal</label>
-              <select id="dp-goal-parent" class="form-control" formControlName="parentGoalId">
-                <option value="" disabled>Select a corporate goal</option>
-                @for (contribution of selectedCorporateGoals(); track contribution.id) {
-                  <option [value]="contribution.id">{{ contribution.name }}</option>
-                }
-              </select>
+              <label class="form-label" for="dp-goal-parent">Corporate goal this division goal contributes to</label>
+              @if (goalParentOptions().length === 0) {
+                <p class="dp-empty">
+                  Tick at least one corporate goal on the left, wait for it to save, then add a division goal.
+                </p>
+              } @else {
+                <select id="dp-goal-parent" class="form-control" formControlName="parentGoalId">
+                  <option value="" disabled>Select a corporate goal</option>
+                  @for (option of goalParentOptions(); track option.id) {
+                    <option [value]="option.id">{{ option.name }}</option>
+                  }
+                </select>
+              }
             </div>
             <div class="form-group">
               <label class="form-label" for="dp-goal-weight">Weight (%)</label>
@@ -487,6 +510,9 @@
         </div>
         <form [formGroup]="kpiForm" (ngSubmit)="submitKpi()">
           <div class="modal-body">
+            @if (kpiParentGoal(); as goal) {
+              <p class="dp-modal-context">Division goal: <strong>{{ goal.name }}</strong></p>
+            }
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label" for="dp-kpi-name">KPI name</label>
@@ -501,10 +527,16 @@
               <div class="form-group">
                 <label class="form-label" for="dp-kpi-owner">Owner (division) *</label>
                 <select id="dp-kpi-owner" class="form-control" formControlName="divisionOwnerId">
+                  @if (divisions().length === 0) {
+                    <option [ngValue]="null" disabled>No divisions available</option>
+                  }
                   @for (d of divisions(); track d.id) {
                     <option [value]="d.id">{{ d.name }}</option>
                   }
                 </select>
+                @if (kpiForm.controls.divisionOwnerId.invalid) {
+                  <p class="kpi-target-error">Select the division that owns this KPI.</p>
+                }
               </div>
               <div class="form-group">
                 <label class="form-label" for="dp-kpi-type">KPI type</label>

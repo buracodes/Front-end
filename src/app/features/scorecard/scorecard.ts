@@ -58,7 +58,7 @@ export class ScorecardPage implements OnInit {
 
   readonly openMenuId = signal<string | null>(null);
 
-  readonly scopes: Scorecard['scope'][] = ['Corporate', 'Division', 'Department'];
+  readonly scopes: Scorecard['scope'][] = ['Corporate', 'Division'];
   readonly statuses: Scorecard['scorecardStatus'][] = ['Active', 'Closed'];
 
   readonly filteredScorecards = computed(() => {
@@ -215,7 +215,7 @@ export class ScorecardPage implements OnInit {
 
   onCancelEdit(): void {
     this.editingId.set(null);
-    this.form.reset({ scope: 'Department' });
+    this.form.reset({ scope: 'Corporate' });
     this.showForm.set(false);
   }
 
@@ -405,7 +405,7 @@ export class ScorecardPage implements OnInit {
         // to the one just created, matching the intended add-FY → add-scorecard flow.
         this.loadFiscalYears(() => {
           this.editingId.set(null);
-          this.form.reset({ fiscalYearId: created.id, name: '', description: '', scope: 'Department' });
+          this.form.reset({ fiscalYearId: created.id, name: '', description: '', scope: 'Corporate' });
           this.showForm.set(true);
         });
       },

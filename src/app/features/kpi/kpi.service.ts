@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable, map } from 'rxjs';
 import { ApiEndpoint } from '../../core/constant/ApiEndpoints';
-import { CreateKpiRequest, Kpi, UpdateKpiRequest } from './kpi.model';
+import { CreateKpiRequest, Kpi, KpiOwnerOption, UpdateKpiRequest } from './kpi.model';
 import { IResponse } from '../../core/model/interface/response.interface';
 import { ApiService } from '../../core/service/apiService/api-service';
 
@@ -35,6 +35,13 @@ export class KpiService {
     const url = query ? `${ApiEndpoint.Kpi}?${query}` : ApiEndpoint.Kpi;
 
     return this.api.get<IResponse<Kpi[]>>(url).pipe(map((r) => r.data ?? []));
+  }
+
+  /** Active users that can own a KPI (readable with kpi:view). */
+  getOwnerOptions(): Observable<KpiOwnerOption[]> {
+    return this.api
+      .get<IResponse<KpiOwnerOption[]>>(`${ApiEndpoint.User}/lookup`)
+      .pipe(map((r) => r.data ?? []));
   }
 
   getById(id: string): Observable<Kpi> {

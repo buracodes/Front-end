@@ -203,10 +203,13 @@ export class DataEntryPage implements OnInit {
 
   readonly canEnter = computed(() => {
     const p = this.reportingPeriod();
-    return !!p && p.state === 'open' && !!p.fiscalPeriodId;
+    if (!(!!p && p.state === 'open' && !!p.fiscalPeriodId)) return false;
+    return this.userStore.hasPermission('actuals:enter') || this.canOverride();
   });
 
   readonly canOverride = computed(() => this.userStore.hasPermission('actuals:override'));
+
+  readonly isReadOnly = computed(() => !this.canEnter() && !this.canOverride());
 
   readonly entrySubtitle = computed(() => {
     const departments = new Set(

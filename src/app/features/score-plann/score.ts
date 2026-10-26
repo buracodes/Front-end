@@ -35,7 +35,8 @@ import { ScorecardService } from '../scorecard/scorecard.service';
 import { ActivatedRoute, Router } from '@angular/router';
 import { DivisionService } from '../division/division.service';
 import { Division } from '../division/division.model';
-
+
+
 import { LucideDynamicIcon } from '@lucide/angular';
 type CrudKind = 'goal' | 'kra' | 'kpi';
 

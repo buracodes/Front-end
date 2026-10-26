@@ -58,16 +58,41 @@
               </div>
             </div>
 
-            <div class="form-group">
-              <label class="form-label" for="kpi-division-owner">Owner (division)</label>
-              <select id="kpi-division-owner" class="form-control" formControlName="divisionOwnerId">
-                <option value="">— Unassigned —</option>
-                @for (division of divisions(); track division.id) {
-                  <option [value]="division.id">{{ division.name }}</option>
-                }
-              </select>
-              <p class="form-hint">The division accountable for this KPI (e.g. IT, Trade Operation).</p>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="kpi-owner-type">Owner type</label>
+                <select id="kpi-owner-type" class="form-control" formControlName="ownerType">
+                  <option value="">�?" Select owner type �?"</option>
+                  <option value="User">User</option>
+                  <option value="Division">Division</option>
+                </select>
+              </div>
+
+              @if (form.controls.ownerType.value === 'User') {
+                <div class="form-group">
+                  <label class="form-label" for="kpi-owner">Owner (user)</label>
+                  <select id="kpi-owner" class="form-control" formControlName="ownerId">
+                    <option value="">�?" Select user �?"</option>
+                    @for (owner of ownerOptions(); track owner.id) {
+                      <option [value]="owner.id">
+                        {{ owner.fullName }}{{ owner.divisionName ? ' �?" ' + owner.divisionName : '' }}
+                      </option>
+                    }
+                  </select>
+                </div>
+              } @else if (form.controls.ownerType.value === 'Division') {
+                <div class="form-group">
+                  <label class="form-label" for="kpi-division-owner">Owner (division)</label>
+                  <select id="kpi-division-owner" class="form-control" formControlName="divisionOwnerId">
+                    <option value="">�?" Select division �?"</option>
+                    @for (division of divisions(); track division.id) {
+                      <option [value]="division.id">{{ division.name }}</option>
+                    }
+                  </select>
+                </div>
+              }
             </div>
+            <p class="form-hint">A KPI is owned by either one user or one division.</p>
 
             <div class="form-group">
               <label class="form-label" for="kpi-name">Name</label>

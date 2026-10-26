@@ -9,7 +9,7 @@ import { GridTable } from '../../shared/reusableComponent/grid-table/grid-table'
 import { actionsColumn } from '../../shared/reusableComponent/grid-table/grid-table-actions';
 import { PlanFilterBar } from '../../shared/reusableComponent/plan-filter-bar/plan-filter-bar';
 import { PlanFilterService } from '../../core/service/plan-filter.service';
-import { CreateKpiRequest, Kpi, UpdateKpiRequest } from './kpi.model';
+import { CreateKpiRequest, Kpi, KpiOwnerOption, KpiOwnerType, UpdateKpiRequest } from './kpi.model';
 import { KpiService } from './kpi.service';
 import { ScoreSnapshotEntry, KPIService as ScoreSnapshotService } from '../../core/service/kpi.service';
 import { scoreColor } from '../strategic-scorecard/workspace-state.service';
@@ -45,6 +45,7 @@ export class KpiPage {
   readonly allKras = signal<Kra[]>([]);
   readonly formKras = signal<Kra[]>([]);
   readonly divisions = signal<Division[]>([]);
+  readonly ownerOptions = signal<KpiOwnerOption[]>([]);
   readonly loading = signal(false);
   readonly loadError = signal<string | null>(null);
   readonly showForm = signal(false);
@@ -74,6 +75,8 @@ export class KpiPage {
     dataSource: new FormControl<Kpi['dataSource']>('Manual', { nonNullable: true }),
     kpiType: new FormControl<Kpi['kpiType']>('Lagging', { nonNullable: true }),
     isCumulative: new FormControl(false, { nonNullable: true }),
+    ownerType: new FormControl<KpiOwnerType | ''>('', { nonNullable: true }),
+    ownerId: new FormControl('', { nonNullable: true }),
     divisionOwnerId: new FormControl('', { nonNullable: true }),
     baseline: new FormControl<number | null>(null),
     minValue: new FormControl<number | null>(null),
@@ -107,6 +110,13 @@ export class KpiPage {
       valueGetter: (params) => (params.data ? this.kraLabel(params.data) : ''),
     },
     { field: 'unit', headerName: 'Unit', sortable: true, filter: true, valueFormatter: (params) => (params.value ? params.value : '—') },
+    {
+      headerName: 'Owner',
+      sortable: true,
+      filter: true,
+      flex: 1,
+      valueGetter: (params) => (params.data ? this.ownerLabel(params.data) : ''),
+    },
     { field: 'weight', headerName: 'Weight', type: 'rightAligned', sortable: true },
     { field: 'kpiType', headerName: 'KPI Type', sortable: true, filter: true },
     { field: 'optimizationType', headerName: 'Optimization', sortable: true, filter: true },
@@ -174,6 +184,7 @@ export class KpiPage {
     this.loadScorecards();
     this.loadAllKras();
     this.loadDivisions();
+    this.loadOwnerOptions();
 
     effect(() => {
       this.rows();
@@ -217,6 +228,19 @@ export class KpiPage {
       next: (divisions) => this.divisions.set(divisions),
       error: () => this.divisions.set([]),
     });
+  }
+
+  loadOwnerOptions(): void {
+    this.kpiService.getOwnerOptions().subscribe({
+      next: (owners) => this.ownerOptions.set(owners),
+      error: () => this.ownerOptions.set([]),
+    });
+  }
+
+  ownerLabel(kpi: Kpi): string {
+    if (kpi.ownerName) return kpi.ownerName;
+    if (kpi.divisionOwnerName) return `${kpi.divisionOwnerName} (division)`;
+    return 'Unassigned';
   }
 
   /** Latest snapshot entry (per KPI) from the selected scorecard's snapshots. */
@@ -357,7 +381,8 @@ export class KpiPage {
     this.form.reset({
       scorecardId: '', kraId: '', name: '', description: '', unit: '', weight: 0,
       optimizationType: 'Maximize', dataSource: 'Manual', kpiType: 'Lagging',
-      isCumulative: false, divisionOwnerId: '', baseline: null, minValue: null, maxValue: null,
+      isCumulative: false, ownerType: '', ownerId: '', divisionOwnerId: '',
+      baseline: null, minValue: null, maxValue: null,
     });
     this.showForm.set(true);
   }
@@ -373,6 +398,8 @@ export class KpiPage {
       dataSource: kpi.dataSource,
       kpiType: kpi.kpiType,
       isCumulative: kpi.isCumulative,
+      ownerType: kpi.ownerId ? 'User' : kpi.divisionOwnerId ? 'Division' : '',
+      ownerId: kpi.ownerId ?? '',
       divisionOwnerId: kpi.divisionOwnerId ?? '',
       baseline: kpi.baseline ?? null,
       minValue: kpi.minValue ?? null,
@@ -398,9 +425,23 @@ export class KpiPage {
     this.form.reset({
       scorecardId: '', kraId: '', name: '', description: '', unit: '', weight: 0,
       optimizationType: 'Maximize', dataSource: 'Manual', kpiType: 'Lagging',
-      isCumulative: false, divisionOwnerId: '', baseline: null, minValue: null, maxValue: null,
+      isCumulative: false, ownerType: '', ownerId: '', divisionOwnerId: '',
+      baseline: null, minValue: null, maxValue: null,
     });
     this.showForm.set(false);
+  }
+
+  /** The form must state an explicit owner type and the matching owner. */
+  private ownerSelection(): { ownerId?: string; divisionOwnerId?: string } | null {
+    const ownerType = this.form.controls.ownerType.value;
+    if (ownerType === 'User' && this.form.controls.ownerId.value) {
+      return { ownerId: this.form.controls.ownerId.value };
+    }
+    if (ownerType === 'Division' && this.form.controls.divisionOwnerId.value) {
+      return { divisionOwnerId: this.form.controls.divisionOwnerId.value };
+    }
+    this.notifications.error('Choose an owner type and an owner for this KPI.');
+    return null;
   }
 
   onSubmit(): void {
@@ -408,6 +449,10 @@ export class KpiPage {
       return;
     }
     if (!this.submitWeightAllowed()) {
+      return;
+    }
+    const ownership = this.ownerSelection();
+    if (!ownership) {
       return;
     }
 
@@ -424,7 +469,7 @@ export class KpiPage {
       dataSource: this.form.controls.dataSource.value,
       kpiType: this.form.controls.kpiType.value,
       isCumulative: this.form.controls.isCumulative.value,
-      divisionOwnerId: this.form.controls.divisionOwnerId.value || undefined,
+      ...ownership,
       baseline: this.form.controls.baseline.value ?? undefined,
       minValue: this.form.controls.minValue.value ?? undefined,
       maxValue: this.form.controls.maxValue.value ?? undefined,
@@ -452,6 +497,10 @@ export class KpiPage {
     if (!this.submitWeightAllowed()) {
       return;
     }
+    const ownership = this.ownerSelection();
+    if (!ownership) {
+      return;
+    }
 
     this.submitting.set(true);
 
@@ -467,7 +516,7 @@ export class KpiPage {
       baseline: this.form.controls.baseline.value ?? undefined,
       minValue: this.form.controls.minValue.value ?? undefined,
       maxValue: this.form.controls.maxValue.value ?? undefined,
-      divisionOwnerId: this.form.controls.divisionOwnerId.value || undefined,
+      ...ownership,
       isActive: this.rows().find((row) => row.id === id)?.isActive ?? true,
     };
 

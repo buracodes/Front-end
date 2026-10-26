@@ -89,6 +89,12 @@ export const routes: Routes = [
           import('./features/strategic-scorecard/target-config/target-config').then((m) => m.TargetConfigPage),
       },
       {
+        path: 'performance-monitoring',
+        canActivate: [permissionGuard('dashboard:view')],
+        loadComponent: () =>
+          import('./features/performance-monitoring/performance-monitoring').then((m) => m.PerformanceMonitoringPage),
+      },
+      {
         path: 'data-locking',
         loadComponent: () =>
           import('./features/data-locking/data-locking').then((m) => m.DataLockingPage),
@@ -115,10 +121,6 @@ export const routes: Routes = [
         path: 'initiatives/:id',
         loadComponent: () =>
           import('./features/initiative/initiative-detail').then((m) => m.InitiativeDetailPage),
-      },
-      {
-        path: 'actuals-data',
-        loadComponent: () => import('./features/actuals-data/actuals-data').then((m) => m.ActualsDataPage),
       },
       {
         path: 'reports',

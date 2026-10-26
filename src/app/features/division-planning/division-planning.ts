@@ -23,6 +23,7 @@ import { Scorecard, FiscalYear } from '../../core/model/scorecard.model';
 import { DivisionActualValueDto, EnterDivisionActualValueRequest } from '../division/division.model';
 import { fiscalMonthForDate, fiscalMonthLabel } from '../strategic-scorecard/workspace-state.service';
 import { ReportExportFormat, ReportFilter, ReportService, downloadBlob } from '../reports/report.service';
+import { toApiError } from '../../core/model/api-error';
 
 import { LucideDynamicIcon } from '@lucide/angular';
 
@@ -99,6 +100,8 @@ private readonly notifications = inject(NotificationService);
   readonly canEdit = computed(() => this.planStatus() === 'Draft');
 
   readonly finalizedAt = computed(() => this.plan()?.finalizedAtUtc ?? null);
+  /** A plan always belongs to one division; nothing can be saved until one is chosen. */
+  readonly hasDivision = computed(() => !!this.plan()?.divisionId);
   readonly hasDivisionGoals = computed(() => this.divisionGoals().length > 0);
   readonly hasDivisionKpis = computed(() => this.divisionGoals().some((g) => g.kpis.length > 0));
   readonly canFinalize = computed(() => this.canEdit() && this.hasDivisionGoals() && this.hasDivisionKpis());
@@ -127,7 +130,13 @@ private readonly notifications = inject(NotificationService);
     return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString();
   }
 
-  readonly divisionName = computed(() => this.plan()?.divisionName ?? '');
+  readonly divisionName = computed(() => {
+    const plan = this.plan();
+    if (!plan) return '';
+    if (plan.divisionName) return plan.divisionName;
+    // The plan payload can omit DivisionName (M3); fall back to the loaded division list.
+    return this.divisions().find((d) => d.id === plan.divisionId)?.name ?? '';
+  });
   readonly scorecardName = computed(() => this.plan()?.scorecardName ?? '');
 
   private readonly selectedFiscalYear = computed(() => {
@@ -158,9 +167,7 @@ private readonly notifications = inject(NotificationService);
     ];
   });
 
-  private readonly planContributionIds = () => new Set((this.plan()?.contributions ?? []).map((c) => c.goalId));
-
-  /** The currently staged corporate goals (persisted plus just-ticked) for the goal modal. */
+  /** The currently checked corporate goals, used by the division goal modal. */
   readonly selectedCorporateGoals = computed<CorporateGoalItem[]>(() => {
     const byId = new Map(this.corporateGoals().map((g) => [g.id, g]));
     return [...this.selectedIds()]
@@ -170,78 +177,82 @@ private readonly notifications = inject(NotificationService);
 
   readonly selectedIds = signal<Set<string>>(new Set());
   readonly selectedCorporateGoalCount = computed(() => this.selectedIds().size);
+  readonly selectionSaving = signal(false);
 
-  /** FR-902: a checkbox click only stages the choice; nothing is written until Save. */
-  toggleContribution(id: string, checked: boolean): void {
-    if (!this.canEdit()) return;
+  /**
+   * Ticking a corporate goal links or unlinks the division immediately — there is no
+   * separate Save/Revert step. The checkbox is updated optimistically and rolled back if
+   * the API call fails. Unlinking a goal that still owns division goals asks the user
+   * whether those goals and their KPIs should be deleted with it.
+   */
+  async toggleContribution(id: string, checked: boolean): Promise<void> {
+    if (!this.canEdit() || this.selectionSaving()) return;
+    const p = this.plan();
+    if (!p) return;
+    if (!p.divisionId) {
+      this.notifications.error('Select a division before linking corporate goals.');
+      return;
+    }
+
+    const persisted = new Set(p.contributions.map((c) => c.goalId));
     const next = new Set(this.selectedIds());
     if (checked) next.add(id);
     else next.delete(id);
+
+    const unchanged =
+      next.size === persisted.size && [...next].every((goalId) => persisted.has(goalId));
+    if (unchanged) return;
+
+    const previous = new Set(this.selectedIds());
     this.selectedIds.set(next);
-  }
 
-  readonly selectionDirty = computed(() => {
-    const current = this.planContributionIds();
-    const staged = this.selectedIds();
-    if (current.size !== staged.size) return true;
-    for (const id of current) if (!staged.has(id)) return true;
-    return false;
-  });
-
-  revertSelection(): void {
-    this.selectedIds.set(this.planContributionIds());
-  }
-
-  async saveSelection(): Promise<void> {
-    const p = this.plan();
-    if (!p || !this.canEdit()) return;
-
-    const current = new Set(p.contributions.map((c) => c.goalId));
-    const staged = this.selectedIds();
-    const removed = [...current].filter((id) => !staged.has(id));
-    const dependents = this.divisionGoals().filter((g) => g.parentGoalId && removed.includes(g.parentGoalId!));
-    const removedNames = removed
-      .map((id) => p.contributions.find((c) => c.goalId === id)?.name)
-      .filter((n): n is string => !!n);
-
+    const removed = [...persisted].filter((goalId) => !next.has(goalId));
     let cascadeRemoveDependents = false;
-    if (dependents.length > 0) {
-      const choice = await this.dialog.confirmChoice(
-        'Remove corporate goal?',
-        `“${removedNames.join('”, “')}” still has division goal${dependents.length > 1 ? 's' : ''}: ${dependents.map((g) => `“${g.name}”`).join(', ')}. Keep ${dependents.length > 1 ? 'them' : 'it'} and ${dependents.length > 1 ? 'their' : 'its'} KPIs in the plan, or delete ${dependents.length > 1 ? 'them' : 'it'} together with the corporate goal?`,
-        {
-          confirmText: 'Delete goals & KPIs',
-          extraText: 'Keep goals & KPIs',
-          cancelText: 'Cancel',
-          variant: 'danger',
-          extraVariant: 'info',
-        }
+    if (removed.length > 0) {
+      const dependents = this.divisionGoals().filter(
+        (g) => g.parentGoalId && removed.includes(g.parentGoalId)
       );
-      if (choice === 'cancel') {
-        this.revertSelection();
-        return;
+      if (dependents.length > 0) {
+        const removedNames = removed
+          .map((goalId) => p.contributions.find((c) => c.goalId === goalId)?.name)
+          .filter((n): n is string => !!n);
+        const choice = await this.dialog.confirmChoice(
+          'Remove corporate goal?',
+          `“${removedNames.join('”, “')}” still has division goal${dependents.length > 1 ? 's' : ''}: ${dependents.map((g) => `“${g.name}”`).join(', ')}. Keep ${dependents.length > 1 ? 'them' : 'it'} and ${dependents.length > 1 ? 'their' : 'its'} KPIs in the plan, or delete ${dependents.length > 1 ? 'them' : 'it'} together with the corporate goal?`,
+          {
+            confirmText: 'Delete goals & KPIs',
+            extraText: 'Keep goals & KPIs',
+            cancelText: 'Cancel',
+            variant: 'danger',
+            extraVariant: 'info',
+          }
+        );
+        if (choice === 'cancel') {
+          this.selectedIds.set(previous);
+          return;
+        }
+        cascadeRemoveDependents = choice === 'confirm';
       }
-      cascadeRemoveDependents = choice === 'confirm';
     }
 
-    this.crudSubmitting.set(true);
+    this.selectionSaving.set(true);
     this.divisionService
       .setContributions({
         divisionId: p.divisionId,
         scorecardId: p.scorecardId,
-        goalIds: [...staged],
+        goalIds: [...next],
         cascadeRemoveDependents,
       })
       .subscribe({
         next: () => {
-          this.crudSubmitting.set(false);
+          this.selectionSaving.set(false);
           this.notifications.success('Corporate goals updated.');
           this.reloadPlan();
         },
-        error: () => {
-          this.crudSubmitting.set(false);
-          this.revertSelection();
-          this.notifications.error('Could not save the linked corporate goals.');
+        error: (error) => {
+          this.selectionSaving.set(false);
+          this.selectedIds.set(previous);
+          this.notifications.error(toApiError(error).message);
         },
       });
   }
@@ -252,7 +263,7 @@ readonly divisionGoals = computed<DivisionGoalDto[]>(() =>
     (this.plan()?.goals ?? []).map((g) => ({
       ...g,
       status: normalizeStatus(g.status),
-      kpis: g.kpis.map((k) => ({ ...k, status: normalizeStatus(k.status) })),
+      kpis: (g.kpis ?? []).map((k) => ({ ...k, status: normalizeStatus(k.status) })),
     }))
   );
 
@@ -423,6 +434,27 @@ readonly goalForm = new FormGroup({
     return id ? this.divisionGoals().find((g) => g.id === id) ?? null : null;
   });
 
+  /**
+   * Corporate goals offered by the Add/Edit division goal modal. Selected corporate goals
+   * only; when editing a legacy goal whose linkage was removed, its own parent stays
+   * visible so the goal can be re-linked without losing context.
+   */
+  readonly goalParentOptions = computed<CorporateGoalItem[]>(() => {
+    const selected = this.selectedCorporateGoals();
+    const edited = this.editedGoal();
+    if (edited?.parentGoalId && !selected.some((g) => g.id === edited.parentGoalId)) {
+      return [
+        {
+          id: edited.parentGoalId,
+          name: edited.parentGoalName || 'Corporate goal (current)',
+          contributesTo: true,
+        },
+        ...selected,
+      ];
+    }
+    return selected;
+  });
+
   goalWeightRemaining(): number {
     const others = this.divisionGoals()
       .filter((g) => g.id !== this.goalEditingId())
@@ -430,15 +462,34 @@ readonly goalForm = new FormGroup({
     return round1(100 - others - Number(this.goalForm.value.weight ?? 0));
   }
 
+  /** Unallocated weight across division goals, used as the default for a new goal. */
+  private remainingDivisionGoalWeight(): number {
+    const used = this.divisionGoals().reduce((sum, g) => sum + (g.weight ?? 0), 0);
+    return Math.max(0, round1(100 - used));
+  }
+
 openCreateGoal(parentGoalId?: string): void {
     if (!this.canEdit()) return;
+    if (!this.plan()?.divisionId) {
+      this.notifications.error('Select a division before adding a division goal.');
+      return;
+    }
+    if (this.selectionSaving()) {
+      this.notifications.error('The corporate goal selection is still saving. Try again in a moment.');
+      return;
+    }
+    const selected = this.selectedCorporateGoals();
+    if (selected.length === 0) {
+      this.notifications.error('Tick at least one corporate goal before adding a division goal.');
+      return;
+    }
     this.goalEditingId.set(null);
     this.goalForm.reset({
       name: '',
       description: '',
       contributionDescription: '',
-      parentGoalId: parentGoalId ?? this.plan()?.contributions[0]?.goalId ?? this.selectedCorporateGoals()[0]?.id ?? '',
-      weight: 0,
+      parentGoalId: parentGoalId ?? selected[0].id,
+      weight: this.remainingDivisionGoalWeight(),
     });
     this.goalModalOpen.set(true);
   }
@@ -450,7 +501,7 @@ openCreateGoal(parentGoalId?: string): void {
       name: goal.name,
       description: goal.description ?? '',
       contributionDescription: goal.contributionDescription ?? '',
-      parentGoalId: goal.parentGoalId ?? this.plan()?.contributions[0]?.goalId ?? this.selectedCorporateGoals()[0]?.id ?? '',
+      parentGoalId: goal.parentGoalId ?? this.selectedCorporateGoals()[0]?.id ?? '',
       weight: goal.weight,
     });
     this.goalModalOpen.set(true);
@@ -462,7 +513,7 @@ openCreateGoal(parentGoalId?: string): void {
 
 submitGoal(): void {
     const f = this.goalForm;
-    if (f.invalid || this.crudSubmitting()) return;
+    if (f.invalid || this.crudSubmitting() || this.selectionSaving()) return;
     // FR-905: plan validation blocks any sum that exceeds 100%.
     if (this.goalWeightRemaining() < 0) {
       this.notifications.error('Division goal weights cannot exceed 100%.');
@@ -470,71 +521,46 @@ submitGoal(): void {
     }
     const p = this.plan();
     if (!p) return;
+    if (!p.divisionId) {
+      this.notifications.error('Select a division before adding a division goal.');
+      return;
+    }
+
+    const parentGoalId = f.controls.parentGoalId.value;
+    // The corporate goal must already be linked (checking a box persists immediately).
+    if (!p.contributions.some((c) => c.goalId === parentGoalId)) {
+      this.notifications.error(
+        'The selected corporate goal is not linked to this plan yet. Tick it above and wait for the update, then try again.'
+      );
+      return;
+    }
 
     const payload = {
       name: f.controls.name.value.trim(),
       description: f.controls.description.value.trim() || undefined,
       contributionDescription: f.controls.contributionDescription.value.trim() || undefined,
-      parentGoalId: f.controls.parentGoalId.value,
+      parentGoalId,
       weight: Number(f.controls.weight.value),
     };
 
-    const contributedIds = new Set(p.contributions.map((c) => c.goalId));
-    const stagedIds = this.selectedIds();
-    const removed = [...contributedIds].filter((id) => !stagedIds.has(id));
-    const parentIsContributed = contributedIds.has(f.controls.parentGoalId.value);
-
-    // The goal modal only lists ticked corporate goals, which may still be staged
-    // (not yet saved). The backend only allows goals under persisted contributions,
-    // so flush a purely additive staged selection before creating the first goal
-    // under it; refuse when a removal is also pending to avoid a silent unlink.
-    const needsSelectionPersist = !this.goalEditingId() && !parentIsContributed && removed.length === 0;
-    if (!parentIsContributed && !needsSelectionPersist) {
-      this.notifications.error('Save your linked corporate goals before adding a division goal.');
-      return;
-    }
-
     this.crudSubmitting.set(true);
+    const call = this.goalEditingId()
+      ? this.divisionService.updateGoal(this.goalEditingId()!, payload)
+      : this.divisionService.createGoal({ ...payload, divisionId: p.divisionId, scorecardId: p.scorecardId });
 
-    const persistGoal = (): void => {
-      const call = this.goalEditingId()
-        ? this.divisionService.updateGoal(this.goalEditingId()!, payload)
-        : this.divisionService.createGoal({ ...payload, divisionId: p.divisionId, scorecardId: p.scorecardId });
-
-      call.subscribe({
-        next: () => {
-          this.crudSubmitting.set(false);
-          this.goalModalOpen.set(false);
-          this.notifications.success(this.goalEditingId() ? 'Division goal updated.' : 'Division goal added.');
-          this.reloadPlan();
-        },
-        error: () => {
-          this.crudSubmitting.set(false);
-          this.reloadPlan();
-          this.notifications.error('Could not save the division goal.');
-        },
-      });
-    };
-
-    if (needsSelectionPersist) {
-      this.divisionService
-        .setContributions({
-          divisionId: p.divisionId,
-          scorecardId: p.scorecardId,
-          goalIds: [...stagedIds],
-          cascadeRemoveDependents: false,
-        })
-        .subscribe({
-          next: persistGoal,
-          error: () => {
-            this.crudSubmitting.set(false);
-            this.notifications.error('Could not save the linked corporate goals.');
-          },
-        });
-      return;
-    }
-
-    persistGoal();
+    call.subscribe({
+      next: () => {
+        this.crudSubmitting.set(false);
+        this.goalModalOpen.set(false);
+        this.notifications.success(this.goalEditingId() ? 'Division goal updated.' : 'Division goal added.');
+        this.reloadPlan();
+      },
+      error: (error) => {
+        this.crudSubmitting.set(false);
+        this.reloadPlan();
+        this.notifications.error(toApiError(error).message);
+      },
+    });
   }
 
   async deleteGoal(goal: DivisionGoalDto): Promise<void> {
@@ -796,6 +822,12 @@ submitGoal(): void {
     return round1(100 - others - Number(this.kpiForm.value.weight ?? 0));
   }
 
+  /** Unallocated KPI weight inside a goal, used as the default for a new KPI. */
+  private remainingKpiWeight(goal: DivisionGoalDto): number {
+    const used = goal.kpis.reduce((sum, k) => sum + (k.weight ?? 0), 0);
+    return Math.max(0, round1(100 - used));
+  }
+
   openCreateKpi(goal: DivisionGoalDto): void {
     if (!this.canEdit()) return;
     this.kpiEditingId.set(null);
@@ -804,8 +836,10 @@ submitGoal(): void {
       name: '',
       description: '',
       unit: '',
-      divisionOwnerId: this.plan()?.divisionId ?? null,
-      weight: 0,
+      // The KPI owner defaults to the plan's division; fall back to the first loaded
+      // division so the form can never open with an unresolvable required owner.
+      divisionOwnerId: this.plan()?.divisionId || this.divisions()[0]?.id || null,
+      weight: this.remainingKpiWeight(goal),
       optimizationType: 'Maximize',
       kpiType: 'Lagging',
       dataSource: 'Manual',
@@ -897,9 +931,9 @@ submitKpi(): void {
         this.notifications.success(this.kpiEditingId() ? 'Division KPI updated.' : 'Division KPI added.');
         this.reloadPlan();
       },
-      error: () => {
+      error: (error) => {
         this.crudSubmitting.set(false);
-        this.notifications.error('Could not save the division KPI.');
+        this.notifications.error(toApiError(error).message);
       },
     });
   }
@@ -1139,7 +1173,14 @@ submitKpi(): void {
 
   readonly divisions = signal<Division[]>([]);
   readonly divisionFilter = signal<string>('');
-  readonly scorecards = signal<Scorecard[]>([]);
+  /** Every scorecard, kept private: the picker only offers corporate scorecards. */
+  private readonly allScorecards = signal<Scorecard[]>([]);
+  /** Division plans always align to the corporate scorecard, so the picker is Corporate-only. */
+  readonly scorecards = computed<Scorecard[]>(() =>
+    this.allScorecards()
+      .filter((s) => s.scope === 'Corporate')
+      .sort((a, b) => a.name.localeCompare(b.name))
+  );
   readonly scorecardFilter = signal<string>('');
 
   onDivisionChange(): void {
@@ -1151,6 +1192,35 @@ submitKpi(): void {
     const scorecardId = this.scorecardFilter();
     if (!scorecardId) return;
     this.router.navigate(['/division-planning', scorecardId]);
+  }
+
+  /**
+   * Division plans are built against a corporate scorecard. A route that points at a
+   * Division-scope scorecard (the scorecard list still links those here) is redirected to
+   * the corporate scorecard of the same fiscal year, or the first corporate scorecard.
+   * Returns false when a redirect was issued so the caller can skip loading the old plan.
+   */
+  private ensureCorporateScorecard(routeScorecardId: string): boolean {
+    const all = this.allScorecards();
+    // Scorecards have not arrived yet; the loader re-runs this check once they do.
+    if (all.length === 0) return true;
+
+    const routeScorecard = all.find((s) => s.id === routeScorecardId);
+    if (routeScorecard?.scope === 'Corporate') return true;
+
+    const corporate = this.scorecards();
+    if (corporate.length === 0) return true;
+
+    const sameFiscalYear = routeScorecard
+      ? corporate.find((s) => s.fiscalYearId === routeScorecard.fiscalYearId)
+      : undefined;
+    const target = sameFiscalYear ?? corporate[0];
+    if (target.id === routeScorecardId) return true;
+
+    this.loading.set(true);
+    this.scorecardFilter.set(target.id);
+    void this.router.navigate(['/division-planning', target.id], { replaceUrl: true });
+    return false;
   }
 
   private syncFilters(plan: DivisionPlanDto): void {
@@ -1171,24 +1241,37 @@ submitKpi(): void {
     this.divisionService.getAll().subscribe({
       next: (divisions) => {
         const ownId = this.userStore.divisionId();
-        const scoped = ownId ? divisions.filter((d) => d.id === ownId) : divisions;
+        const scoped = ownId
+          ? divisions.filter((d) => d.id === ownId)
+          : [...divisions].sort((a, b) => a.name.localeCompare(b.name));
         this.divisions.set(scoped);
-        if (ownId) {
-          this.divisionFilter.set(ownId);
+
+        // A plan always belongs to a division. Default to the account's own division, or to
+        // the first division for corporate users, so linking goals never posts an empty
+        // DivisionId (the API rejects that with "Division is required.").
+        const preferred = ownId || this.divisionFilter() || scoped[0]?.id || '';
+        if (preferred && preferred !== this.divisionFilter()) {
+          this.divisionFilter.set(preferred);
+          if (this.scorecardId()) this.reloadPlan();
         }
       },
     });
     this.scorecardService.getAll().subscribe({
-      next: (scorecards) => this.scorecards.set(scorecards),
+      next: (scorecards) => {
+        this.allScorecards.set(scorecards);
+        const current = this.scorecardId();
+        if (current) this.ensureCorporateScorecard(current);
+      },
     });
     this.route.paramMap.subscribe((params) => {
       const id = params.get('scorecardId') ?? '';
       if (!id) {
         this.loading.set(false);
-        this.loadError.set('No division scorecard was selected.');
+        this.loadError.set('No corporate scorecard was selected.');
         return;
       }
       this.scorecardId.set(id);
+      if (!this.ensureCorporateScorecard(id)) return;
       this.reloadPlan();
     });
   }
@@ -1196,10 +1279,11 @@ submitKpi(): void {
   private reloadPlan(): void {
     if (!this.scorecardId()) {
       this.loading.set(false);
-      this.loadError.set('No division scorecard was selected.');
+      this.loadError.set('No corporate scorecard was selected.');
       return;
     }
     this.loading.set(true);
+    this.loadError.set(null);
     const ownDivision = this.userStore.isDivisionAccount() ? this.userStore.divisionId() : null;
     const divisionId = this.divisionFilter() || ownDivision || undefined;
     this.divisionService
@@ -1212,11 +1296,16 @@ submitKpi(): void {
           this.syncFilters(plan);
           this.prepareEntry();
         },
-        error: () => {
+        error: (error) => {
           this.loading.set(false);
-          this.loadError.set('Could not load the division plan.');
+          this.loadError.set(toApiError(error).message);
         },
       });
+  }
+
+  /** Re-runs the plan request after a failed load (or after the API comes back up). */
+  retryLoad(): void {
+    this.reloadPlan();
   }
 
 statusLabel(status?: RagStatus): string {

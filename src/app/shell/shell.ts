@@ -149,31 +149,31 @@ export class ShellComponent {
       permission: 'initiatives:view',
     },
     {
-      label: 'Monitoring & Reports',
+      label: 'Performance Monitoring',
+      route: '/performance-monitoring',
+      icon: 'activity',
+      permission: 'dashboard:view',
+    },
+    {
+      label: 'Reports',
       route: '/reports',
       icon: 'file-text',
       permission: 'reports:view',
     },
+    // {
+    //   label: 'Data Management',
+    //   route: '/data-management',
+    //   icon: 'files',
+    //   permission: 'data:upload',
+    // },
+    // {
+    //   label: 'Divisions',
+    //   route: '/divisions',
+    //   icon: 'layout-grid',
+    //   permission: 'divisions:view',
+    // },
     {
-      label: 'Actuals & Data',
-      route: '/actuals-data',
-      icon: 'clipboard-list',
-      permission: 'actuals:view',
-    },
-    {
-      label: 'Data Management',
-      route: '/data-management',
-      icon: 'files',
-      permission: 'data:upload',
-    },
-    {
-      label: 'Divisions',
-      route: '/divisions',
-      icon: 'layout-grid',
-      permission: 'divisions:view',
-    },
-    {
-      label: 'Administration',
+      label: 'Role Management',
       icon: 'shield-check',
       isGroup: true,
       children: [

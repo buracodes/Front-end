@@ -29,6 +29,7 @@ export const ApiEndpoint = {
   KpiActual: 'kpiactual',
   KpiTarget: 'kpitarget',
   PeriodLock: 'periodlock',
+  PerformanceMonitoring: 'performancemonitoring',
   Reports: 'reports',
   ResetDivisionPassword: 'user/divisions/reset-password',
   AccessControl: {

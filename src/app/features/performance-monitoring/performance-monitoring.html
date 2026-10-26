@@ -1,0 +1,210 @@
+<div class="pm-page">
+  <header class="pm-header">
+    <div>
+      <h1 class="pm-title">Performance Monitoring</h1>
+      <p class="pm-subtitle">Centralized view of corporate and division performance</p>
+    </div>
+    <button type="button" class="pm-refresh" (click)="refresh()" [disabled]="loading()">
+      <svg lucideIcon="refresh-cw" size="16"></svg>
+      <span>{{ loading() ? 'Refreshing...' : 'Refresh' }}</span>
+    </button>
+  </header>
+
+  <section class="pm-filters" aria-label="Performance filters">
+    <div class="pm-filter">
+      <label for="pm-fiscal-year">Fiscal Year</label>
+      <select id="pm-fiscal-year" [(ngModel)]="fiscalYearId" (change)="onFiscalYearChange()">
+        <option value="">All</option>
+        @for (fy of fiscalYears(); track fy.id) {
+          <option [value]="fy.id">{{ fy.label }}</option>
+        }
+      </select>
+    </div>
+
+    @if (canViewCorporate()) {
+      <div class="pm-filter">
+        <label for="pm-scope">Scorecard Scope</label>
+        <select id="pm-scope" [ngModel]="scopeMode()" (ngModelChange)="onScopeModeChange($event)">
+          <option value="all">All Authorized</option>
+          <option value="corporate">Corporate</option>
+          <option value="division">Division</option>
+        </select>
+      </div>
+    }
+
+    <div class="pm-filter">
+      <label for="pm-scorecard">Scorecard</label>
+      <select id="pm-scorecard" [(ngModel)]="scorecardId" (change)="onFilterChange()">
+        <option value="">All</option>
+        @for (sc of selectableScorecards(); track sc.id) {
+          <option [value]="sc.id">{{ sc.name }}</option>
+        }
+      </select>
+    </div>
+
+    @if (canPickDivision()) {
+      <div class="pm-filter">
+        <label for="pm-division">Division</label>
+        <select id="pm-division" [(ngModel)]="divisionId" (change)="onFilterChange()">
+          @for (d of divisions(); track d.id) {
+            <option [value]="d.id">{{ d.name }}</option>
+          }
+        </select>
+      </div>
+    }
+
+    <div class="pm-filter">
+      <label for="pm-period">Period</label>
+      <select id="pm-period" [(ngModel)]="periodType" (change)="onFilterChange()">
+        <option value="Ytd">YTD</option>
+        <option value="Quarter">Quarter</option>
+        <option value="Month">Month</option>
+        <option value="Year">Year</option>
+      </select>
+    </div>
+  </section>
+
+  @if (loading() && !data()) {
+    <div class="pm-empty" role="status">Loading performance data...</div>
+  } @else if (data(); as d) {
+    @if (!hasData()) {
+      <div class="pm-empty" role="status">
+        No scorecards or performance records are available for the selected filters.
+      </div>
+    } @else {
+      <section class="pm-summary" aria-label="Performance summary">
+        <div class="pm-card">
+          <div class="pm-card-label">Scope</div>
+          <div class="pm-card-value">{{ d.scope }}</div>
+          <div class="pm-card-sub">{{ d.divisionName || d.scorecardName || '-' }}</div>
+        </div>
+        <div class="pm-card">
+          <div class="pm-card-label">Overall Score</div>
+          <div [class]="'pm-card-value ' + ragClass(d.rag)">
+            {{ d.overallScore !== null && d.overallScore !== undefined ? (d.overallScore | number: '1.0-2') : '-' }}
+          </div>
+          <div class="pm-card-sub">{{ d.rag || 'NoData' }}</div>
+        </div>
+        <div class="pm-card">
+          <div class="pm-card-label">Scorecards</div>
+          <div class="pm-card-value">{{ d.scorecardCount }}</div>
+          <div class="pm-card-sub">{{ d.fiscalYearName || '-' }}</div>
+        </div>
+        <div class="pm-card">
+          <div class="pm-card-label">Goals Monitored</div>
+          <div class="pm-card-value">{{ d.goalsCount }}</div>
+        </div>
+        <div class="pm-card">
+          <div class="pm-card-label">KPIs Monitored</div>
+          <div class="pm-card-value">{{ d.kpiCount }}</div>
+        </div>
+        <div class="pm-card">
+          <div class="pm-card-label">Green / On track</div>
+          <div class="pm-card-value rag-green">{{ d.greenCount }}</div>
+        </div>
+        <div class="pm-card">
+          <div class="pm-card-label">Amber / At risk</div>
+          <div class="pm-card-value rag-amber">{{ d.amberCount }}</div>
+        </div>
+        <div class="pm-card">
+          <div class="pm-card-label">Red / Off track</div>
+          <div class="pm-card-value rag-red">{{ d.redCount }}</div>
+        </div>
+        <div class="pm-card">
+          <div class="pm-card-label">No data</div>
+          <div class="pm-card-value rag-gray">{{ d.noDataCount }}</div>
+        </div>
+      </section>
+
+      @if (isCorporate() && d.divisions.length) {
+        <section class="pm-section" aria-label="Division comparison">
+          <h2 class="pm-section-title">Division Comparison</h2>
+          <div class="pm-table-wrap">
+            <table class="pm-table">
+              <thead>
+                <tr>
+                  <th>Division</th>
+                  <th>Plan</th>
+                  <th>Goals</th>
+                  <th>KPIs</th>
+                  <th>Score</th>
+                  <th>RAG</th>
+                  <th>On track</th>
+                  <th>At risk</th>
+                  <th>Off track</th>
+                  <th>No data</th>
+                  <th><span class="pm-visually-hidden">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (div of d.divisions; track div.divisionId) {
+                  <tr>
+                    <td>{{ div.divisionName }}</td>
+                    <td>{{ div.planStatus || '-' }}</td>
+                    <td>{{ div.goalsCount }}</td>
+                    <td>{{ div.kpiCount }}</td>
+                    <td [class]="ragClass(div.rag)">
+                      {{ div.overallScore !== null && div.overallScore !== undefined ? (div.overallScore | number: '1.0-2') : '-' }}
+                    </td>
+                    <td>{{ div.rag || 'NoData' }}</td>
+                    <td class="rag-green">{{ div.greenCount }}</td>
+                    <td class="rag-amber">{{ div.amberCount }}</td>
+                    <td class="rag-red">{{ div.redCount }}</td>
+                    <td class="rag-gray">{{ div.noDataCount }}</td>
+                    <td>
+                      <button type="button" class="pm-link" (click)="drillDown(div.divisionId)">
+                        View
+                      </button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </section>
+      }
+
+      <section class="pm-section" aria-label="KPI performance">
+        <h2 class="pm-section-title">KPI Performance</h2>
+        @if (d.kpis.length) {
+          <div class="pm-table-wrap">
+            <table class="pm-table">
+              <thead>
+                <tr>
+                  <th>KPI</th>
+                  <th>Owner</th>
+                  <th>Goal / KRA</th>
+                  <th>Unit</th>
+                  <th>Weight</th>
+                  <th>Target</th>
+                  <th>Actual</th>
+                  <th>Score</th>
+                  <th>RAG</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (k of d.kpis; track k.kpiId) {
+                  <tr>
+                    <td>{{ k.kpiName }}</td>
+                    <td>{{ k.ownerName || k.divisionOwnerName || '-' }}</td>
+                    <td>{{ k.goalName || k.kraName || '-' }}</td>
+                    <td>{{ k.unit || '-' }}</td>
+                    <td>{{ k.weight | number: '1.0-2' }}%</td>
+                    <td>{{ k.target !== null && k.target !== undefined ? (k.target | number: '1.0-2') : '-' }}</td>
+                    <td>{{ k.actual !== null && k.actual !== undefined ? (k.actual | number: '1.0-2') : '-' }}</td>
+                    <td [class]="ragClass(k.rag)">
+                      {{ k.score !== null && k.score !== undefined ? (k.score | number: '1.0-2') : '-' }}
+                    </td>
+                    <td>{{ k.rag || 'NoData' }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        } @else {
+          <div class="pm-empty">No KPI data available for the selected filters.</div>
+        }
+      </section>
+    }
+  }
+</div>

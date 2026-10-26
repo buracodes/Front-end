@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
+import { Router } from '@angular/router';
+import { of, throwError } from 'rxjs';
 import { ActivatedRoute } from '@angular/router';
 import { DivisionPlanningPage } from './division-planning';
 import { DivisionService } from '../division/division.service';
@@ -10,7 +10,7 @@ import { NotificationService } from '../../core/service/notification.service';
 import { ConfirmDialogService } from '../../shared/service/confirm-dialog.service';
 import { ReportService } from '../reports/report.service';
 import { DivisionPlanDto, DivisionGoalDto } from '../division/division.model';
-import { FiscalYear } from '../../core/model/scorecard.model';
+import { FiscalYear, Scorecard } from '../../core/model/scorecard.model';
 
 const FY: FiscalYear = {
   id: 'fy-1',
@@ -92,6 +92,22 @@ const paramMap = {
   keys: () => ['scorecardId'],
 };
 
+const CORPORATE_SCORECARD: Scorecard = {
+  id: 'sc-1',
+  fiscalYearId: 'fy-1',
+  name: 'ECX Corporate Strategy',
+  scope: 'Corporate',
+  scorecardStatus: 'Active',
+};
+
+const DIVISION_SCORECARD: Scorecard = {
+  id: 'sc-2',
+  fiscalYearId: 'fy-1',
+  name: 'ECX Division Scorecard',
+  scope: 'Division',
+  scorecardStatus: 'Active',
+};
+
 describe('DivisionPlanningPage', () => {
   let divisionService: {
     getAll: ReturnType<typeof vi.fn>;
@@ -104,13 +120,17 @@ describe('DivisionPlanningPage', () => {
   let dialog: { confirm: ReturnType<typeof vi.fn>; confirmChoice: ReturnType<typeof vi.fn> };
   let reportService: { export: ReturnType<typeof vi.fn> };
   let notifications: { success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
+  let router: { navigate: ReturnType<typeof vi.fn> };
 
-  const start = (): DivisionPlanningPage => {
+  const start = (scorecards: Scorecard[] = []): DivisionPlanningPage => {
     TestBed.configureTestingModule({
       providers: [
-        provideRouter([]),
+        { provide: Router, useValue: router },
         { provide: ActivatedRoute, useValue: { paramMap: of(paramMap) } },
-        { provide: ScorecardService, useValue: { getFiscalYears: () => of([FY]), getAll: () => of([]) } },
+        {
+          provide: ScorecardService,
+          useValue: { getFiscalYears: () => of([FY]), getAll: () => of(scorecards) },
+        },
         { provide: DivisionService, useValue: divisionService },
         { provide: KPIService, useValue: { getLockStatus: () => of({ periods: [] }) } },
         { provide: NotificationService, useValue: notifications },
@@ -142,6 +162,7 @@ describe('DivisionPlanningPage', () => {
     };
     reportService = { export: vi.fn(() => of(new Blob(['x']))) };
     notifications = { success: vi.fn(), error: vi.fn() };
+    router = { navigate: vi.fn(() => Promise.resolve(true)) };
   });
 
   afterEach(() => {
@@ -153,6 +174,34 @@ describe('DivisionPlanningPage', () => {
 
     expect(page.plan()?.divisionName).toBe('Retail Operations');
     expect(divisionService.getPlanContextByScorecard).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers only corporate scorecards in the scorecard picker', () => {
+    const page = start([DIVISION_SCORECARD, CORPORATE_SCORECARD]);
+
+    expect(page.scorecards().map((s) => s.id)).toEqual(['sc-1']);
+    expect(divisionService.getPlanContextByScorecard).toHaveBeenCalledTimes(1);
+  });
+
+  it('redirects a division-scope route scorecard to the corporate scorecard of the same fiscal year', () => {
+    start([
+      { ...CORPORATE_SCORECARD, scope: 'Division', name: 'ECX Division Scorecard' },
+      { ...CORPORATE_SCORECARD, id: 'sc-8', name: 'Corporate 2026' },
+      { ...CORPORATE_SCORECARD, id: 'sc-9', fiscalYearId: 'fy-9', name: 'Corporate 2027' },
+    ]);
+
+    expect(router.navigate).toHaveBeenCalledWith(['/division-planning', 'sc-8'], { replaceUrl: true });
+    expect(divisionService.getPlanContextByScorecard).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the first corporate scorecard when none shares the fiscal year', () => {
+    start([
+      { ...CORPORATE_SCORECARD, scope: 'Division', name: 'ECX Division Scorecard' },
+      { ...CORPORATE_SCORECARD, id: 'sc-9', fiscalYearId: 'fy-9', name: 'Corporate 2027' },
+    ]);
+
+    expect(router.navigate).toHaveBeenCalledWith(['/division-planning', 'sc-9'], { replaceUrl: true });
+    expect(divisionService.getPlanContextByScorecard).not.toHaveBeenCalled();
   });
 
   it('treats the API camelCase status "draft" as editable', () => {
@@ -176,66 +225,132 @@ describe('DivisionPlanningPage', () => {
     expect(page.canEdit()).toBe(false);
   });
 
-  it('seeds the staged selection from persisted contributions on load', () => {
+  it('seeds the linked-goal selection from persisted contributions on load', () => {
     const page = start();
 
     expect([...page.selectedIds()].sort()).toEqual(['g1', 'g3']);
     expect(page.selectedCorporateGoalCount()).toBe(2);
-    expect(page.selectionDirty()).toBe(false);
+    expect(page.selectionSaving()).toBe(false);
   });
 
-  it('seeds the checklist with persisted contributed state and lets checkboxes stage choices', () => {
+  it('lists every corporate goal with its persisted contributed state', () => {
     const page = start();
 
     expect(page.corporateGoals().map((g) => g.id)).toEqual(['g1', 'g3', 'g2']);
     expect(page.corporateGoals()[0]).toMatchObject({ name: 'Grow revenue', contributesTo: true });
     expect(page.corporateGoals()[2]).toMatchObject({ name: 'Expand ops', contributesTo: false });
-
-    page.toggleContribution('g2', true);
-    page.toggleContribution('g1', false);
-
-    expect(page.selectedIds().has('g2')).toBe(true);
-    expect(page.selectedIds().has('g1')).toBe(false);
-    expect(page.selectionDirty()).toBe(true);
   });
 
-  it('surfaces the staged corporate goals for the goal-modal picker', () => {
+  it('persists a ticked corporate goal immediately without a save step', async () => {
+    const page = start();
+
+    await page.toggleContribution('g2', true);
+
+    const sent = divisionService.setContributions.mock.calls[0][0];
+    expect(sent).toMatchObject({
+      divisionId: 'div-1',
+      scorecardId: 'sc-1',
+      cascadeRemoveDependents: false,
+    });
+    expect([...sent.goalIds].sort()).toEqual(['g1', 'g2', 'g3']);
+    expect(notifications.success).toHaveBeenCalled();
+    // The page reloads the plan so the checklist reflects what the backend stored.
+    expect(divisionService.getPlanContextByScorecard).toHaveBeenCalledTimes(2);
+  });
+
+  it('unticks a corporate goal that owns no division goals without asking', async () => {
+    const page = start();
+
+    await page.toggleContribution('g3', false);
+
+    expect(dialog.confirmChoice).not.toHaveBeenCalled();
+    expect(divisionService.setContributions).toHaveBeenCalledWith({
+      divisionId: 'div-1',
+      scorecardId: 'sc-1',
+      goalIds: ['g1'],
+      cascadeRemoveDependents: false,
+    });
+  });
+
+  it('rolls a failed auto-save back to the persisted selection', async () => {
+    const page = start();
+    divisionService.setContributions.mockReturnValueOnce(throwError(() => new Error('boom')));
+
+    await page.toggleContribution('g2', true);
+
+    expect(notifications.error).toHaveBeenCalled();
+    expect([...page.selectedIds()].sort()).toEqual(['g1', 'g3']);
+    expect(page.selectionSaving()).toBe(false);
+  });
+
+  it('refuses to link a corporate goal before a division is selected', async () => {
+    const page = start();
+    (page as unknown as { plan: { set: (p: DivisionPlanDto | null) => void } }).plan.set({
+      ...PLAN,
+      divisionId: '',
+      divisionName: '',
+    });
+
+    expect(page.hasDivision()).toBe(false);
+    await page.toggleContribution('g2', true);
+
+    expect(divisionService.setContributions).not.toHaveBeenCalled();
+    expect(notifications.error).toHaveBeenCalledWith('Select a division before linking corporate goals.');
+  });
+
+  it('defaults the division filter to the first division so goals can be linked', () => {
+    divisionService.getAll.mockReturnValue(
+      of([
+        { id: 'div-2', name: 'Beta Division' },
+        { id: 'div-1', name: 'Alpha Division' },
+      ])
+    );
+
+    const page = start();
+
+    expect(page.divisions().map((d) => d.id)).toEqual(['div-1', 'div-2']);
+    expect(page.divisionFilter()).toBe('div-1');
+    expect(divisionService.getPlanContextByScorecard).toHaveBeenCalledWith(
+      'sc-1',
+      expect.anything(),
+      'div-1'
+    );
+  });
+
+  it('surfaces the currently linked corporate goals for the goal-modal picker', () => {
     const page = start();
 
     expect(page.selectedCorporateGoals().map((g) => g.id)).toEqual(['g1', 'g3']);
-
-    page.toggleContribution('g2', true);
-    expect(page.selectedCorporateGoals().map((g) => g.id)).toEqual(['g1', 'g3', 'g2']);
+    expect(page.goalParentOptions().map((g) => g.id)).toEqual(['g1', 'g3']);
   });
 
-  it('creates a division goal under a ticked corporate goal even before saving the selection', async () => {
+  it('does not open the goal modal when no corporate goal is linked', () => {
     const page = start();
     (page as unknown as { plan: { set: (p: DivisionPlanDto | null) => void } }).plan.set({
       ...PLAN,
       contributions: [],
       goals: [],
     });
-    page.revertSelection();
-    page.toggleContribution('g2', true);
+    (page as unknown as { selectedIds: { set: (s: Set<string>) => void } }).selectedIds.set(new Set());
 
     page.openCreateGoal();
-    expect(page.goalForm.controls.parentGoalId.value).toBe('g2');
 
-    page.goalForm.patchValue({ name: 'New division goal', weight: 40 });
-    page.submitGoal();
+    expect(page.goalModalOpen()).toBe(false);
+    expect(notifications.error).toHaveBeenCalled();
+  });
 
-    expect(divisionService.setContributions).toHaveBeenCalledWith(
-      expect.objectContaining({ goalIds: ['g2'], cascadeRemoveDependents: false })
-    );
-    expect(divisionService.createGoal).toHaveBeenCalledWith(
-      expect.objectContaining({
-        name: 'New division goal',
-        parentGoalId: 'g2',
-        weight: 40,
-        divisionId: 'div-1',
-        scorecardId: 'sc-1',
-      })
-    );
+  it('defaults a new division goal to the first linked goal and the remaining weight', () => {
+    const page = start();
+    (page as unknown as { plan: { set: (p: DivisionPlanDto | null) => void } }).plan.set({
+      ...PLAN,
+      goals: [{ ...PLAN.goals[0], weight: 60 }],
+    });
+
+    page.openCreateGoal();
+
+    expect(page.goalModalOpen()).toBe(true);
+    expect(page.goalForm.controls.parentGoalId.value).toBe('g1');
+    expect(page.goalForm.controls.weight.value).toBe(40);
   });
 
   it('creates a goal under an already-saved contribution without flushing the selection', () => {
@@ -255,18 +370,19 @@ describe('DivisionPlanningPage', () => {
     );
   });
 
-  it('asks the user to save the selection when creating a goal also implies a removal', () => {
+  it('refuses to create a goal whose corporate goal is not linked yet', () => {
     const page = start();
     (page as unknown as { plan: { set: (p: DivisionPlanDto | null) => void } }).plan.set({
       ...PLAN,
-      contributions: [{ goalId: 'g1', name: 'Grow revenue', weight: 100 }],
+      contributions: [],
       goals: [],
     });
-    page.revertSelection();
-    page.toggleContribution('g1', false);
+    (page as unknown as { selectedIds: { set: (s: Set<string>) => void } }).selectedIds.set(new Set(['g2']));
 
     page.openCreateGoal();
-    page.goalForm.patchValue({ name: 'New goal', parentGoalId: 'g2', weight: 40 });
+    expect(page.goalForm.controls.parentGoalId.value).toBe('g2');
+
+    page.goalForm.patchValue({ name: 'New goal', weight: 40 });
     page.submitGoal();
 
     expect(notifications.error).toHaveBeenCalled();
@@ -388,14 +504,6 @@ describe('DivisionPlanningPage', () => {
     });
   });
 
-  it('stages selection and only saves once confirmed', () => {
-    const page = start();
-
-    page.toggleContribution('g3', false);
-    expect(page.selectionDirty()).toBe(true);
-    expect(divisionService.setContributions).not.toHaveBeenCalled();
-  });
-
   it('builds the report from the division goals with normalized rag', () => {
     const page = start();
 
@@ -406,43 +514,23 @@ describe('DivisionPlanningPage', () => {
     expect(rows[0].status).toBe('green');
   });
 
-  it('removing a cargo with no division goals saves without cascading', async () => {
-    const page = start();
-
-    (page as unknown as { selectedIds: { set: (s: Set<string>) => void } })
-      .selectedIds.set(new Set(['g1']));
-
-    await page.saveSelection();
-
-    expect(divisionService.setContributions).toHaveBeenCalledWith({
-      divisionId: 'div-1',
-      scorecardId: 'sc-1',
-      goalIds: ['g1'],
-      cascadeRemoveDependents: false,
-    });
-  });
-
   it('asks for confirmation before cascading a removal that owns division goals', async () => {
     const page = start();
-
-    (page as unknown as { selectedIds: { set: (s: Set<string>) => void } })
-      .selectedIds.set(new Set());
     dialog.confirmChoice.mockResolvedValue('cancel');
 
-    await page.saveSelection();
+    // g1 is the parent of the plan's only division goal.
+    await page.toggleContribution('g1', false);
 
     expect(dialog.confirmChoice).toHaveBeenCalled();
     expect(divisionService.setContributions).not.toHaveBeenCalled();
+    expect([...page.selectedIds()].sort()).toEqual(['g1', 'g3']);
   });
 
   it('cascades removal once the user confirms deletion', async () => {
     const page = start();
-
-    (page as unknown as { selectedIds: { set: (s: Set<string>) => void } })
-      .selectedIds.set(new Set(['g3']));
     dialog.confirmChoice.mockResolvedValue('confirm');
 
-    await page.saveSelection();
+    await page.toggleContribution('g1', false);
 
     expect(divisionService.setContributions).toHaveBeenCalledWith({
       divisionId: 'div-1',
@@ -454,12 +542,9 @@ describe('DivisionPlanningPage', () => {
 
   it('keeps division goals and KPIs when the user chooses keep', async () => {
     const page = start();
-
-    (page as unknown as { selectedIds: { set: (s: Set<string>) => void } })
-      .selectedIds.set(new Set(['g3']));
     dialog.confirmChoice.mockResolvedValue('extra');
 
-    await page.saveSelection();
+    await page.toggleContribution('g1', false);
 
     expect(divisionService.setContributions).toHaveBeenCalledWith({
       divisionId: 'div-1',
@@ -573,6 +658,43 @@ describe('DivisionPlanningPage', () => {
     expect(page.kpiQuarterly()).toEqual([15, 15, 15, 15]);
     expect(page.kpiMonthly()).toEqual(Array.from({ length: 12 }, () => 5));
     expect(page.kpiTargetsValid()).toBe(true);
+  });
+
+  it('opens the KPI modal with the plan division as owner and the remaining goal weight', () => {
+    const page = start();
+    (page as unknown as { plan: { set: (p: DivisionPlanDto | null) => void } }).plan.set({
+      ...PLAN,
+      goals: [{ ...PLAN.goals[0], kpis: [{ ...PLAN.goals[0].kpis[0], weight: 40 }] }],
+    });
+
+    page.openCreateKpi(page.divisionGoals()[0]);
+
+    expect(page.kpiModalOpen()).toBe(true);
+    expect(page.kpiParentGoal()?.id).toBe('dg1');
+    expect(page.kpiForm.controls.divisionOwnerId.value).toBe('div-1');
+    expect(page.kpiForm.controls.weight.value).toBe(60);
+  });
+
+  it('tolerates a goal payload that omits KPIs', () => {
+    const page = start();
+    (page as unknown as { plan: { set: (p: DivisionPlanDto | null) => void } }).plan.set({
+      ...PLAN,
+      goals: [{ ...PLAN.goals[0], kpis: undefined } as unknown as DivisionGoalDto],
+    });
+
+    expect(page.divisionGoals()[0].kpis).toEqual([]);
+  });
+
+  it('retries the plan load after a failure', () => {
+    divisionService.getPlanContextByScorecard.mockReturnValueOnce(throwError(() => new Error('down')));
+
+    const page = start();
+    expect(page.loadError()).toBeTruthy();
+
+    page.retryLoad();
+
+    expect(divisionService.getPlanContextByScorecard).toHaveBeenCalledTimes(2);
+    expect(page.loadError()).toBeNull();
   });
 
   it('validates non-cumulative targets as equal to the annual target', () => {

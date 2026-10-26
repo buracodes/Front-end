@@ -26,6 +26,15 @@ export interface Kpi {
   createdDate?: string;
 }
 
+export type KpiOwnerType = 'User' | 'Division';
+
+export interface KpiOwnerOption {
+  id: string;
+  fullName: string;
+  divisionId?: string;
+  divisionName?: string;
+}
+
 export interface CreateKpiRequest {
   scorecardId: string;
   kraId?: string;
@@ -40,6 +49,7 @@ export interface CreateKpiRequest {
   baseline?: number;
   minValue?: number;
   maxValue?: number;
+  ownerId?: string;
   divisionOwnerId?: string;
 }
 
@@ -56,5 +66,6 @@ export interface UpdateKpiRequest {
   minValue?: number;
   maxValue?: number;
   isActive?: boolean;
+  ownerId?: string;
   divisionOwnerId?: string;
 }

@@ -4,7 +4,7 @@ export interface Scorecard {
   fiscalYearName?: string;
   name: string;
   description?: string;
-  scope: 'Corporate' | 'Division' | 'Department';
+  scope: 'Corporate' | 'Division';
   scorecardStatus: 'Active' | 'Closed';
   goalCount?: number;
   kraCount?: number;
@@ -18,13 +18,13 @@ export interface CreateScorecardRequest {
   fiscalYearId: string;
   name: string;
   description?: string;
-  scope?: 'Corporate' | 'Division' | 'Department';
+  scope?: 'Corporate' | 'Division';
 }
 
 export interface UpdateScorecardRequest {
   name?: string;
   description?: string;
-  scope?: 'Corporate' | 'Division' | 'Department';
+  scope?: 'Corporate' | 'Division';
 }
 
 /** The API serializes enums as camelCase (e.g. "corporate"); the UI models use TitleCase. */

@@ -11,18 +11,14 @@ export interface LogoutRequest {
   refreshToken: string;
 }
 
-export interface ChangePasswordRequest {
-  currentPassword: string;
-  newPassword: string;
-  confirmPassword: string;
-}
-
 export interface AuthUser {
   id: string;
   username: string;
   fullName: string;
   email?: string;
   divisionId?: string;
+  /** Null until the account's first successful sign-in. */
+  lastLoginAtUtc?: string | null;
   roles: string[];
   permissions: string[];
 }

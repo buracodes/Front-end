@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { firstValueFrom, map, Observable, tap } from 'rxjs';
 import { ApiEndpoint } from '../constant/ApiEndpoints';
-import { AuthUser, ChangePasswordRequest, LoginRequest, TokenResponse } from '../model/auth.model';
+import { AuthUser, LoginRequest, TokenResponse } from '../model/auth.model';
 import { IResponse } from '../model/interface/response.interface';
 import { ApiService } from './apiService/api-service';
 import { TokenStorageService } from './token-storage.service';
@@ -94,17 +94,6 @@ export class AuthService {
 
     this.clearSession();
     this.router.navigate(['/login']);
-  }
-
-  /**
-   * Changes the signed-in user's password. The server revokes every refresh token for
-   * the account, so the local session is dropped and the user signs in again.
-   */
-  changePassword(dto: ChangePasswordRequest): Observable<boolean> {
-    return this.api.post<IResponse<boolean>>(ApiEndpoint.Auth.ChangePassword, { dto }).pipe(
-      map((response) => response.data ?? false),
-      tap(() => this.clearSession())
-    );
   }
 
   getCurrentUser(): void {

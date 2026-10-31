@@ -111,10 +111,6 @@
           @if (profileOpen()) {
             <div class="profile-backdrop" (click)="closeProfile()"></div>
             <div class="profile-menu" role="menu" aria-label="Account menu">
-              <button type="button" role="menuitem" (click)="closeProfile(); openPasswordModal()">
-                <svg lucideIcon="settings" size="15"></svg>
-                Settings
-              </button>
               <button type="button" role="menuitem" (click)="closeProfile(); openNotifications()">
                 <svg lucideIcon="bell" size="15"></svg>
                 Notifications
@@ -137,72 +133,3 @@
 
 <app-confirm-dialog />
 <app-toaster />
-
-@if (showPasswordForm()) {
-  <div class="modal-backdrop" (click)="closePasswordModal()">
-    <div class="modal-dialog" (click)="$event.stopPropagation()">
-      <div class="modal-header">
-        <h3>Change Password</h3>
-        <button type="button" class="close-btn" aria-label="Close" (click)="closePasswordModal()"><svg lucideIcon="x" size="18"></svg></button>
-      </div>
-      <div class="modal-body">
-        <form [formGroup]="passwordForm" (ngSubmit)="changePassword()" novalidate>
-          <div class="form-group">
-            <label class="form-label" for="current-password">Current Password</label>
-            <input
-              id="current-password"
-              class="form-control"
-              type="password"
-              formControlName="currentPassword"
-              autocomplete="current-password"
-            />
-            @if (passwordForm.controls.currentPassword.invalid && passwordForm.controls.currentPassword.touched) {
-              <p class="form-error">Current password is required.</p>
-            }
-          </div>
-
-          <div class="form-group">
-            <label class="form-label" for="new-password">New Password</label>
-            <input
-              id="new-password"
-              class="form-control"
-              type="password"
-              formControlName="newPassword"
-              autocomplete="new-password"
-            />
-            @if (passwordForm.controls.newPassword.invalid && passwordForm.controls.newPassword.touched) {
-              @if (passwordForm.controls.newPassword.hasError('required')) {
-                <p class="form-error">New password is required.</p>
-              } @else {
-                <p class="form-error">{{ passwordRequirementsMessage }}</p>
-              }
-            }
-          </div>
-
-          <div class="form-group">
-            <label class="form-label" for="confirm-password">Confirm New Password</label>
-            <input
-              id="confirm-password"
-              class="form-control"
-              type="password"
-              formControlName="confirmPassword"
-              autocomplete="new-password"
-            />
-            @if (passwordForm.controls.confirmPassword.invalid && passwordForm.controls.confirmPassword.touched) {
-              <p class="form-error">Password confirmation is required.</p>
-            }
-          </div>
-
-          <p class="form-hint">You will be signed out after changing your password.</p>
-
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" (click)="closePasswordModal()">Cancel</button>
-            <button type="submit" class="btn btn-primary" [disabled]="passwordForm.invalid || changingPassword()">
-              {{ changingPassword() ? 'Saving…' : 'Change Password' }}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  </div>
-}

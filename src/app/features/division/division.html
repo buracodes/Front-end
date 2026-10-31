@@ -4,7 +4,9 @@
       <h1 class="page-title">Divisions</h1>
       <p class="page-subtitle">Manage organizational divisions.</p>
     </div>
-    <button type="button" class="btn btn-primary" (click)="openAddModal()">Add Division</button>
+    @if (canManageDivisions) {
+      <button type="button" class="btn btn-primary" (click)="openAddModal()">Add Division</button>
+    }
   </div>
 
   @if (showForm()) {
@@ -53,7 +55,7 @@
                 }
               }
               <p class="form-hint">
-                A Data Input User login is created automatically for this division: username = code, default password = same code.
+                Divisions hold no login of their own: employees sign in with their Active Directory account.
               </p>
             </div>
 
@@ -61,64 +63,6 @@
               <button type="button" class="btn btn-secondary" (click)="onCancelEdit()">Cancel</button>
               <button type="submit" class="btn btn-primary" [disabled]="form.invalid || submitting()">
                 {{ submitting() ? 'Saving…' : 'Save Division' }}
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-  }
-
-  @if (showResetForm() && selectedDivision(); as division) {
-    <div class="modal-backdrop" (click)="onCancelReset()">
-      <div class="modal-dialog" (click)="$event.stopPropagation()">
-        <div class="modal-header">
-          <h3>Reset Password</h3>
-          <button type="button" class="close-btn" (click)="onCancelReset()" aria-label="Close"><svg lucideIcon="x" size="18"></svg></button>
-        </div>
-        <div class="modal-body">
-          <form [formGroup]="resetForm" (ngSubmit)="onResetPassword()" novalidate>
-            <p class="form-hint">
-              Set a new password for the '{{ division.code }}' Data Input login. Any active sessions for that
-              account are signed out.
-            </p>
-
-            <div class="form-group">
-              <label class="form-label" for="division-new-password">New Password</label>
-              <input
-                id="division-new-password"
-                class="form-control"
-                type="password"
-                formControlName="newPassword"
-                autocomplete="new-password"
-              />
-              @if (resetForm.controls.newPassword.invalid && resetForm.controls.newPassword.touched) {
-                @if (resetForm.controls.newPassword.hasError('required')) {
-                  <p class="form-error">New password is required.</p>
-                } @else {
-                  <p class="form-error">{{ passwordRequirementsMessage }}</p>
-                }
-              }
-            </div>
-
-            <div class="form-group">
-              <label class="form-label" for="division-confirm-password">Confirm New Password</label>
-              <input
-                id="division-confirm-password"
-                class="form-control"
-                type="password"
-                formControlName="confirmPassword"
-                autocomplete="new-password"
-              />
-              @if (resetForm.controls.confirmPassword.invalid && resetForm.controls.confirmPassword.touched) {
-                <p class="form-error">Password confirmation is required.</p>
-              }
-            </div>
-
-            <div class="modal-footer">
-              <button type="button" class="btn btn-secondary" (click)="onCancelReset()">Cancel</button>
-              <button type="submit" class="btn btn-primary" [disabled]="resetForm.invalid || resetting()">
-                {{ resetting() ? 'Saving…' : 'Reset Password' }}
               </button>
             </div>
           </form>

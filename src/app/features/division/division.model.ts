@@ -39,13 +39,6 @@ export interface DivisionKpiTargetDto {
   targetValue: number;
 }
 
-/** FR-904: a target supplied when creating/updating a division KPI. */
-export interface DivisionKpiTargetInputDto {
-  fiscalPeriodId: string;
-  targetValue: number;
-  granularity: TargetGranularity;
-}
-
 /** FR-904: fiscal periods of the plan's fiscal year, used to resolve target period ids. */
 export interface DivisionFiscalPeriodDto {
   id: string;
@@ -160,8 +153,6 @@ export interface CreateDivisionKpiRequest {
   divisionId: string;
   scorecardId: string;
   divisionGoalId: string;
-  ownerId?: string;
-  divisionOwnerId?: string;
   unitOfMeasureId?: string;
   name: string;
   description?: string;
@@ -176,12 +167,9 @@ export interface CreateDivisionKpiRequest {
   minValue?: number;
   maxValue?: number;
   formula?: string;
-  targets?: DivisionKpiTargetInputDto[];
 }
 
 export interface UpdateDivisionKpiRequest {
-  ownerId?: string;
-  divisionOwnerId?: string;
   unitOfMeasureId?: string;
   name?: string;
   description?: string;
@@ -197,7 +185,6 @@ export interface UpdateDivisionKpiRequest {
   maxValue?: number;
   formula?: string;
   isActive?: boolean;
-  targets?: DivisionKpiTargetInputDto[];
 }
 
 export type KpiDataSource = 'Manual' | 'Automated' | 'Calculated';
@@ -222,10 +209,4 @@ export interface EnterDivisionActualValueRequest {
   value: number;
   dataSource?: KpiDataSource;
   note?: string;
-}
-
-export interface ResetDivisionPasswordRequest {
-  divisionId: string;
-  newPassword: string;
-  confirmPassword: string;
 }

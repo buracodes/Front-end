@@ -29,6 +29,7 @@ const TEMPLATE_SLUGS = [
   'download',
   'ellipsis-vertical',
   'eye',
+  'eye-off',
   'file-down',
   'file-spreadsheet',
   'file-text',

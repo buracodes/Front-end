@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
+import { HttpErrorResponse } from '@angular/common/http';
 import { of, throwError } from 'rxjs';
 import { ActivatedRoute } from '@angular/router';
 import { DivisionPlanningPage } from './division-planning';
@@ -7,10 +8,20 @@ import { DivisionService } from '../division/division.service';
 import { ScorecardService } from '../scorecard/scorecard.service';
 import { KPIService } from '../../core/service/kpi.service';
 import { NotificationService } from '../../core/service/notification.service';
+import { UserStore } from '../../core/service/user-store.service';
 import { ConfirmDialogService } from '../../shared/service/confirm-dialog.service';
 import { ReportService } from '../reports/report.service';
 import { DivisionPlanDto, DivisionGoalDto } from '../division/division.model';
 import { FiscalYear, Scorecard } from '../../core/model/scorecard.model';
+import { PeriodLockStatusItem } from '../../core/model/goal.model';
+
+const DEFAULT_PERMISSIONS = [
+  'divisions:view',
+  'divisions:plan',
+  'divisions:reports.view',
+  'divisions:actuals.enter',
+  'reports:export',
+];
 
 const FY: FiscalYear = {
   id: 'fy-1',
@@ -34,13 +45,6 @@ const PLAN: DivisionPlanDto = {
     { goalId: 'g3', name: 'Improve efficiency', weight: 50 },
   ],
   availableGoals: [{ goalId: 'g2', name: 'Expand ops', weight: 100 }],
-  fiscalPeriods: Array.from({ length: 12 }, (_, i) => ({
-    id: `p${i + 1}`,
-    fiscalMonth: i + 1,
-    quarter: Math.floor(i / 3) + 1,
-    isQuarterEnd: (i + 1) % 3 === 0,
-    isYearEnd: i + 1 === 12,
-  })),
   goals: [
     {
       id: 'dg1',
@@ -65,20 +69,6 @@ const PLAN: DivisionPlanDto = {
           status: 'Amber',
           isActive: true,
           isCumulative: true,
-          targets: [
-            ...Array.from({ length: 12 }, (_, i) => ({
-              fiscalPeriodId: `p${i + 1}`,
-              fiscalMonth: i + 1,
-              quarter: Math.floor(i / 3) + 1,
-              granularity: 'Monthly' as const,
-              targetValue: 5,
-            })),
-            { fiscalPeriodId: 'p3', fiscalMonth: 3, quarter: 1, granularity: 'Quarterly' as const, targetValue: 15 },
-            { fiscalPeriodId: 'p6', fiscalMonth: 6, quarter: 2, granularity: 'Quarterly' as const, targetValue: 15 },
-            { fiscalPeriodId: 'p9', fiscalMonth: 9, quarter: 3, granularity: 'Quarterly' as const, targetValue: 15 },
-            { fiscalPeriodId: 'p12', fiscalMonth: 12, quarter: 4, granularity: 'Quarterly' as const, targetValue: 15 },
-            { fiscalPeriodId: 'p12', fiscalMonth: 12, quarter: 4, granularity: 'Annual' as const, targetValue: 60 },
-          ],
         },
       ],
     },
@@ -113,16 +103,33 @@ describe('DivisionPlanningPage', () => {
     getAll: ReturnType<typeof vi.fn>;
     getPlanContextByScorecard: ReturnType<typeof vi.fn>;
     setContributions: ReturnType<typeof vi.fn>;
+    updateGoal: ReturnType<typeof vi.fn>;
     createGoal: ReturnType<typeof vi.fn>;
-    createKpi: ReturnType<typeof vi.fn>;
+    deleteGoal: ReturnType<typeof vi.fn>;
     updateKpi: ReturnType<typeof vi.fn>;
-  } & Record<string, unknown>;
+    createKpi: ReturnType<typeof vi.fn>;
+    deleteKpi: ReturnType<typeof vi.fn>;
+    finalizePlan: ReturnType<typeof vi.fn>;
+    getActuals: ReturnType<typeof vi.fn>;
+    enterActual: ReturnType<typeof vi.fn>;
+  };
   let dialog: { confirm: ReturnType<typeof vi.fn>; confirmChoice: ReturnType<typeof vi.fn> };
   let reportService: { export: ReturnType<typeof vi.fn> };
   let notifications: { success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
   let router: { navigate: ReturnType<typeof vi.fn> };
+  let permissions: string[];
 
-  const start = (scorecards: Scorecard[] = []): DivisionPlanningPage => {
+  const userStore = {
+    hasPermission: (permission: string) => permissions.includes(permission),
+    divisionId: () => null,
+    isDivisionAccount: () => false,
+  };
+
+  const start = (
+    scorecards: Scorecard[] = [],
+    granted: string[] = DEFAULT_PERMISSIONS
+  ): DivisionPlanningPage => {
+    permissions = granted;
     TestBed.configureTestingModule({
       providers: [
         { provide: Router, useValue: router },
@@ -136,12 +143,14 @@ describe('DivisionPlanningPage', () => {
         { provide: NotificationService, useValue: notifications },
         { provide: ConfirmDialogService, useValue: dialog },
         { provide: ReportService, useValue: reportService },
+        { provide: UserStore, useValue: userStore },
       ],
     });
     return TestBed.runInInjectionContext(() => new DivisionPlanningPage());
   };
 
   beforeEach(() => {
+    permissions = DEFAULT_PERMISSIONS;
     divisionService = {
       getAll: vi.fn(() => of([])),
       getPlanContextByScorecard: vi.fn(() => of(PLAN)),
@@ -400,12 +409,52 @@ describe('DivisionPlanningPage', () => {
     expect(goalRow.status).toBe('green');
   });
 
-  it('builds one report row per division goal with weight, score and status', () => {
+  it('builds a goal row followed by its KPI rows with target, actual, score and status', () => {
     const page = start();
 
     const rows = page.reportGoalRows();
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ name: 'Retail network', weight: 100, score: 88, status: 'green' });
+    expect(rows.map((r) => [r.kind, r.name])).toEqual([
+      ['goal', 'Retail network'],
+      ['kpi', 'Branches opened'],
+    ]);
+    expect(rows[0]).toMatchObject({ weight: 100, score: 88, status: 'green', progress: 88 });
+    expect(rows[1]).toMatchObject({
+      parentName: 'Retail network',
+      weight: 100,
+      target: 10,
+      actual: 8,
+      score: 80,
+      status: 'amber',
+      progress: 80,
+    });
+  });
+
+  it('clamps report progress bars to the 0-100 range', () => {
+    const page = start();
+    (page as unknown as { plan: { set: (p: DivisionPlanDto | null) => void } }).plan.set({
+      ...PLAN,
+      goals: [
+        {
+          ...PLAN.goals[0],
+          score: 140,
+          kpis: [{ ...PLAN.goals[0].kpis[0], score: -5 }],
+        },
+      ],
+    });
+
+    const rows = page.reportGoalRows();
+    expect(rows[0].progress).toBe(100);
+    expect(rows[1].progress).toBe(0);
+  });
+
+  it('formats report target/actual values and scores with placeholders', () => {
+    const page = start();
+
+    expect(page.reportValue(8, '%')).toBe('8 %');
+    expect(page.reportValue(8)).toBe('8');
+    expect(page.reportValue(null, '%')).toBe('—');
+    expect(page.reportScore(80)).toBe('80%');
+    expect(page.reportScore(null)).toBe('—');
   });
 
   it('derives the overall rag from the 95/70 thresholds', () => {
@@ -421,17 +470,18 @@ describe('DivisionPlanningPage', () => {
     expect(page.overallStatus()).toBe('red');
   });
 
-  it('renders the overall-score doughnut as an orange ring against the remainder', () => {
+  it('renders the overall-score doughnut in its RAG colour against the remainder', () => {
     const page = start();
 
     const segments = page.donutSegments();
     expect(segments).toHaveLength(2);
-    expect(segments[0].color).toBe('#C77B24');
+    expect(segments[0].color).toBe('#16A34A');
     expect(segments[1].color).toBe('#E3EAE0');
     expect(segments[0].dash + segments[0].gap + segments[1].dash + segments[1].gap).toBeCloseTo(1, 3);
     expect(segments[0].dash).toBeCloseTo(0.952, 3);
 
     (page as unknown as { plan: { set: (p: DivisionPlanDto | null) => void } }).plan.set({ ...PLAN, overallScore: 40 });
+    expect(page.donutSegments()[0].color).toBe('#DC2626');
     expect(page.donutSegments()[0].dash).toBeCloseTo(0.392, 3);
   });
 
@@ -504,14 +554,15 @@ describe('DivisionPlanningPage', () => {
     });
   });
 
-  it('builds the report from the division goals with normalized rag', () => {
+  it('builds the report from the division goals and their KPIs with normalized rag', () => {
     const page = start();
 
     const rows = page.reportGoalRows();
-    expect(rows.map((r) => r.name)).toEqual(['Retail network']);
+    expect(rows.map((r) => r.name)).toEqual(['Retail network', 'Branches opened']);
     expect(rows[0].weight).toBe(100);
     expect(rows[0].score).toBe(88);
     expect(rows[0].status).toBe('green');
+    expect(rows[1].status).toBe('amber');
   });
 
   it('asks for confirmation before cascading a removal that owns division goals', async () => {
@@ -582,97 +633,166 @@ describe('DivisionPlanningPage', () => {
     );
   });
 
-  // ── FR-904: KPI target configuration ────────────────────────────────────
+  // ── Permission gating and entry windows ─────────────────────────────────
+
+  it('blocks plan editing without divisions:plan even while the plan is a draft', () => {
+    const page = start([], ['divisions:view', 'divisions:reports.view']);
+
+    expect(page.planStatus()).toBe('Draft');
+    expect(page.canPlan()).toBe(false);
+    expect(page.canEdit()).toBe(false);
+
+    page.openCreateGoal();
+    expect(page.goalModalOpen()).toBe(false);
+    expect(page.openCreateKpi(page.divisionGoals()[0])).toBeUndefined();
+    expect(page.kpiModalOpen()).toBe(false);
+  });
+
+  it('hides the division report and export without their own permissions', () => {
+    const page = start([], ['divisions:view', 'divisions:plan']);
+
+    expect(page.canViewReport()).toBe(false);
+    expect(page.canExportReport()).toBe(false);
+
+    page.exportPlan('pdf', { stopPropagation: () => {} } as Event);
+    expect(reportService.export).not.toHaveBeenCalled();
+    expect(notifications.error).toHaveBeenCalledWith('You do not have permission to export reports.');
+  });
+
+  it('requires reports:export in addition to report visibility before exporting', () => {
+    const page = start([], ['divisions:view', 'divisions:reports.view']);
+
+    expect(page.canViewReport()).toBe(true);
+    expect(page.canExportReport()).toBe(false);
+
+    page.exportPlan('pdf', { stopPropagation: () => {} } as Event);
+    expect(reportService.export).not.toHaveBeenCalled();
+  });
+
+  it('requires divisions:actuals.enter in addition to a finalized plan', () => {
+    const page = start([], ['divisions:view', 'divisions:plan']);
+    (page as unknown as { plan: { set: (p: DivisionPlanDto | null) => void } }).plan.set({
+      ...PLAN,
+      planStatus: 'finalized',
+    });
+
+    expect(page.planStatus()).toBe('Finalized');
+    expect(page.canEnterActuals()).toBe(false);
+  });
+
+  const lock = (
+    fiscalMonth: number,
+    state: 'open' | 'notYetOpen' | 'locked'
+  ): PeriodLockStatusItem => ({
+    fiscalPeriodId: `p${fiscalMonth}`,
+    fiscalMonth,
+    quarter: Math.floor((fiscalMonth - 1) / 3) + 1,
+    isQuarterEnd: fiscalMonth % 3 === 0,
+    isYearEnd: fiscalMonth === 12,
+    state,
+    effectiveEntryOpenDate: '2026-07-01',
+    effectiveCutoffDate: '2026-12-31',
+    effectiveEntryOpenDay: 1,
+    effectiveCutoffDay: 31,
+    effectiveReminderDaysBeforeCutoff: 3,
+    hasExplicitOverride: false,
+  });
+
+  it('treats only open periods with a fiscal period id as enterable', () => {
+    const page = start();
+    const locks = (page as unknown as {
+      periodLocks: { set: (m: Map<number, PeriodLockStatusItem>) => void };
+    }).periodLocks;
+
+    locks.set(
+      new Map([
+        [1, lock(1, 'notYetOpen')],
+        [2, lock(2, 'locked')],
+        [3, lock(3, 'open')],
+      ])
+    );
+
+    expect(page.isEntryOpen(1)).toBe(false);
+    expect(page.isEntryOpen(2)).toBe(false);
+    expect(page.isEntryOpen(3)).toBe(true);
+    expect(page.isEntryOpen(null)).toBe(false);
+  });
+
+  it('surfaces the API message when finalizing a plan fails', async () => {
+    const page = start();
+    dialog.confirm.mockResolvedValueOnce(true);
+    divisionService.finalizePlan.mockReturnValueOnce(
+      throwError(
+        () =>
+          new HttpErrorResponse({
+            status: 400,
+            error: { detail: 'Add at least one KPI to the division goal “Retail network” before finalizing this plan.' },
+          })
+      )
+    );
+
+    await page.finalizePlan();
+
+    expect(notifications.error).toHaveBeenCalledWith(
+      'Add at least one KPI to the division goal “Retail network” before finalizing this plan.'
+    );
+  });
+
+  it('rejects a KPI weight of zero so it matches the database check constraint', () => {
+    const page = start();
+    page.openCreateKpi(page.divisionGoals()[0]);
+    page.kpiForm.controls.name.setValue('Zero weight KPI');
+    page.kpiForm.controls.weight.setValue(0);
+
+    expect(page.kpiForm.controls.weight.hasError('min')).toBe(true);
+    page.submitKpi();
+    expect(divisionService.createKpi).not.toHaveBeenCalled();
+  });
+
+  // ── Division KPI form mirrors the corporate KPI form ────────────────────
 
   const openKpiModal = (page: DivisionPlanningPage): DivisionPlanningPage => {
+    // Leave room in the goal's 100% weight budget so the new KPI passes the
+    // positive-weight rule (the DB rejects a zero-weight KPI).
+    (page as unknown as { plan: { set: (p: DivisionPlanDto | null) => void } }).plan.set({
+      ...PLAN,
+      goals: [{ ...PLAN.goals[0], kpis: [{ ...PLAN.goals[0].kpis[0], weight: 40 }] }],
+    });
     page.openCreateKpi(page.divisionGoals()[0]);
     page.kpiForm.controls.name.setValue('Branches opened');
     return page;
   };
 
-  it('accepts a reconciled cumulative target set and submits it', () => {
+  it('submits a KPI without owner or target fields', () => {
     const page = start();
     openKpiModal(page);
 
-    page.kpiMonthly.set(Array.from({ length: 12 }, () => 5));
-    page.kpiQuarterly.set([15, 15, 15, 15]);
-    page.kpiAnnualTarget.set(60);
-
-    expect(page.kpiTargetsValid()).toBe(true);
     page.submitKpi();
 
-    const sent = divisionService.createKpi.mock.calls[0][0];
     expect(divisionService.createKpi).toHaveBeenCalledTimes(1);
-    expect(sent.targets).toHaveLength(17);
-    expect(sent.targets).toEqual(expect.arrayContaining([
-      { fiscalPeriodId: 'p1', targetValue: 5, granularity: 'Monthly' },
-      { fiscalPeriodId: 'p3', targetValue: 15, granularity: 'Quarterly' },
-      { fiscalPeriodId: 'p12', targetValue: 60, granularity: 'Annual' },
-    ]));
-  });
-
-  it('blocks a partial target entry with a validation error', () => {
-    const page = start();
-    openKpiModal(page);
-
-    // Annual present but no quarterly/monthly reconciliation.
-    page.kpiAnnualTarget.set(60);
-
-    expect(page.kpiTargetsValid()).toBe(false);
-    expect(page.kpiTargetsError()).toContain('quarterly');
-    page.submitKpi();
-    expect(divisionService.createKpi).not.toHaveBeenCalled();
-    expect(notifications.error).toHaveBeenCalled();
-  });
-
-  it('requires the annual target once any target value is entered', () => {
-    const page = start();
-    openKpiModal(page);
-
-    page.kpiMonthly.set(Array.from({ length: 12 }, () => 5));
-
-    expect(page.kpiTargetsValid()).toBe(false);
-    expect(page.kpiTargetsError()).toBe('Annual target is required.');
-  });
-
-  it('allows a KPI without targets and submits an empty list', () => {
-    const page = start();
-    openKpiModal(page);
-
-    expect(page.kpiTargetsValid()).toBe(true);
-    expect(page.kpiTargetsError()).toBeNull();
-    page.submitKpi();
-
-    expect(divisionService.createKpi).toHaveBeenCalledWith(
-      expect.objectContaining({ targets: [] })
+    const sent = divisionService.createKpi.mock.calls[0][0];
+    expect(sent).toEqual(
+      expect.objectContaining({
+        divisionId: 'div-1',
+        scorecardId: 'sc-1',
+        divisionGoalId: 'dg1',
+        name: 'Branches opened',
+      })
     );
+    expect(sent).not.toHaveProperty('ownerId');
+    expect(sent).not.toHaveProperty('divisionOwnerId');
+    expect(sent).not.toHaveProperty('targets');
   });
 
-  it('reloads an edited KPI annual/quarterly/monthly targets', () => {
+  it('opens the KPI modal on the corporate goal with the remaining goal weight', () => {
     const page = start();
-    const goal = page.divisionGoals()[0];
-
-    page.openEditKpi(goal.kpis[0], goal);
-
-    expect(page.kpiAnnualTarget()).toBe(60);
-    expect(page.kpiQuarterly()).toEqual([15, 15, 15, 15]);
-    expect(page.kpiMonthly()).toEqual(Array.from({ length: 12 }, () => 5));
-    expect(page.kpiTargetsValid()).toBe(true);
-  });
-
-  it('opens the KPI modal with the plan division as owner and the remaining goal weight', () => {
-    const page = start();
-    (page as unknown as { plan: { set: (p: DivisionPlanDto | null) => void } }).plan.set({
-      ...PLAN,
-      goals: [{ ...PLAN.goals[0], kpis: [{ ...PLAN.goals[0].kpis[0], weight: 40 }] }],
-    });
-
-    page.openCreateKpi(page.divisionGoals()[0]);
+    openKpiModal(page);
 
     expect(page.kpiModalOpen()).toBe(true);
     expect(page.kpiParentGoal()?.id).toBe('dg1');
-    expect(page.kpiForm.controls.divisionOwnerId.value).toBe('div-1');
+    expect(page.kpiParentGoal()?.parentGoalName).toBe('Grow revenue');
     expect(page.kpiForm.controls.weight.value).toBe(60);
+    expect('divisionOwnerId' in page.kpiForm.controls).toBe(false);
   });
 
   it('tolerates a goal payload that omits KPIs', () => {
@@ -695,21 +815,5 @@ describe('DivisionPlanningPage', () => {
 
     expect(divisionService.getPlanContextByScorecard).toHaveBeenCalledTimes(2);
     expect(page.loadError()).toBeNull();
-  });
-
-  it('validates non-cumulative targets as equal to the annual target', () => {
-    const page = start();
-    openKpiModal(page);
-    page.kpiForm.controls.isCumulative.setValue(false);
-
-    page.kpiAnnualTarget.set(50);
-    page.kpiQuarterly.set([10, 10, 10, 10]);
-    page.kpiMonthly.set(Array.from({ length: 12 }, () => 10));
-
-    expect(page.kpiQuarterError(0)).toContain('Quarter target must equal');
-    expect(page.kpiTargetsValid()).toBe(false);
-
-    page.kpiAnnualTarget.set(10);
-    expect(page.kpiTargetsValid()).toBe(true);
   });
 });

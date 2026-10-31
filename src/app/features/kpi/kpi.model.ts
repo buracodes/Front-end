@@ -6,6 +6,7 @@ export interface Kpi {
   kraName?: string;
   goalId?: string;
   goalName?: string;
+  divisionGoalId?: string;
   name: string;
   description?: string;
   unit?: string;

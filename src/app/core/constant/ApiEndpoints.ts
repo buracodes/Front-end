@@ -4,7 +4,6 @@ export const ApiEndpoint = {
     Refresh: 'auth/refresh',
     Logout: 'auth/logout',
     Me: 'auth/me',
-    ChangePassword: 'user/change-password',
   },
   Organization: {
     Profile: 'organization',
@@ -31,7 +30,6 @@ export const ApiEndpoint = {
   PeriodLock: 'periodlock',
   PerformanceMonitoring: 'performancemonitoring',
   Reports: 'reports',
-  ResetDivisionPassword: 'user/divisions/reset-password',
   AccessControl: {
     Tier: 'accesscontrol',
     Root: 'accesscontrol',
@@ -41,6 +39,7 @@ export const ApiEndpoint = {
     Memberships: 'accesscontrol/memberships',
     Rights: 'accesscontrol/rights',
     Directory: 'accesscontrol/directory',
+    Employees: 'accesscontrol/employees',
     Audit: 'accesscontrol/audit',
   },
 };

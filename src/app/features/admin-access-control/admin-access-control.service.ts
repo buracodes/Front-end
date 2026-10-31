@@ -4,14 +4,10 @@ import { ApiEndpoint } from '../../core/constant/ApiEndpoints';
 import { IResponse } from '../../core/model/interface/response.interface';
 import { ApiService } from '../../core/service/apiService/api-service';
 import {
-  AccessDirectoryUser,
   AccessEffect,
   AccessGroup,
   AccessRight,
-  AccessSummary,
-  AccessUserDetail,
-  AuthorizationAuditEntry,
-  EffectiveAccessResult,
+  EmployeeHrInfo,
   GroupMembershipRow,
   GroupRightRow,
   UserRightRow,
@@ -22,12 +18,6 @@ export class AdminAccessControlService {
   private readonly api = inject(ApiService);
 
   // ── Reads ──────────────────────────────────────────────────────────────
-
-  loadSummary(): Observable<AccessSummary> {
-    return this.api
-      .get<IResponse<AccessSummary>>(ApiEndpoint.AccessControl.Summary)
-      .pipe(map((r) => r.data!));
-  }
 
   getGroups(): Observable<AccessGroup[]> {
     return this.api
@@ -41,10 +31,15 @@ export class AdminAccessControlService {
       .pipe(map((r) => r.data ?? []));
   }
 
-  getMemberships(groupId?: string): Observable<GroupMembershipRow[]> {
-    const query = groupId ? `?groupId=${groupId}` : '';
+  getMemberships(filter: { groupId?: string; userId?: string } = {}): Observable<GroupMembershipRow[]> {
+    const params = new URLSearchParams();
+    if (filter.groupId) params.set('groupId', filter.groupId);
+    if (filter.userId) params.set('userId', filter.userId);
+    const query = params.toString();
     return this.api
-      .get<IResponse<GroupMembershipRow[]>>(`${ApiEndpoint.AccessControl.Memberships}${query}`)
+      .get<IResponse<GroupMembershipRow[]>>(
+        `${ApiEndpoint.AccessControl.Memberships}${query ? `?${query}` : ''}`,
+      )
       .pipe(map((r) => r.data ?? []));
   }
 
@@ -54,16 +49,13 @@ export class AdminAccessControlService {
       .pipe(map((r) => r.data ?? []));
   }
 
-  getDirectory(): Observable<AccessDirectoryUser[]> {
+  /** Active employees straight from HR — the assignable population, before first sign-in. */
+  getEmployees(search?: string): Observable<EmployeeHrInfo[]> {
+    const params = new URLSearchParams({ take: '1000' });
+    if (search) params.set('search', search);
     return this.api
-      .get<IResponse<AccessDirectoryUser[]>>(ApiEndpoint.AccessControl.Directory)
+      .get<IResponse<EmployeeHrInfo[]>>(`${ApiEndpoint.AccessControl.Employees}?${params.toString()}`)
       .pipe(map((r) => r.data ?? []));
-  }
-
-  getUserDetail(userId: string): Observable<AccessUserDetail> {
-    return this.api
-      .get<IResponse<AccessUserDetail>>(`${ApiEndpoint.AccessControl.Directory}/${userId}`)
-      .pipe(map((r) => r.data!));
   }
 
   getUserRights(userId: string): Observable<UserRightRow[]> {
@@ -72,21 +64,7 @@ export class AdminAccessControlService {
       .pipe(map((r) => r.data ?? []));
   }
 
-  getEffectiveAccess(userId: string): Observable<EffectiveAccessResult> {
-    return this.api
-      .get<IResponse<EffectiveAccessResult>>(
-        `${ApiEndpoint.AccessControl.Directory}/${userId}/effective-access`,
-      )
-      .pipe(map((r) => r.data!));
-  }
-
-  getAuthorizationAudit(): Observable<AuthorizationAuditEntry[]> {
-    return this.api
-      .get<IResponse<AuthorizationAuditEntry[]>>(ApiEndpoint.AccessControl.Audit)
-      .pipe(map((r) => r.data ?? []));
-  }
-
-  // ── Groups capability ──────────────────────────────────────────────────
+  // ── Groups ─────────────────────────────────────────────────────────────
 
   createGroup(name: string, description: string | null): Observable<AccessGroup> {
     return this.api
@@ -94,21 +72,43 @@ export class AdminAccessControlService {
       .pipe(map((r) => r.data!));
   }
 
-  updateGroup(groupId: string, description: string | null): Observable<AccessGroup> {
+  updateGroup(groupId: string, name: string, description: string | null): Observable<AccessGroup> {
     return this.api
       .put<IResponse<AccessGroup>>(`${ApiEndpoint.AccessControl.Groups}/${groupId}`, {
-        dto: { description },
+        dto: { name, description },
       })
       .pipe(map((r) => r.data!));
   }
 
-  setGroupStatus(groupId: string, isActive: boolean): Observable<AccessGroup> {
+  /** Delete is a deactivation: members immediately lose rights granted only through the group. */
+  deleteGroup(groupId: string): Observable<AccessGroup> {
     return this.api
       .put<IResponse<AccessGroup>>(`${ApiEndpoint.AccessControl.Groups}/${groupId}/status`, {
-        dto: { isActive },
+        dto: { isActive: false },
       })
       .pipe(map((r) => r.data!));
   }
+
+  // ── Group rights ───────────────────────────────────────────────────────
+
+  assignGroupRight(groupId: string, rightId: string): Observable<GroupRightRow> {
+    return this.api
+      .put<IResponse<GroupRightRow>>(
+        `${ApiEndpoint.AccessControl.Groups}/${groupId}/rights/${rightId}`,
+        { effect: 'Grant' },
+      )
+      .pipe(map((r) => r.data!));
+  }
+
+  revokeGroupRight(groupId: string, rightId: string): Observable<boolean> {
+    return this.api
+      .delete<IResponse<boolean>>(
+        `${ApiEndpoint.AccessControl.Groups}/${groupId}/rights/${rightId}`,
+      )
+      .pipe(map(() => true));
+  }
+
+  // ── Group members (UserRole is binary: grant = assign, deny = remove) ──
 
   assignMembership(groupId: string, userId: string): Observable<GroupMembershipRow> {
     return this.api
@@ -119,54 +119,13 @@ export class AdminAccessControlService {
       .pipe(map((r) => r.data!));
   }
 
-  removeMembership(groupId: string, userId: string, reason?: string): Observable<boolean> {
+  removeMembership(groupId: string, userId: string): Observable<boolean> {
     return this.api
       .delete<IResponse<boolean>>(`${ApiEndpoint.AccessControl.Groups}/${groupId}/members/${userId}`)
       .pipe(map(() => true));
   }
 
-  setGroupRight(groupId: string, rightId: string, effect: AccessEffect): Observable<GroupRightRow> {
-    return this.api
-      .put<IResponse<GroupRightRow>>(
-        `${ApiEndpoint.AccessControl.Groups}/${groupId}/rights/${rightId}`,
-        { effect },
-      )
-      .pipe(map((r) => r.data!));
-  }
-
-  removeGroupRight(groupId: string, rightId: string, reason?: string): Observable<boolean> {
-    return this.api
-      .delete<IResponse<boolean>>(
-        `${ApiEndpoint.AccessControl.Groups}/${groupId}/rights/${rightId}`,
-      )
-      .pipe(map(() => true));
-  }
-
-  // ── Rights catalog capability ──────────────────────────────────────────
-
-  createRight(name: string, module: string, description: string | null): Observable<AccessRight> {
-    return this.api
-      .post<IResponse<AccessRight>>(ApiEndpoint.AccessControl.Rights, {
-        dto: { name, module, description },
-      })
-      .pipe(map((r) => r.data!));
-  }
-
-  updateRight(rightId: string, module: string, description: string | null): Observable<AccessRight> {
-    return this.api
-      .put<IResponse<AccessRight>>(`${ApiEndpoint.AccessControl.Rights}/${rightId}`, {
-        dto: { module, description },
-      })
-      .pipe(map((r) => r.data!));
-  }
-
-  deleteRight(rightId: string, reason?: string): Observable<boolean> {
-    return this.api
-      .delete<IResponse<boolean>>(`${ApiEndpoint.AccessControl.Rights}/${rightId}`)
-      .pipe(map(() => true));
-  }
-
-  // ── User rights capability ─────────────────────────────────────────────
+  // ── Direct user rights ─────────────────────────────────────────────────
 
   setUserRight(
     userId: string,
@@ -182,7 +141,7 @@ export class AdminAccessControlService {
       .pipe(map((r) => r.data!));
   }
 
-  removeUserRight(userId: string, rightId: string, reason?: string): Observable<boolean> {
+  removeUserRight(userId: string, rightId: string): Observable<boolean> {
     return this.api
       .delete<IResponse<boolean>>(
         `${ApiEndpoint.AccessControl.Directory}/${userId}/rights/${rightId}`,

@@ -1,34 +1,30 @@
-import { HttpClient, provideHttpClient } from '@angular/common/http';
+import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import type { AuthUser } from '../../core/model/auth.model';
 import { NotificationService } from '../../core/service/notification.service';
 import { UserStore } from '../../core/service/user-store.service';
 import { ConfirmDialogService } from '../../shared/service/confirm-dialog.service';
-import { AccessGroup, AccessSummary } from './admin-access-control.model';
+import {
+  AccessGroup,
+  AccessRight,
+  EmployeeHrInfo,
+  GroupRightRow,
+} from './admin-access-control.model';
 import { AdminAccessControlPage } from './admin-access-control';
 
 const PAGE_PERMISSION = 'admin:access.view';
-
-function summary(overrides: Partial<AccessSummary> = {}): AccessSummary {
-  return {
-    totalGroups: 4,
-    totalRights: 30,
-    groupMembershipAssignments: 12,
-    directGrantAssignments: 3,
-    directDenyAssignments: 1,
-    ...overrides,
-  };
-}
+const GROUPS_PERMISSION = 'admin:access.groups.manage';
+const USER_RIGHTS_PERMISSION = 'admin:access.user-rights.manage';
 
 function group(overrides: Partial<AccessGroup> = {}): AccessGroup {
   return {
     id: 'g-1',
     name: 'Coordinators',
-    description: null,
+    description: 'Division coordinators',
     memberCount: 2,
     rightCount: 4,
-    denyCount: 1,
+    denyCount: 0,
     isActive: true,
     status: 'Active',
     lastUpdated: '2026-10-18T09:00:00Z',
@@ -36,8 +32,46 @@ function group(overrides: Partial<AccessGroup> = {}): AccessGroup {
   };
 }
 
+function right(overrides: Partial<AccessRight> = {}): AccessRight {
+  return {
+    id: 'r-1',
+    name: 'kpi:view',
+    module: 'kpi',
+    description: 'View KPIs',
+    groupAssignments: 1,
+    directAssignments: 0,
+    referenced: true,
+    status: 'Active',
+    lastUpdated: null,
+    ...overrides,
+  };
+}
+
+function employee(overrides: Partial<EmployeeHrInfo> = {}): EmployeeHrInfo {
+  return {
+    empId: '11111111-1111-1111-1111-111111111111',
+    idCode: 'EMP-001',
+    firstName: 'Dereje',
+    middleName: 'Kebede',
+    lastName: 'Girma',
+    email: 'dereje.kebede@ecx.com.et',
+    positionId: null,
+    positionName: 'Planner',
+    positionLevel: null,
+    divisionId: null,
+    divisionName: 'Trading',
+    departmentId: null,
+    departmentName: null,
+    branchId: null,
+    branchName: null,
+    ...overrides,
+  };
+}
+
 describe('AdminAccessControlPage', () => {
-  function setup(permissions: string[] = [PAGE_PERMISSION, 'admin:access.groups.manage', 'admin:access.rights.manage', 'admin:access.user-rights.manage', 'admin:audit.view']): {
+  function setup(
+    permissions: string[] = [PAGE_PERMISSION, GROUPS_PERMISSION, USER_RIGHTS_PERMISSION],
+  ): {
     http: HttpTestingController;
     notifications: NotificationService;
     confirmDialog: ConfirmDialogService;
@@ -63,45 +97,62 @@ describe('AdminAccessControlPage', () => {
     return { http, notifications, confirmDialog, page };
   }
 
-  async function flushSummary(http: HttpTestingController, payload: AccessSummary = summary()): Promise<void> {
+  async function flushInitial(
+    http: HttpTestingController,
+    payloads: {
+      groups?: AccessGroup[];
+      rights?: AccessRight[];
+      employees?: EmployeeHrInfo[];
+    } = {},
+  ): Promise<void> {
     await Promise.resolve();
     http
-      .expectOne((req) => req.method === 'GET' && req.url.includes('accesscontrol/summary'))
-      .flush({ success: true, data: payload });
+      .expectOne((req) => req.method === 'GET' && req.url.endsWith('accesscontrol/groups'))
+      .flush({ success: true, data: payloads.groups ?? [group()] });
+    http
+      .expectOne((req) => req.method === 'GET' && req.url.endsWith('accesscontrol/rights'))
+      .flush({ success: true, data: payloads.rights ?? [right()] });
+    http
+      .expectOne((req) => req.method === 'GET' && req.url.includes('accesscontrol/employees'))
+      .flush({ success: true, data: payloads.employees ?? [employee()] });
+    await Promise.resolve();
   }
 
-  it('renders the page tab as visible for viewers with admin:access.view', async () => {
-    const { http, page } = setup([PAGE_PERMISSION]);
-    await flushSummary(http);
-
-    expect(page.visibleTabs().map((t) => t.key)).toContain('overview');
-    expect(page.visibleTabs().map((t) => t.key)).not.toContain('audit');
-    http.verify();
+  it('exposes exactly the four access-control tabs', () => {
+    const { page } = setup();
+    expect(page.tabs.map((tab) => tab.label)).toEqual([
+      'Groups',
+      'Group Rights',
+      'Group Members',
+      'User Rights',
+    ]);
   });
 
-  it('shows the Authorization Audit tab only for holders of admin:audit.view', async () => {
-    const { http, page } = setup([PAGE_PERMISSION, 'admin:audit.view']);
-    await flushSummary(http);
-
-    expect(page.visibleTabs().map((t) => t.key)).toContain('audit');
-    http.verify();
-  });
-
-  it('loads the summary on init and populates the overview cards', async () => {
+  it('filters the group table by name and description', async () => {
     const { http, page } = setup();
-    await flushSummary(http, summary({ totalGroups: 7 }));
+    await flushInitial(http, {
+      groups: [
+        group({ id: 'g-1', name: 'Coordinators', description: 'Division coordinators' }),
+        group({ id: 'g-2', name: 'Auditors', description: 'Read-only review' }),
+      ],
+    });
 
-    expect(page.summary()?.totalGroups).toBe(7);
-    expect(page.summary()?.totalRights).toBe(30);
+    page.groupSearch.set('audit');
+    expect(page.filteredGroups().map((row) => row.id)).toEqual(['g-2']);
+
+    page.groupSearch.set('coordinators');
+    expect(page.filteredGroups().map((row) => row.id)).toEqual(['g-1']);
     http.verify();
   });
 
   it('refuses to create a group without a name and fires no request', async () => {
     const { http, notifications, page } = setup();
     const errorSpy = vi.spyOn(notifications, 'error');
-    await flushSummary(http);
+    await flushInitial(http);
 
-    await page.createGroup();
+    page.openCreateGroup();
+    page.groupFormName.set('   ');
+    await page.saveGroup();
 
     expect(errorSpy).toHaveBeenCalledWith('Group name is required.');
     http.verify();
@@ -110,85 +161,93 @@ describe('AdminAccessControlPage', () => {
   it('creates a group through the groups endpoint and reloads the list', async () => {
     const { http, notifications, page } = setup();
     const successSpy = vi.spyOn(notifications, 'success');
-    await flushSummary(http);
+    await flushInitial(http);
 
-    page.newGroupName.set('Coordinators');
-    const saving = page.createGroup();
+    page.openCreateGroup();
+    page.groupFormName.set('Auditors');
+    page.groupFormDescription.set('Read-only review');
+    const saving = page.saveGroup();
 
     await Promise.resolve();
     http
-      .expectOne((req) => req.method === 'POST' && req.url.includes('accesscontrol/groups'))
-      .flush({ success: true, data: group() });
+      .expectOne((req) => req.method === 'POST' && req.url.endsWith('accesscontrol/groups'))
+      .flush({ success: true, data: group({ name: 'Auditors' }) });
     await Promise.resolve();
     http
-      .expectOne((req) => req.method === 'GET' && req.url.includes('accesscontrol/groups'))
-      .flush({ success: true, data: [group()] });
-    await Promise.resolve();
-    http
-      .expectOne((req) => req.method === 'GET' && req.url.includes('accesscontrol/summary'))
-      .flush({ success: true, data: summary() });
+      .expectOne((req) => req.method === 'GET' && req.url.endsWith('accesscontrol/groups'))
+      .flush({ success: true, data: [group({ name: 'Auditors' })] });
     await saving;
 
-    expect(successSpy).toHaveBeenCalledWith('Access group created.');
-    expect(page.newGroupName()).toBe('');
+    expect(successSpy).toHaveBeenCalledWith('Group created.');
+    expect(page.groupDialog()).toBeNull();
   });
 
-  it('refuses to save a direct user right without a justification reason', async () => {
-    const { http, notifications, page } = setup();
-    const errorSpy = vi.spyOn(notifications, 'error');
-    await flushSummary(http);
-    http.verify();
-
-    await page.saveUserRight();
-
-    expect(errorSpy).toHaveBeenCalledWith('Select an employee and a right first.');
-    http.verify();
-  });
-
-  it('labels granted and denied results with distinct tones', async () => {
+  it('marks rights already assigned to the selected group', async () => {
     const { http, page } = setup();
-    await flushSummary(http);
+    await flushInitial(http);
 
-    expect(page.resultTone('Granted')).toBe('granted');
-    expect(page.resultTone('Denied')).toBe('denied');
+    const selecting = page.selectGroup(group());
+
+    await Promise.resolve();
+    const assigned: GroupRightRow = {
+      roleId: 'g-1',
+      permissionId: 'r-1',
+      roleName: 'Coordinators',
+      permissionName: 'kpi:view',
+      module: 'kpi',
+      effect: 'Grant',
+      assignedAt: '2026-10-18T09:00:00Z',
+      assignedByName: 'admin',
+    };
+    http
+      .expectOne((req) => req.method === 'GET' && req.url.includes('groups/g-1/rights'))
+      .flush({ success: true, data: [assigned] });
+    await selecting;
+
+    expect(page.selectedGroupRights().get('r-1')).toBe('Grant');
+    expect(page.groupRightModules()[0].rights[0].effect).toBe('Grant');
     http.verify();
   });
 
-  it('counts granted rights in the effective-access overview', async () => {
+  it('builds the employee display name from HR first and middle names', async () => {
     const { http, page } = setup();
-    await flushSummary(http);
+    await flushInitial(http);
 
-    const entries = [
-      { result: 'Granted' },
-      { result: 'Granted' },
-      { result: 'Denied' },
-    ] as never[];
-
-    expect(page.grantedCount(entries)).toBe(2);
+    expect(page.employeeName(employee())).toBe('Dereje Kebede');
     http.verify();
   });
 
-  it('blocks deleting a right that is still referenced', async () => {
-    const { http, notifications, page } = setup();
-    const errorSpy = vi.spyOn(notifications, 'error');
-    await flushSummary(http);
-    http.verify();
+  it('loads the memberships of the selected HR employee', async () => {
+    const { http, page } = setup();
+    await flushInitial(http);
 
-    await page.deleteRight({ referenced: true } as never);
+    const selecting = page.selectMemberEmployee(employee());
 
-    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('still referenced'));
-    http.verify();
-  });
+    await Promise.resolve();
+    http
+      .expectOne(
+        (req) =>
+          req.method === 'GET' &&
+          req.url.includes('accesscontrol/memberships') &&
+          req.url.includes('userId=11111111-1111-1111-1111-111111111111'),
+      )
+      .flush({
+        success: true,
+        data: [
+          {
+            userId: '11111111-1111-1111-1111-111111111111',
+            roleId: 'g-1',
+            username: 'dereje.kebede',
+            fullName: 'Dereje Kebede',
+            roleName: 'Coordinators',
+            assignedAt: '2026-10-18T09:00:00Z',
+            assignedByName: 'admin',
+          },
+        ],
+      });
+    await selecting;
 
-  it('refuses membership assignment when employee or group is missing', async () => {
-    const { http, notifications, page } = setup();
-    const errorSpy = vi.spyOn(notifications, 'error');
-    await flushSummary(http);
-    http.verify();
-
-    await page.assignMembership();
-
-    expect(errorSpy).toHaveBeenCalledWith('Select an employee and an access group first.');
+    expect(page.memberRoleIds().has('g-1')).toBe(true);
     http.verify();
   });
 });

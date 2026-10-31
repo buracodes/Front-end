@@ -91,15 +91,26 @@
                 Forgot password?
               </a>
             </div> -->
-            <label class="mb-1.5 block text-sm font-medium text-slate-700" for="username">Password</label>
-            <input
-              id="password"
-              class="w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
-              type="password"
-              autocomplete="current-password"
-              formControlName="password"
-              placeholder="Enter your password"
-            />
+            <label class="mb-1.5 block text-sm font-medium text-slate-700" for="password">Password</label>
+            <div class="relative">
+              <input
+                id="password"
+                class="w-full rounded-lg border border-slate-300 px-3.5 py-2.5 pr-11 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+                [type]="showPassword() ? 'text' : 'password'"
+                autocomplete="current-password"
+                formControlName="password"
+                placeholder="Enter your password"
+              />
+              <button
+                type="button"
+                class="absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 transition hover:text-slate-600 focus:outline-none focus-visible:text-brand"
+                (click)="togglePassword()"
+                [attr.aria-label]="showPassword() ? 'Hide password' : 'Show password'"
+                [attr.aria-pressed]="showPassword()"
+              >
+                <svg [lucideIcon]="showPassword() ? 'eye-off' : 'eye'" size="18"></svg>
+              </button>
+            </div>
             @if (form.controls.password.invalid && form.controls.password.touched) {
               <p class="mt-1.5 text-xs text-red-600">Password is required.</p>
             }

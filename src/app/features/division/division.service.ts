@@ -16,7 +16,6 @@ import {
   UpdateDivisionKpiRequest,
   DivisionActualValueDto,
   EnterDivisionActualValueRequest,
-  ResetDivisionPasswordRequest,
 } from './division.model';
 import { IResponse } from '../../core/model/interface/response.interface';
 import { ApiService } from '../../core/service/apiService/api-service';
@@ -127,12 +126,6 @@ export class DivisionService {
     return this.api
       .post<IResponse<DivisionActualValueDto>>(`${ApiEndpoint.Division}/actuals`, { dto })
       .pipe(map((r) => r.data!));
-  }
-
-  resetAccountPassword(model: ResetDivisionPasswordRequest): Observable<boolean> {
-    return this.api
-      .post<IResponse<boolean>>(ApiEndpoint.ResetDivisionPassword, { dto: model })
-      .pipe(map((r) => r.data ?? false));
   }
 
   private toQueryString(query?: DivisionPlanQuery): string {

@@ -615,6 +615,18 @@ textarea.form-control {
   max-width: 700px;
 }
 
+/* Some dialogs wrap .modal-body and .modal-footer in a <form>. That form must
+   continue the dialog's flex column, otherwise it grows to content height,
+   .modal-body never becomes a bounded scroll container, and the footer is
+   clipped by the dialog's overflow: hidden. */
+.modal-dialog > form {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .modal-header {
   display: flex;
   justify-content: space-between;

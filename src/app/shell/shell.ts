@@ -1,11 +1,8 @@
 import { Component, inject, signal, computed } from '@angular/core';
-import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
-import { toApiError } from '../core/model/api-error';
+import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { UserStore } from '../core/service/user-store.service';
 import { AuthService } from '../core/service/auth.service';
 import { NotificationService } from '../core/service/notification.service';
-import { PASSWORD_REQUIREMENTS_MESSAGE, passwordPolicyValidator } from '../core/validation/password-policy';
 import { Toaster } from '../shared/reusableComponent/toaster/toaster';
 import { ConfirmDialog } from '../shared/reusableComponent/confirm-dialog/confirm-dialog';
 import { LucideDynamicIcon } from '@lucide/angular';
@@ -15,7 +12,8 @@ interface NavItem {
   route?: string;
   /** Lucide icon slug, resolved through the registry in core/icon/app-icons. */
   icon: string;
-  permission?: string;
+  /** Required capability; an array means "any of these" (matches permissionGuard). */
+  permission?: string | string[];
   children?: NavItem[];
   isGroup?: boolean;
 }
@@ -26,7 +24,6 @@ interface NavItem {
     RouterOutlet,
     RouterLink,
     RouterLinkActive,
-    ReactiveFormsModule,
     Toaster,
     ConfirmDialog,
     LucideDynamicIcon,
@@ -38,32 +35,11 @@ export class ShellComponent {
   readonly userStore = inject(UserStore);
   private readonly authService = inject(AuthService);
   private readonly notifications = inject(NotificationService);
-  private readonly router = inject(Router);
 
   readonly sidebarCollapsed = signal(false);
   readonly mobileMenuOpen = signal(false);
   readonly expandedGroups = signal<Set<string>>(new Set());
   readonly profileOpen = signal(false);
-
-  readonly showPasswordForm = signal(false);
-  readonly changingPassword = signal(false);
-
-  readonly passwordRequirementsMessage = PASSWORD_REQUIREMENTS_MESSAGE;
-
-  readonly passwordForm = new FormGroup({
-    currentPassword: new FormControl('', {
-      nonNullable: true,
-      validators: [Validators.required],
-    }),
-    newPassword: new FormControl('', {
-      nonNullable: true,
-      validators: [Validators.required, passwordPolicyValidator()],
-    }),
-    confirmPassword: new FormControl('', {
-      nonNullable: true,
-      validators: [Validators.required],
-    }),
-  });
 
   readonly navItems: NavItem[] = [
     {
@@ -78,9 +54,10 @@ export class ShellComponent {
       permission: 'organization:view',
     },
     {
-      label: 'scorecards',
+      label: 'Scorecards',
       route: '/scorecards',
       icon: 'layout-list',
+      permission: 'scorecard:view',
     },
     {
       label: 'Fiscal Years',
@@ -133,6 +110,7 @@ export class ShellComponent {
           label: 'Data Locking',
           route: '/data-locking',
           icon: 'lock',
+          permission: ['actuals:view', 'admin:config.manage'],
         },
         // {
         //   label: 'Scorecard Clone',
@@ -190,12 +168,6 @@ export class ShellComponent {
           permission: 'admin:users.manage',
         },
         {
-          label: 'Roles',
-          route: '/admin/roles',
-          icon: 'shield',
-          permission: 'admin:roles.manage',
-        },
-        {
           label: 'RAG Thresholds',
           route: '/admin/rag-thresholds',
           icon: 'traffic-cone',
@@ -205,11 +177,29 @@ export class ShellComponent {
     },
   ];
 
-  readonly visibleNavItems = computed(() =>
-    this.navItems.filter(
-      (item) => !item.permission || this.userStore.hasPermission(item.permission)
-    )
-  );
+  readonly visibleNavItems = computed(() => {
+    const canAccess = (permission?: string | string[]): boolean => {
+      if (!permission) {
+        return true;
+      }
+      const required = Array.isArray(permission) ? permission : [permission];
+      return this.userStore.hasAnyPermission(required);
+    };
+
+    return this.navItems
+      .map((item) =>
+        item.children
+          ? { ...item, children: item.children.filter((child) => canAccess(child.permission)) }
+          : item
+      )
+      .filter((item) => {
+        if (!canAccess(item.permission)) {
+          return false;
+        }
+        // A group whose children are all hidden would render an empty, dead menu entry.
+        return !(item.children && item.children.length === 0);
+      });
+  });
 
   toggleGroup(label: string): void {
     this.expandedGroups.update((groups) => {
@@ -269,43 +259,5 @@ export class ShellComponent {
 
   logout(): void {
     this.authService.logout();
-  }
-
-  openPasswordModal(): void {
-    this.passwordForm.reset({ currentPassword: '', newPassword: '', confirmPassword: '' });
-    this.showPasswordForm.set(true);
-  }
-
-  closePasswordModal(): void {
-    this.passwordForm.reset({ currentPassword: '', newPassword: '', confirmPassword: '' });
-    this.showPasswordForm.set(false);
-  }
-
-  changePassword(): void {
-    if (this.passwordForm.invalid || this.changingPassword()) {
-      return;
-    }
-
-    const { currentPassword, newPassword, confirmPassword } = this.passwordForm.getRawValue();
-
-    if (newPassword !== confirmPassword) {
-      this.notifications.error('New password and confirmation do not match.');
-      return;
-    }
-
-    this.changingPassword.set(true);
-
-    this.authService.changePassword({ currentPassword, newPassword, confirmPassword }).subscribe({
-      next: () => {
-        this.changingPassword.set(false);
-        this.closePasswordModal();
-        this.notifications.success('Password changed. Please sign in with your new password.');
-        this.router.navigate(['/login']);
-      },
-      error: (error) => {
-        this.notifications.error(toApiError(error).message);
-        this.changingPassword.set(false);
-      },
-    });
   }
 }

@@ -8,8 +8,6 @@ import {
   DivisionPlanDto,
   DivisionGoalDto,
   DivisionKpiDto,
-  DivisionFiscalPeriodDto,
-  DivisionKpiTargetInputDto,
   RagStatus,
 } from '../division/division.model';
 import { NotificationService } from '../../core/service/notification.service';
@@ -35,10 +33,17 @@ interface CorporateGoalItem {
 }
 
 interface ReportGoalRow {
+  kind: 'goal' | 'kpi';
   name: string;
+  parentName?: string;
   weight: number;
-  score: number;
+  score: number | null;
+  target?: number | null;
+  actual?: number | null;
+  unit?: string;
   status?: RagStatus;
+  /** RAG bar width, already clamped to 0-100. */
+  progress: number;
 }
 
 type ReportPeriod = 'Ytd' | 'Year' | 'Q1' | 'Q2' | 'Q3' | 'Q4' | 'M1' | 'M2' | 'M3' | 'M4' | 'M5' | 'M6' | 'M7' | 'M8' | 'M9' | 'M10' | 'M11' | 'M12' | 'Range';
@@ -96,8 +101,19 @@ private readonly notifications = inject(NotificationService);
   readonly crudSubmitting = signal(false);
 
   readonly planStatus = computed<CanonicalPlanStatus>(() => normalizePlanStatus(this.plan()?.planStatus));
-  /** Editing is only allowed while the plan is still a draft. */
-  readonly canEdit = computed(() => this.planStatus() === 'Draft');
+
+  readonly canPlan = computed(() => this.userStore.hasPermission('divisions:plan'));
+  /** Editing is only allowed while the plan is still a draft and the user may plan divisions. */
+  readonly canEdit = computed(() => this.canPlan() && this.planStatus() === 'Draft');
+  /** FR-908: the division performance report is a separately granted capability. */
+  readonly canViewReport = computed(() => this.userStore.hasPermission('divisions:reports.view'));
+  readonly canExportReport = computed(
+    () => this.canViewReport() && this.userStore.hasPermission('reports:export')
+  );
+  /** FR-906: actual entry needs the finalization state *and* the entry permission. */
+  readonly canEnterActuals = computed(
+    () => this.planStatus() === 'Finalized' && this.userStore.hasPermission('divisions:actuals.enter')
+  );
 
   readonly finalizedAt = computed(() => this.plan()?.finalizedAtUtc ?? null);
   /** A plan always belongs to one division; nothing can be saved until one is chosen. */
@@ -267,14 +283,36 @@ readonly divisionGoals = computed<DivisionGoalDto[]>(() =>
     }))
   );
 
-  readonly reportGoalRows = computed<ReportGoalRow[]>(
-    () =>
-      this.divisionGoals().map((g) => ({
-        name: g.name,
-        weight: g.weight,
-        score: g.score ?? 0,
-        status: normalizeStatus(g.status),
-      }))
+  /** FR-908: the report lists every goal followed by its KPIs, so targets, actuals and
+   *  per-KPI scores are visible — not just the rolled-up goal score. */
+  readonly reportGoalRows = computed<ReportGoalRow[]>(() =>
+    this.divisionGoals().flatMap((g) => {
+      const clamp = (value: number | null | undefined): number =>
+        Math.max(0, Math.min(100, value ?? 0));
+
+      return [
+        {
+          kind: 'goal' as const,
+          name: g.name,
+          weight: g.weight,
+          score: g.score ?? null,
+          status: normalizeStatus(g.status),
+          progress: clamp(g.score),
+        },
+        ...(g.kpis ?? []).map((k) => ({
+          kind: 'kpi' as const,
+          name: k.name,
+          parentName: g.name,
+          weight: k.weight,
+          score: k.score ?? null,
+          target: k.target ?? null,
+          actual: k.actual ?? null,
+          unit: k.unit,
+          status: normalizeStatus(k.status),
+          progress: clamp(k.score),
+        })),
+      ];
+    })
   );
 
   readonly overallStatus = computed<RagStatus | undefined>(() => {
@@ -299,13 +337,24 @@ readonly overallScore = computed(() => {
   readonly donutSize = 150;
   readonly donutThickness = 20;
 
-  /** FR-908: single-ring doughnut — the overall score (orange) and the remainder
-   *  (pale green-gray). */
+  private readonly ragColor = computed(() => {
+    switch (this.overallStatus()) {
+      case 'green':
+        return '#16A34A';
+      case 'amber':
+        return '#D97706';
+      default:
+        return '#DC2626';
+    }
+  });
+
+  /** FR-908: single-ring doughnut — the overall score in its RAG colour and the
+   *  remainder (pale green-gray). */
   readonly donutSegments = computed<DonutSegment[]>(() => {
     const score = Math.max(0, Math.min(100, this.overallScore()));
     const tail = Math.max(0, 100 - score);
     return this.buildSegments([
-      { value: score, color: '#C77B24' },
+      { value: score, color: this.ragColor() },
       { value: tail, color: '#E3EAE0' },
     ]);
   });
@@ -576,7 +625,7 @@ submitGoal(): void {
         this.notifications.success('Division goal deleted.');
         this.reloadPlan();
       },
-      error: () => this.notifications.error('Could not delete the division goal.'),
+      error: (error) => this.notifications.error(toApiError(error).message),
     });
   }
 
@@ -596,13 +645,9 @@ submitGoal(): void {
       validators: [Validators.maxLength(500)],
     }),
     unit: new FormControl('', { nonNullable: true, validators: [Validators.maxLength(50)] }),
-    divisionOwnerId: new FormControl<string | null>(null, {
-      nonNullable: true,
-      validators: [Validators.required],
-    }),
     weight: new FormControl(0, {
       nonNullable: true,
-      validators: [Validators.min(0), Validators.max(100)],
+      validators: [Validators.min(0.01), Validators.max(100)],
     }),
     optimizationType: new FormControl<'Maximize' | 'Minimize' | 'ExactHit' | 'Binary'>('Maximize', {
       nonNullable: true,
@@ -614,192 +659,6 @@ submitGoal(): void {
     minValue: new FormControl<number | null>(null, { nonNullable: true }),
     maxValue: new FormControl<number | null>(null, { nonNullable: true }),
   });
-
-  // ── FR-904: KPI targets (annual / quarterly / monthly) ───────────────────
-
-  readonly kpiQuarterIndexes = [0, 1, 2, 3];
-
-  readonly kpiAnnualTarget = signal<number | null>(null);
-  readonly kpiQuarterly = signal<number[]>([0, 0, 0, 0]);
-  readonly kpiMonthly = signal<number[]>([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-
-  /** Fiscal periods of the loaded plan, used to resolve target period ids. */
-  private readonly kpiPeriods = computed<DivisionFiscalPeriodDto[]>(() =>
-    (this.plan()?.fiscalPeriods ?? []).slice().sort((a, b) => a.fiscalMonth - b.fiscalMonth)
-  );
-
-  private resetKpiTargets(): void {
-    this.kpiAnnualTarget.set(null);
-    this.kpiQuarterly.set([0, 0, 0, 0]);
-    this.kpiMonthly.set([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-  }
-
-  /** Reloads an existing KPI's persisted annual/quarterly/monthly targets. */
-  private loadKpiTargets(kpi: DivisionKpiDto): void {
-    this.resetKpiTargets();
-    const quarterly = this.kpiQuarterly().slice();
-    const monthly = this.kpiMonthly().slice();
-    let annual: number | null = null;
-    for (const t of kpi.targets ?? []) {
-      if (t.granularity === 'Annual') annual = t.targetValue;
-      if (t.granularity === 'Quarterly' && t.quarter >= 1 && t.quarter <= 4) quarterly[t.quarter - 1] = t.targetValue;
-      if (t.granularity === 'Monthly' && t.fiscalMonth >= 1 && t.fiscalMonth <= 12) monthly[t.fiscalMonth - 1] = t.targetValue;
-    }
-    this.kpiAnnualTarget.set(annual);
-    this.kpiQuarterly.set(quarterly);
-    this.kpiMonthly.set(monthly);
-  }
-
-  private kpiIsCumulative(): boolean {
-    return this.kpiForm.controls.isCumulative.value === true;
-  }
-
-  monthsOfKpiQuarter(q: number): number[] {
-    return [q * 3, q * 3 + 1, q * 3 + 2];
-  }
-
-  kpiMonthLabel(fiscalMonth: number): string {
-    const fy = this.selectedFiscalYear();
-    return fy ? fiscalMonthLabel(fy.startDate, fiscalMonth) : `M${fiscalMonth}`;
-  }
-
-  kpiQuarterLabel(q: number): string {
-    return `Q${q + 1}`;
-  }
-
-  kpiQuarterDisplay(q: number): number {
-    return this.kpiQuarterly()[q];
-  }
-
-  kpiQuarterSum(q: number): number {
-    return this.monthsOfKpiQuarter(q).reduce((s, mi) => s + this.kpiMonthly()[mi], 0);
-  }
-
-  private kpiMonthsFilled(q: number): boolean {
-    return this.monthsOfKpiQuarter(q).every((mi) => this.kpiMonthly()[mi] !== 0);
-  }
-
-  onKpiAnnualChange(event: Event): void {
-    const raw = (event.target as HTMLInputElement).value.trim();
-    const n = raw === '' ? null : Number(raw);
-    this.kpiAnnualTarget.set(n !== null && Number.isNaN(n) ? null : n);
-  }
-
-  onKpiQuarterChange(q: number, event: Event): void {
-    const next = this.kpiQuarterly().slice();
-    next[q] = this.parseTargetNumber((event.target as HTMLInputElement).value);
-    this.kpiQuarterly.set(next);
-  }
-
-  onKpiMonthChange(mi: number, event: Event): void {
-    const next = this.kpiMonthly().slice();
-    next[mi] = this.parseTargetNumber((event.target as HTMLInputElement).value);
-    this.kpiMonthly.set(next);
-  }
-
-  private parseTargetNumber(raw: string): number {
-    const t = raw.trim();
-    if (t === '') return 0;
-    const n = Number(t);
-    return Number.isNaN(n) ? 0 : n;
-  }
-
-  /** True when the user has entered at least one target value. */
-  kpiTargetsProvided(): boolean {
-    return (
-      this.kpiAnnualTarget() !== null ||
-      this.kpiQuarterly().some((v) => v !== 0) ||
-      this.kpiMonthly().some((v) => v !== 0)
-    );
-  }
-
-  /** Mirrors the corporate target rules: annual required, cumulative sums, or non-cumulative equality. */
-  kpiQuarterError(q: number): string | null {
-    const annual = this.kpiAnnualTarget();
-    if (annual === null) return null;
-    if (this.kpiIsCumulative()) {
-      if (!this.kpiMonthsFilled(q)) return 'Fill all 3 month targets.';
-      if (Math.abs(this.kpiQuarterSum(q) - this.kpiQuarterDisplay(q)) >= 0.005) {
-        return `Month total (${round1(this.kpiQuarterSum(q))}) must equal the quarter target (${round1(this.kpiQuarterDisplay(q))}).`;
-      }
-      return null;
-    }
-    if (this.kpiQuarterDisplay(q) !== annual) {
-      return `Quarter target must equal the annual target (${round1(annual)}).`;
-    }
-    if (this.monthsOfKpiQuarter(q).some((mi) => this.kpiMonthly()[mi] !== this.kpiQuarterDisplay(q))) {
-      return `Each month target must equal the quarter target (${round1(this.kpiQuarterDisplay(q))}).`;
-    }
-    return null;
-  }
-
-  /** Empty targets are allowed; otherwise the annual target and reconciliation are enforced. */
-  kpiTargetsError(): string | null {
-    if (!this.kpiTargetsProvided()) return null;
-    const annual = this.kpiAnnualTarget();
-    if (annual === null) return 'Annual target is required.';
-    if (this.kpiIsCumulative()) {
-      const quarters = this.kpiQuarterly();
-      if (quarters.some((v) => v === 0)) return 'All four quarterly targets must be filled.';
-      const sum = quarters.reduce((s, v) => s + v, 0);
-      if (Math.abs(sum - annual) >= 0.005) {
-        return `Quarterly targets total ${round1(sum)}, but the annual target is ${round1(annual)}. They must match exactly.`;
-      }
-      for (let q = 0; q < 4; q++) {
-        const err = this.kpiQuarterError(q);
-        if (err) return err;
-      }
-      return null;
-    }
-    for (let q = 0; q < 4; q++) {
-      const err = this.kpiQuarterError(q);
-      if (err) return err;
-    }
-    return null;
-  }
-
-  kpiTargetsValid(): boolean {
-    return this.kpiTargetsError() === null;
-  }
-
-  /** Materialises the entered targets into the request shape (empty list when nothing entered). */
-  private buildKpiTargets(): DivisionKpiTargetInputDto[] {
-    if (!this.kpiTargetsProvided()) return [];
-
-    const periods = this.kpiPeriods();
-    const annual = this.kpiAnnualTarget();
-    const monthlyById = new Map<number, string>();
-    const quarterEndById = new Map<number, string>();
-    let yearEndId: string | undefined;
-    for (const period of periods) {
-      monthlyById.set(period.fiscalMonth, period.id);
-      if (period.isQuarterEnd) quarterEndById.set(period.quarter, period.id);
-      if (period.isYearEnd) yearEndId = period.id;
-    }
-
-    const targets: DivisionKpiTargetInputDto[] = [];
-    const months = this.kpiMonthly();
-    for (let month = 1; month <= 12; month++) {
-      const periodId = monthlyById.get(month);
-      if (periodId) {
-        targets.push({ fiscalPeriodId: periodId, targetValue: months[month - 1], granularity: 'Monthly' });
-      }
-    }
-
-    const quarters = this.kpiQuarterly();
-    for (let quarter = 1; quarter <= 4; quarter++) {
-      const periodId = quarterEndById.get(quarter);
-      if (!periodId) continue;
-      const value = this.kpiIsCumulative() ? quarters[quarter - 1] : annual ?? 0;
-      targets.push({ fiscalPeriodId: periodId, targetValue: value, granularity: 'Quarterly' });
-    }
-
-    if (yearEndId && annual !== null) {
-      targets.push({ fiscalPeriodId: yearEndId, targetValue: annual, granularity: 'Annual' });
-    }
-
-    return targets;
-  }
 
   readonly kpiParentGoal = computed<DivisionGoalDto | null>(() => {
     const id = this.kpiParentGoalId();
@@ -836,19 +695,15 @@ submitGoal(): void {
       name: '',
       description: '',
       unit: '',
-      // The KPI owner defaults to the plan's division; fall back to the first loaded
-      // division so the form can never open with an unresolvable required owner.
-      divisionOwnerId: this.plan()?.divisionId || this.divisions()[0]?.id || null,
       weight: this.remainingKpiWeight(goal),
       optimizationType: 'Maximize',
       kpiType: 'Lagging',
       dataSource: 'Manual',
-isCumulative: true,
+      isCumulative: true,
       baseline: null,
       minValue: null,
       maxValue: null,
     });
-    this.resetKpiTargets();
     this.kpiModalOpen.set(true);
   }
 
@@ -860,17 +715,15 @@ isCumulative: true,
       name: kpi.name,
       description: kpi.description ?? '',
       unit: kpi.unit ?? '',
-      divisionOwnerId: kpi.divisionOwnerId ?? null,
       weight: kpi.weight,
       optimizationType: (kpi.optimizationType as 'Maximize' | 'Minimize' | 'ExactHit' | 'Binary') || 'Maximize',
       kpiType: (kpi.kpiType as 'Leading' | 'Lagging') || 'Lagging',
       dataSource: (kpi.dataSource as 'Manual' | 'Automated' | 'Calculated') || 'Manual',
       isCumulative: kpi.isCumulative,
-baseline: kpi.baseline ?? null,
+      baseline: kpi.baseline ?? null,
       minValue: kpi.minValue ?? null,
       maxValue: kpi.maxValue ?? null,
     });
-    this.loadKpiTargets(kpi);
     this.kpiModalOpen.set(true);
   }
 
@@ -878,17 +731,11 @@ baseline: kpi.baseline ?? null,
     this.kpiModalOpen.set(false);
   }
 
-submitKpi(): void {
+  submitKpi(): void {
     if (this.kpiForm.invalid || this.crudSubmitting()) return;
     // FR-905: KPI weights under a goal cannot exceed 100%.
     if (this.kpiWeightRemaining() < 0) {
       this.notifications.error('KPI weights for this goal cannot exceed 100%.');
-      return;
-    }
-    // FR-904: when targets are entered they must reconcile (annual required, etc.).
-    const targetError = this.kpiTargetsError();
-    if (targetError) {
-      this.notifications.error(targetError);
       return;
     }
     const p = this.plan();
@@ -900,7 +747,6 @@ submitKpi(): void {
       name: f.controls.name.value.trim(),
       description: f.controls.description.value.trim() || undefined,
       unit: f.controls.unit.value.trim() || undefined,
-      divisionOwnerId: f.controls.divisionOwnerId.value ?? undefined,
       weight: Number(f.controls.weight.value),
       optimizationType: f.controls.optimizationType.value,
       kpiType: f.controls.kpiType.value,
@@ -909,9 +755,6 @@ submitKpi(): void {
       baseline: f.controls.baseline.value ?? undefined,
       minValue: f.controls.minValue.value ?? undefined,
       maxValue: f.controls.maxValue.value ?? undefined,
-      // FR-904: without fiscal periods the target grid cannot be materialised, so on edit we
-      // leave the persisted targets untouched rather than risk clearing them.
-      targets: this.kpiPeriods().length > 0 ? this.buildKpiTargets() : undefined,
     };
 
     this.crudSubmitting.set(true);
@@ -951,7 +794,7 @@ submitKpi(): void {
         this.notifications.success('Division KPI deleted.');
         this.reloadPlan();
       },
-      error: () => this.notifications.error('Could not delete the division KPI.'),
+      error: (error) => this.notifications.error(toApiError(error).message),
     });
   }
 
@@ -975,9 +818,9 @@ submitKpi(): void {
         this.notifications.success('Division plan finalized.');
         this.reloadPlan();
       },
-      error: () => {
+      error: (error) => {
         this.finalizing.set(false);
-        this.notifications.error('Could not finalize the division plan.');
+        this.notifications.error(toApiError(error).message);
       },
     });
   }
@@ -1016,7 +859,7 @@ submitKpi(): void {
   isEntryOpen(month: number | null): boolean {
     if (!month) return false;
     const lock = this.periodLocks().get(month);
-    return !!lock && lock.state !== 'locked' && !!lock.fiscalPeriodId;
+    return lock?.state === 'open' && !!lock.fiscalPeriodId;
   }
 
   private actualFor(kpiId: string, month: number | null): DivisionActualValueDto | undefined {
@@ -1075,7 +918,7 @@ submitKpi(): void {
     const p = this.plan();
     const month = this.entryMonth();
     const periodId = this.periodIdFor(month);
-    if (!p || !month || !periodId || this.entrySaving()) return;
+    if (!p || !month || !periodId || this.entrySaving() || !this.canEnterActuals()) return;
     const raw = this.entryValue(kpiId).trim();
     if (raw === '') return;
 
@@ -1097,9 +940,9 @@ submitKpi(): void {
         }
         this.reloadPlan();
       },
-      error: () => {
+      error: (error) => {
         this.entrySaving.set(null);
-        this.notifications.error('Could not save the actual value.');
+        this.notifications.error(toApiError(error).message);
       },
     });
   }
@@ -1151,7 +994,7 @@ submitKpi(): void {
   private prepareEntry(): void {
     const p = this.plan();
     if (!p?.scorecardId || !p.fiscalYearId) return;
-    if (this.planStatus() === 'Finalized') {
+    if (this.canEnterActuals()) {
       this.loadPeriodLocks(p.scorecardId, p.fiscalYearId);
       if (p.divisionId) {
         this.loadDivisionActuals(p.divisionId, p.fiscalYearId);
@@ -1276,12 +1119,16 @@ submitKpi(): void {
     });
   }
 
+  private reloadSequence = 0;
+
   private reloadPlan(): void {
     if (!this.scorecardId()) {
       this.loading.set(false);
       this.loadError.set('No corporate scorecard was selected.');
       return;
     }
+    // Period/division/filter changes can overlap; only the newest response may win.
+    const sequence = ++this.reloadSequence;
     this.loading.set(true);
     this.loadError.set(null);
     const ownDivision = this.userStore.isDivisionAccount() ? this.userStore.divisionId() : null;
@@ -1290,6 +1137,7 @@ submitKpi(): void {
       .getPlanContextByScorecard(this.scorecardId(), this.periodQuery(), divisionId)
 .subscribe({
         next: (plan) => {
+          if (sequence !== this.reloadSequence) return;
           this.plan.set(plan);
           this.selectedIds.set(new Set(plan.contributions.map((c) => c.goalId)));
           this.loading.set(false);
@@ -1297,6 +1145,7 @@ submitKpi(): void {
           this.prepareEntry();
         },
         error: (error) => {
+          if (sequence !== this.reloadSequence) return;
           this.loading.set(false);
           this.loadError.set(toApiError(error).message);
         },
@@ -1308,7 +1157,7 @@ submitKpi(): void {
     this.reloadPlan();
   }
 
-statusLabel(status?: RagStatus): string {
+  statusLabel(status?: RagStatus): string {
     switch (status) {
       case 'green':
         return 'Green';
@@ -1317,6 +1166,15 @@ statusLabel(status?: RagStatus): string {
       default:
         return 'Red';
     }
+  }
+
+  reportValue(value?: number | null, unit?: string): string {
+    if (value == null) return '—';
+    return unit ? `${value} ${unit}` : `${value}`;
+  }
+
+  reportScore(value?: number | null): string {
+    return value == null ? '—' : `${value}%`;
   }
 
 readonly exporting = signal(false);
@@ -1363,6 +1221,10 @@ readonly exporting = signal(false);
   exportPlan(format: ReportExportFormat, event?: Event): void {
     event?.stopPropagation();
     this.exportMenuOpen.set(false);
+    if (!this.canExportReport()) {
+      this.notifications.error('You do not have permission to export reports.');
+      return;
+    }
     const filter = this.currentExportFilter();
     if (!filter || this.exporting()) {
       this.notifications.error('No plan is loaded to export.');
@@ -1376,9 +1238,9 @@ readonly exporting = signal(false);
         downloadBlob(blob, `division-performance-${stamp}.${format}`);
         this.notifications.success('Division report exported.');
       },
-      error: () => {
+      error: (error) => {
         this.exporting.set(false);
-        this.notifications.error('Could not export the division report.');
+        this.notifications.error(toApiError(error).message);
       },
     });
   }

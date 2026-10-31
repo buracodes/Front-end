@@ -1,6 +1,6 @@
 import { HttpContextToken, HttpErrorResponse, HttpEvent, HttpHandlerFn, HttpInterceptorFn, HttpRequest } from '@angular/common/http';
 import { inject } from '@angular/core';
-import { Observable, from, switchMap, throwError } from 'rxjs';
+import { Observable, catchError, from, switchMap, throwError } from 'rxjs';
 import { AuthService } from '../service/auth.service';
 
 const TOKEN_ROUTES = ['/auth/login', '/auth/refresh', '/auth/logout'];
@@ -18,13 +18,15 @@ export const authInterceptor: HttpInterceptorFn = (req: HttpRequest<unknown>, ne
     req = req.clone({ setHeaders: { Authorization: `Bearer ${token}` } });
   }
 
+  // HttpClient reports failures on the error channel, so the 401 handling must live in
+  // catchError — a switchMap over next() never observes an HttpErrorResponse.
   return next(req).pipe(
-    switchMap((event) => {
-      if (event instanceof HttpErrorResponse && event.status === 401 && !isTokenRoute(req.url) && !req.context.get(RETRIED)) {
+    catchError((error: unknown) => {
+      if (error instanceof HttpErrorResponse && error.status === 401 && !isTokenRoute(req.url) && !req.context.get(RETRIED)) {
         return from(authService.refresh()).pipe(
           switchMap((refreshed) => {
             if (!refreshed) {
-              return throwError(() => event);
+              return throwError(() => error);
             }
             const retry = req.clone({
               setHeaders: { Authorization: `Bearer ${authService.accessToken}` },
@@ -34,7 +36,7 @@ export const authInterceptor: HttpInterceptorFn = (req: HttpRequest<unknown>, ne
           })
         );
       }
-      return [event];
+      return throwError(() => error);
     })
   );
 };

@@ -23,7 +23,12 @@ export class LoginPage {
 
   readonly submitting = signal(false);
   readonly errorMessage = signal<string | null>(null);
+  readonly showPassword = signal(false);
   readonly year = new Date().getFullYear();
+
+  togglePassword(): void {
+    this.showPassword.update((visible) => !visible);
+  }
 
   onSubmit(): void {
     if (this.form.invalid || this.submitting()) {

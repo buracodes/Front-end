@@ -37,7 +37,7 @@ export class KpiService {
     return this.api.get<IResponse<Kpi[]>>(url).pipe(map((r) => r.data ?? []));
   }
 
-  /** Active users that can own a KPI (readable with kpi:view). */
+  /** Active HR employees that can own a KPI (readable with kpi:view). */
   getOwnerOptions(): Observable<KpiOwnerOption[]> {
     return this.api
       .get<IResponse<KpiOwnerOption[]>>(`${ApiEndpoint.User}/lookup`)

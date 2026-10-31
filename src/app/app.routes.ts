@@ -2,7 +2,6 @@ import { Routes } from '@angular/router';
 import { authGuard } from './core/guard/auth.guard';
 import { guestGuard } from './core/guard/guest.guard';
 import { permissionGuard } from './core/guard/permission.guard';
-import { InitiativeDetailPage } from './features/initiative/initiative-detail';
 
 export const routes: Routes = [
   {
@@ -22,39 +21,48 @@ export const routes: Routes = [
       },
       {
         path: 'org-profile',
+        canActivate: [permissionGuard('organization:view')],
         loadComponent: () => import('./features/org-profile/org-profile').then((m) => m.OrgProfilePage),
       },
-      { 
+      {
         path: 'scorecards',
+        canActivate: [permissionGuard('scorecard:view')],
         loadComponent: () => import('./features/scorecard/scorecard').then((m) => m.ScorecardPage),
       },
       {
         path: 'scorecards/manage',
+        canActivate: [permissionGuard('scorecard:view')],
         loadComponent: () => import('./features/scorecard/scorecard').then((m) => m.ScorecardPage),
       },
       {
         path: 'scorecards/:id',
+        canActivate: [permissionGuard('scorecard:view')],
         loadComponent: () => import('./features/score-plann/score').then((m) => m.score),
       },
       {
         path: 'division-planning/:scorecardId',
+        canActivate: [permissionGuard('divisions:view')],
         loadComponent: () =>
           import('./features/division-planning/division-planning').then((m) => m.DivisionPlanningPage),
       },
       {
         path: 'goals',
+        canActivate: [permissionGuard('goals:view')],
         loadComponent: () => import('./features/goals/goals').then((m) => m.GoalsPage),
       },
       {
         path: 'kras',
+        canActivate: [permissionGuard('kra:view')],
         loadComponent: () => import('./features/kra/kra').then((m) => m.KraPage),
       },
       {
         path: 'kpis',
+        canActivate: [permissionGuard('kpi:view')],
         loadComponent: () => import('./features/kpi/kpi').then((m) => m.KpiPage),
       },
       {
         path: 'scorecardss',
+        canActivate: [permissionGuard('scorecard:view')],
         loadComponent: () =>
           import('./features/strategic-scorecard/scorecard-layout/scorecard-layout').then((m) => m.ScorecardLayout),
         children: [
@@ -70,21 +78,23 @@ export const routes: Routes = [
           },
         ],
       },
-      { path: 'initiatives/:id', component: InitiativeDetailPage },
       {
         // Bulk Create Targets, scoped by fiscal year rather than by a single scorecard, so it
         // lives at the top level instead of inside the scorecard workspace layout.
         path: 'targets',
+        canActivate: [permissionGuard('targets:view')],
         loadComponent: () =>
           import('./features/strategic-scorecard/targets/targets').then((m) => m.TargetsPage),
       },
       {
         path: 'data-entry',
+        canActivate: [permissionGuard('actuals:view')],
         loadComponent: () =>
           import('./features/data-entry/data-entry').then((m) => m.DataEntryPage),
       },
       {
         path: 'target-config',
+        canActivate: [permissionGuard('targets:edit')],
         loadComponent: () =>
           import('./features/strategic-scorecard/target-config/target-config').then((m) => m.TargetConfigPage),
       },
@@ -95,35 +105,44 @@ export const routes: Routes = [
           import('./features/performance-monitoring/performance-monitoring').then((m) => m.PerformanceMonitoringPage),
       },
       {
+        // Viewing period locks only needs actuals:view; the page itself hides the unlock
+        // controls unless the user also holds admin:config.manage.
         path: 'data-locking',
+        canActivate: [permissionGuard(['actuals:view', 'admin:config.manage'])],
         loadComponent: () =>
           import('./features/data-locking/data-locking').then((m) => m.DataLockingPage),
       },
       {
         path: 'scorecard-clone',
+        canActivate: [permissionGuard('scorecard:clone')],
         loadComponent: () =>
           import('./features/strategic-scorecard/scorecard-clone/scorecard-clone').then((m) => m.ScorecardClonePage),
       },
       {
         path: 'data-management',
+        canActivate: [permissionGuard('data:upload')],
         loadComponent: () =>
           import('./features/data-management/data-management').then((m) => m.DataManagementPage),
       },
       {
         path: 'divisions',
+        canActivate: [permissionGuard('divisions:view')],
         loadComponent: () => import('./features/division/division').then((m) => m.DivisionPage),
       },
       {
         path: 'initiatives',
+        canActivate: [permissionGuard('initiatives:view')],
         loadComponent: () => import('./features/initiative/initiative').then((m) => m.InitiativePage),
       },
       {
         path: 'initiatives/:id',
+        canActivate: [permissionGuard('initiatives:view')],
         loadComponent: () =>
           import('./features/initiative/initiative-detail').then((m) => m.InitiativeDetailPage),
       },
       {
         path: 'reports',
+        canActivate: [permissionGuard('reports:view')],
         loadComponent: () => import('./features/reports/reports').then((m) => m.ReportsPage),
       },
       {
@@ -136,19 +155,18 @@ export const routes: Routes = [
       },
       {
         path: 'admin/users',
+        canActivate: [permissionGuard('admin:users.manage')],
         loadComponent: () => import('./features/admin-users/admin-users').then((m) => m.AdminUsersPage),
       },
       {
-        path: 'admin/roles',
-        loadComponent: () => import('./features/admin-roles/admin-roles').then((m) => m.AdminRolesPage),
-      },
-      {
         path: 'admin/rag-thresholds',
+        canActivate: [permissionGuard('admin:rag.thresholds.manage')],
         loadComponent: () =>
           import('./features/admin-thresholds/admin-thresholds').then((m) => m.AdminThresholdsPage),
       },
       {
         path: 'admin/fiscal-years',
+        canActivate: [permissionGuard('admin:config.manage')],
         loadComponent: () => import('./features/fiscal-year/fiscal-year').then((m) => m.FiscalYearPage),
       },
     ],

@@ -8,11 +8,12 @@ import { UserStore } from '../service/user-store.service';
  * ADR-011). This guard only decides where to send a user whose claims lack the
  * capability so they never land on a page that would 403 on every read.
  */
-export const permissionGuard = (permission: string): CanActivateFn => () => {
+export const permissionGuard = (permission: string | readonly string[]): CanActivateFn => () => {
   const userStore = inject(UserStore);
   const router = inject(Router);
 
-  if (userStore.hasPermission(permission)) {
+  const required = Array.isArray(permission) ? permission : [permission];
+  if (required.length === 0 || userStore.hasAnyPermission([...required])) {
     return true;
   }
 

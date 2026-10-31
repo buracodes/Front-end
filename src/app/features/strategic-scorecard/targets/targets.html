@@ -94,6 +94,9 @@
                     @if (row.unit) {
                       <span class="kpi-unit">{{ row.unit }}</span>
                     }
+                    @if (row.divisionName) {
+                      <span class="kpi-division">{{ row.divisionName }}</span>
+                    }
                     @if (row.error) {
                       <span class="kpi-error">{{ row.error }}</span>
                     }

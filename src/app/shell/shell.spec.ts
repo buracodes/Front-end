@@ -62,7 +62,7 @@ describe('ShellComponent', () => {
     expect(host.querySelector('.user-role')!.textContent).toContain('PowerUser');
   });
 
-  it('opens the profile menu with Settings, Notifications and Sign out', () => {
+  it('opens the profile menu with Notifications and Sign out', () => {
     start();
     expect(host.querySelector('.profile-menu')).toBeNull();
 
@@ -70,7 +70,7 @@ describe('ShellComponent', () => {
     const items = Array.from(host.querySelectorAll('.profile-menu button')).map((button) =>
       button.textContent?.trim()
     );
-    expect(items).toEqual(['Settings', 'Notifications', 'Sign out']);
+    expect(items).toEqual(['Notifications', 'Sign out']);
   });
 
   it('closes the menu when the backdrop is clicked', () => {
@@ -90,14 +90,6 @@ describe('ShellComponent', () => {
     fixture.detectChanges();
     expect(logoutCalls).toBe(1);
     expect(host.querySelector('.profile-menu')).toBeNull();
-  });
-
-  it('opens the change password modal from Settings', () => {
-    start();
-    openMenu();
-    findItem('Settings').click();
-    fixture.detectChanges();
-    expect(host.textContent).toContain('Change Password');
   });
 
   it('raises a notification toast from Notifications', () => {

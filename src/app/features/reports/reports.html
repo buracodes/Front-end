@@ -201,9 +201,11 @@
           </table>
         </div>
         <footer class="result-actions">
-          <button type="button" class="rp-btn" (click)="export('pdf')" [disabled]="exporting()">Export to PDF</button>
-          <button type="button" class="rp-btn" (click)="export('xlsx')" [disabled]="exporting()">Export to Excel</button>
-          <button type="button" class="rp-btn" (click)="export('csv')" [disabled]="exporting()">Export to CSV</button>
+          @if (canExport()) {
+            <button type="button" class="rp-btn" (click)="export('pdf')" [disabled]="exporting()">Export to PDF</button>
+            <button type="button" class="rp-btn" (click)="export('xlsx')" [disabled]="exporting()">Export to Excel</button>
+            <button type="button" class="rp-btn" (click)="export('csv')" [disabled]="exporting()">Export to CSV</button>
+          }
         </footer>
       } @else {
         <p class="reports-state">No data matches the selected filters.</p>

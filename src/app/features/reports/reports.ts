@@ -4,6 +4,7 @@ import { toApiError } from '../../core/model/api-error';
 import { ScorecardService } from '../../core/service/scorecard.service';
 import { DivisionService } from '../division/division.service';
 import { NotificationService } from '../../core/service/notification.service';
+import { UserStore } from '../../core/service/user-store.service';
 import { FiscalYear, Scorecard } from '../../core/model/scorecard.model';
 import { Division } from '../division/division.model';
 import {
@@ -47,6 +48,7 @@ export class ReportsPage implements OnInit {
   private readonly scorecardService = inject(ScorecardService);
   private readonly divisionService = inject(DivisionService);
   private readonly notifications = inject(NotificationService);
+  private readonly userStore = inject(UserStore);
 
   readonly templates = signal<ReportTemplate[]>([]);
   readonly fiscalYears = signal<FiscalYear[]>([]);
@@ -85,8 +87,17 @@ export class ReportsPage implements OnInit {
   /** Only templates the backend actually offers are shown as cards. */
   readonly cards = computed(() => {
     const available = new Set(this.templates().map((t) => t.id));
-    return this.cardDefs.filter((c) => available.has(c.templateId));
+    return this.cardDefs.filter(
+      (c) =>
+        available.has(c.templateId) &&
+        // FR-908: division performance is a separately granted capability.
+        (c.templateId !== 'division-performance' ||
+          this.userStore.hasPermission('divisions:reports.view'))
+    );
   });
+
+  /** FR-909: exporting is restricted to roles holding reports:export. */
+  readonly canExport = computed(() => this.userStore.hasPermission('reports:export'));
 
   readonly selectedCard = computed(
     () => this.cardDefs.find((c) => c.key === this.selectedCardKey()) ?? this.cardDefs[0]
@@ -165,6 +176,10 @@ export class ReportsPage implements OnInit {
   }
 
   export(format: ReportExportFormat): void {
+    if (!this.canExport()) {
+      this.notifications.error('You do not have permission to export reports.');
+      return;
+    }
     const filter = this.currentFilter();
     if (!filter) return;
 

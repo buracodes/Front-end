@@ -1,13 +1,5 @@
 /** Backend-computed access-control types (dynamic RBAC, delivered by /api/accesscontrol). */
 
-export interface AccessSummary {
-  totalGroups: number;
-  totalRights: number;
-  groupMembershipAssignments: number;
-  directGrantAssignments: number;
-  directDenyAssignments: number;
-}
-
 export interface AccessGroup {
   id: string;
   name: string;
@@ -32,29 +24,23 @@ export interface AccessRight {
   lastUpdated: string | null;
 }
 
-export interface AccessDirectoryUser {
-  id: string;
-  username: string;
+/** Active employee from the HR database. EmpId is the AD objectGUID and the SPMS user id. */
+export interface EmployeeHrInfo {
+  empId: string | null;
+  idCode: string | null;
+  firstName: string | null;
+  middleName: string | null;
+  lastName: string | null;
   email: string | null;
-  fullName: string;
-  isActive: boolean;
-  lastLoginAtUtc: string | null;
+  positionId: string | null;
+  positionName: string | null;
+  positionLevel: string | null;
   divisionId: string | null;
   divisionName: string | null;
-  groupNames: string[];
-}
-
-export interface AccessUserDetail {
-  id: string;
-  username: string;
-  email: string | null;
-  fullName: string;
-  isActive: boolean;
-  divisionId: string | null;
-  divisionName: string | null;
-  lastLoginAtUtc: string | null;
-  groupNames: string[];
-  unassignedGroupsCount: number;
+  departmentId: string | null;
+  departmentName: string | null;
+  branchId: string | null;
+  branchName: string | null;
 }
 
 export interface GroupMembershipRow {
@@ -91,40 +77,6 @@ export interface UserRightRow {
   reason: string | null;
   assignedAt: string;
   assignedByName: string | null;
-}
-
-export interface EffectiveAccessEntry {
-  permissionId: string;
-  permissionName: string;
-  module: string;
-  description: string | null;
-  /** 'Granted' | 'Denied' */
-  result: string;
-  /** 'Direct User Assignment' | 'Group Assignment' | 'Default Deny' */
-  source: string;
-  hasExplicitDeny: boolean;
-  explanation: string;
-}
-
-export interface EffectiveAccessResult {
-  userId: string;
-  username: string;
-  fullName: string;
-  isActive: boolean;
-  groupNames: string[];
-  rights: EffectiveAccessEntry[];
-}
-
-export interface AuthorizationAuditEntry {
-  id: string;
-  entityType: string;
-  entityId: string;
-  action: string;
-  performedByName: string | null;
-  performedAt: string;
-  reason: string | null;
-  oldValues: string | null;
-  newValues: string | null;
 }
 
 export type AccessEffect = 'Grant' | 'Deny';

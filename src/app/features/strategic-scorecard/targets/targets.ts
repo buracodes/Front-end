@@ -19,6 +19,8 @@ interface TargetRow {
   scorecardName: string;
   goalName: string;
   kraName: string;
+  /** Set for division KPIs, whose owner is always the plan's division. */
+  divisionName: string;
   unit: string;
   monthly: number[];
   quarterly: number[];
@@ -313,6 +315,7 @@ export class TargetsPage implements OnDestroy {
       scorecardName: kpi.scorecardName ?? '—',
       goalName: kpi.goalName ?? '—',
       kraName: kpi.kraName ?? '—',
+      divisionName: kpi.divisionGoalId ? kpi.divisionOwnerName ?? 'Division' : '',
       unit: kpi.unit ?? '',
       monthly,
       quarterly,

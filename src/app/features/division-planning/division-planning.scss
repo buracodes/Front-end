@@ -593,12 +593,6 @@
   font-weight: 500;
 }
 
-.dp-kpi-chip-owner {
-  color: var(--color-primary);
-  font-weight: 600;
-  font-size: calc(var(--font-size-xs) - 1px);
-}
-
 .dp-kpi-chip-remove {
   display: inline-flex;
   align-items: center;
@@ -653,6 +647,14 @@
   margin: 0 0 var(--sp-3);
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
+
+  p {
+    margin: 0 0 var(--sp-1);
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
 
   strong {
     color: var(--color-text);
@@ -861,6 +863,17 @@
 
 .dp-cell-goal {
   font-weight: 600;
+}
+
+.dp-report-goal-row td {
+  background: color-mix(in srgb, var(--color-bg-subtle, #f8fafc) 70%, transparent);
+}
+
+.dp-report-kpi-name {
+  display: inline-block;
+  padding-left: var(--sp-4);
+  color: var(--color-text-muted);
+  font-weight: 500;
 }
 
 .dp-cell-kpi {
@@ -1096,115 +1109,4 @@
   .dp-entry-grid-head {
     display: none;
   }
-}
-
-/* ── FR-904: KPI target configuration ─────────────────────────────────── */
-.kpi-targets {
-  margin-top: var(--sp-4);
-  padding-top: var(--sp-4);
-  border-top: 1px solid var(--color-border);
-
-  .kpi-targets-head {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: var(--sp-3);
-    flex-wrap: wrap;
-    margin-bottom: var(--sp-3);
-
-    h4 {
-      margin: 0;
-      color: var(--color-primary-darker);
-    }
-  }
-
-  .kpi-targets-hint {
-    font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
-  }
-}
-
-.kpi-annual-group {
-  max-width: 220px;
-}
-
-.kpi-annual-input {
-  font-weight: 600;
-}
-
-.kpi-quarter-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-  gap: var(--sp-3);
-  margin-top: var(--sp-3);
-}
-
-.kpi-quarter-box {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md, 8px);
-  padding: var(--sp-3);
-
-  &.invalid {
-    border-color: var(--color-danger);
-  }
-}
-
-.kpi-quarter-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-2);
-  margin-bottom: var(--sp-2);
-}
-
-.kpi-quarter-name {
-  font-weight: 600;
-  color: var(--color-text);
-}
-
-.kpi-quarter-edit {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-  width: 96px;
-
-  input {
-    width: 100%;
-  }
-}
-
-.kpi-month-row {
-  display: flex;
-  gap: var(--sp-2);
-}
-
-.kpi-month-box {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-  flex: 1;
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-
-  input {
-    width: 100%;
-  }
-}
-
-.kpi-quarter-sum {
-  margin: var(--sp-2) 0 0;
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-}
-
-.kpi-target-error {
-  margin: var(--sp-2) 0 0;
-  font-size: var(--font-size-xs);
-  color: var(--color-danger);
-}
-
-.kpi-targets-error {
-  margin-top: var(--sp-3);
 }

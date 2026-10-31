@@ -220,18 +220,24 @@
             (ngModelChange)="memberSearch.set($event)"
           />
           <div class="list">
-            @for (employee of filteredEmployees(); track employeeKey(employee)) {
-              <button
-                type="button"
-                class="list-item"
-                [class.active]="memberEmployeeId() === employee.empId"
-                (click)="selectMemberEmployee(employee)"
-              >
-                <span class="list-item-title">{{ employeeName(employee) }}</span>
-                <span class="list-item-meta">{{ employeeSubtitle(employee) || '—' }}</span>
-              </button>
-            } @empty {
-              <p class="empty">No employees match this search.</p>
+            @if (employeesLoading()) {
+              <p class="empty">Loading employees…</p>
+            } @else if (employeesLoadFailed()) {
+              <p class="empty">Employees could not be loaded.</p>
+            } @else {
+              @for (employee of filteredEmployees(); track employeeKey(employee)) {
+                <button
+                  type="button"
+                  class="list-item"
+                  [class.active]="memberEmployeeId() === employee.empId"
+                  (click)="selectMemberEmployee(employee)"
+                >
+                  <span class="list-item-title">{{ employeeName(employee) }}</span>
+                  <span class="list-item-meta">{{ employeeSubtitle(employee) || '—' }}</span>
+                </button>
+              } @empty {
+                <p class="empty">No employees match this search.</p>
+              }
             }
           </div>
         </aside>
@@ -294,18 +300,24 @@
             (ngModelChange)="rightEmployeeSearch.set($event)"
           />
           <div class="list">
-            @for (employee of rightEmployeeOptions(); track employeeKey(employee)) {
-              <button
-                type="button"
-                class="list-item"
-                [class.active]="rightEmployeeId() === employee.empId"
-                (click)="selectRightEmployee(employee)"
-              >
-                <span class="list-item-title">{{ employeeName(employee) }}</span>
-                <span class="list-item-meta">{{ employeeSubtitle(employee) || '—' }}</span>
-              </button>
-            } @empty {
-              <p class="empty">No employees match this search.</p>
+            @if (employeesLoading()) {
+              <p class="empty">Loading employees…</p>
+            } @else if (employeesLoadFailed()) {
+              <p class="empty">Employees could not be loaded.</p>
+            } @else {
+              @for (employee of rightEmployeeOptions(); track employeeKey(employee)) {
+                <button
+                  type="button"
+                  class="list-item"
+                  [class.active]="rightEmployeeId() === employee.empId"
+                  (click)="selectRightEmployee(employee)"
+                >
+                  <span class="list-item-title">{{ employeeName(employee) }}</span>
+                  <span class="list-item-meta">{{ employeeSubtitle(employee) || '—' }}</span>
+                </button>
+              } @empty {
+                <p class="empty">No employees match this search.</p>
+              }
             }
           </div>
         </aside>

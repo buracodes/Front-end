@@ -63,6 +63,7 @@ const DATA_DRIVEN_SLUGS = [
   'files',
   'file-text',
   'gauge',
+  'key-square',
   'layers',
   'layout-dashboard',
   'layout-grid',
@@ -74,6 +75,7 @@ const DATA_DRIVEN_SLUGS = [
   'shield-check',
   'square-plus',
   'target',
+  'traffic-cone',
   'users',
 ];
 

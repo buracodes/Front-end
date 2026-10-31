@@ -217,6 +217,33 @@ describe('AdminAccessControlPage', () => {
     http.verify();
   });
 
+  it('tracks the employee directory load so the tabs can show progress', async () => {
+    const { http, notifications, page } = setup();
+    const errorSpy = vi.spyOn(notifications, 'error');
+    expect(page.employeesLoading()).toBe(true);
+
+    await Promise.resolve();
+    http
+      .expectOne((req) => req.method === 'GET' && req.url.endsWith('accesscontrol/groups'))
+      .flush({ success: true, data: [group()] });
+    http
+      .expectOne((req) => req.method === 'GET' && req.url.endsWith('accesscontrol/rights'))
+      .flush({ success: true, data: [right()] });
+    http
+      .expectOne((req) => req.method === 'GET' && req.url.includes('accesscontrol/employees'))
+      .flush(
+        { message: 'Login failed for user dbaccess.' },
+        { status: 500, statusText: 'Server Error' },
+      );
+    await Promise.resolve();
+
+    expect(page.employeesLoading()).toBe(false);
+    expect(page.employeesLoadFailed()).toBe(true);
+    expect(page.employees()).toEqual([]);
+    expect(errorSpy).toHaveBeenCalled();
+    http.verify();
+  });
+
   it('loads the memberships of the selected HR employee', async () => {
     const { http, page } = setup();
     await flushInitial(http);

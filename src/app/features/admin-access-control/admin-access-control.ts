@@ -75,6 +75,8 @@ export class AdminAccessControlPage {
   readonly groups = signal<AccessGroup[]>([]);
   readonly rights = signal<AccessRight[]>([]);
   readonly employees = signal<EmployeeHrInfo[]>([]);
+  readonly employeesLoading = signal(false);
+  readonly employeesLoadFailed = signal(false);
 
   // ── Groups tab ─────────────────────────────────────────────────────────
 
@@ -209,10 +211,15 @@ export class AdminAccessControlPage {
   }
 
   private async loadEmployees(): Promise<void> {
+    this.employeesLoading.set(true);
+    this.employeesLoadFailed.set(false);
     try {
       this.employees.set(await this.firstValue(this.aclService.getEmployees()));
     } catch (error) {
+      this.employeesLoadFailed.set(true);
       this.handleLoadError(error);
+    } finally {
+      this.employeesLoading.set(false);
     }
   }
 

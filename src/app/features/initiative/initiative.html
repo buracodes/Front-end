@@ -109,17 +109,42 @@
           <button type="button" class="btn btn-secondary btn-sm" (click)="clearLinks()">Clear links</button>
         </div>
 
-        <div class="form-group">
-          <label class="form-label">Owner</label>
-          <select class="form-control" formControlName="ownerId">
-            <option value="">Select owner</option>
-            @for (owner of ownerFormOptions(); track owner.id) {
-            <option [value]="owner.id">{{ owner.label }}</option>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="initiative-owner-type">Owner type</label>
+            <select id="initiative-owner-type" class="form-control" formControlName="ownerType"
+              (change)="onOwnerTypeChange($any($event.target).value)">
+              <option value="Individual">Individual</option>
+              <option value="Division">Division</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            @if (form.controls.ownerType.value === 'Division') {
+            <label class="form-label" for="initiative-division-owner">Division owner</label>
+            <select id="initiative-division-owner" class="form-control" formControlName="divisionOwnerId">
+              <option value="">Select division</option>
+              @for (division of divisionOptions(); track division.id) {
+              <option [value]="division.id">{{ division.label }}</option>
+              }
+            </select>
+            @if (loadingDivisions()) {
+            <p class="form-hint">Loading divisions…</p>
             }
-          </select>
-          @if (form.controls.ownerId.invalid && form.controls.ownerId.touched) {
-          <p class="form-error">Owner is required.</p>
-          }
+            } @else {
+            <label class="form-label" for="initiative-owner">Owner</label>
+            <select id="initiative-owner" class="form-control" formControlName="ownerId">
+              <option value="">Select owner</option>
+              @for (owner of ownerFormOptions(); track owner.id) {
+              <option [value]="owner.id">{{ owner.label }}</option>
+              }
+            </select>
+            }
+            @if (form.hasError('ownerRequired') && (form.controls.ownerId.touched ||
+            form.controls.divisionOwnerId.touched)) {
+            <p class="form-error">Select an owner: an individual user or a division.</p>
+            }
+          </div>
         </div>
 
         <div class="form-row">
@@ -233,7 +258,7 @@
 
     <div class="initiative-meta">
       <div>
-        Owner · {{ initiative.ownerName || ownerName(initiative.ownerId ?? '') }}
+        Owner · {{ ownerLabel(initiative) }}
         @if (initiative.isClosed) {
         · <span class="badge badge-neutral">Closed</span>
         }

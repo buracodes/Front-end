@@ -32,15 +32,17 @@
       </div>
     }
 
-    <div class="pm-filter">
-      <label for="pm-scorecard">Scorecard</label>
-      <select id="pm-scorecard" [(ngModel)]="scorecardId" (change)="onFilterChange()">
-        <option value="">All</option>
-        @for (sc of selectableScorecards(); track sc.id) {
-          <option [value]="sc.id">{{ sc.name }}</option>
-        }
-      </select>
-    </div>
+    @if (selectableScorecards().length) {
+      <div class="pm-filter">
+        <label for="pm-scorecard">Scorecard</label>
+        <select id="pm-scorecard" [(ngModel)]="scorecardId" (change)="onFilterChange()">
+          <option value="">All</option>
+          @for (sc of selectableScorecards(); track sc.id) {
+            <option [value]="sc.id">{{ sc.name }}</option>
+          }
+        </select>
+      </div>
+    }
 
     @if (canPickDivision()) {
       <div class="pm-filter">

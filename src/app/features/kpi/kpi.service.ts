@@ -37,10 +37,19 @@ export class KpiService {
     return this.api.get<IResponse<Kpi[]>>(url).pipe(map((r) => r.data ?? []));
   }
 
-  /** Active HR employees that can own a KPI (readable with kpi:view). */
-  getOwnerOptions(): Observable<KpiOwnerOption[]> {
+  /**
+   * Active HR employees that can own a KPI (readable with kpi:view). Search runs on the
+   * HR side against name, HR id code and email so the picker never loads the directory.
+   */
+  getOwnerOptions(search?: string, take = 50): Observable<KpiOwnerOption[]> {
+    const params = new URLSearchParams();
+    const term = search?.trim();
+    if (term) {
+      params.set('search', term);
+    }
+    params.set('take', String(take));
     return this.api
-      .get<IResponse<KpiOwnerOption[]>>(`${ApiEndpoint.User}/lookup`)
+      .get<IResponse<KpiOwnerOption[]>>(`${ApiEndpoint.User}/lookup?${params.toString()}`)
       .pipe(map((r) => r.data ?? []));
   }
 

@@ -7,6 +7,7 @@ import {
   Initiative,
   InitiativeListItem,
   InitiativeHistoryEntry,
+  InitiativeOwnerType,
   InitiativeRagLabel,
   Milestone,
   MilestoneStatus,
@@ -24,6 +25,8 @@ import { ConfirmDialogService } from '../../shared/service/confirm-dialog.servic
 import { UserStore } from '../../core/service/user-store.service';
 import { AdminUserService } from '../admin-users/admin-users.service';
 import { AppUser } from '../admin-users/admin-users.model';
+import { DivisionService } from '../division/division.service';
+import { Division } from '../division/division.model';
 
 import { LucideDynamicIcon } from '@lucide/angular';
 type DetailTab = 'milestones' | 'budget' | 'progress' | 'dependencies' | 'closure';
@@ -69,6 +72,7 @@ export class InitiativeDetailPage {
   private readonly notifications = inject(NotificationService);
   private readonly dialog = inject(ConfirmDialogService);
   private readonly adminUserService = inject(AdminUserService);
+  private readonly divisionService = inject(DivisionService);
   private readonly userStore = inject(UserStore);
 
   readonly initiative = signal<Initiative | null>(null);
@@ -106,7 +110,10 @@ export class InitiativeDetailPage {
 
   readonly userOptions = signal<AppUser[]>([]);
   readonly loadingUsers = signal(false);
+  readonly divisions = signal<Division[]>([]);
+  readonly loadingDivisions = signal(false);
   readonly currentOwnerId = signal<string | null>(null);
+  readonly currentDivisionOwnerId = signal<string | null>(null);
 
   readonly canEdit = computed(() => this.userStore.hasPermission('initiatives:edit'));
 
@@ -116,9 +123,13 @@ export class InitiativeDetailPage {
    * controls from the very owner the API accepts.
    */
   readonly isOwner = computed(() => {
-    const ownerId = this.initiative()?.ownerId;
+    const initiative = this.initiative();
     const userId = this.userStore.user()?.id;
-    return !!ownerId && !!userId && ownerId === userId;
+    if (initiative?.ownerId && userId && initiative.ownerId === userId) {
+      return true;
+    }
+    const divisionId = this.userStore.divisionId();
+    return !!initiative?.divisionOwnerId && !!divisionId && initiative.divisionOwnerId === divisionId;
   });
 
   /**
@@ -231,6 +242,33 @@ export class InitiativeDetailPage {
     }
     return options;
   });
+
+  /** Active divisions offered as an initiative owner, plus the current one when it is not listed. */
+  readonly divisionOptions = computed(() => {
+    const options = this.divisions()
+      .filter((division) => division.isActive !== false)
+      .map((division) => ({
+        id: division.id,
+        label: division.code ? `${division.name} (${division.code})` : division.name,
+      }));
+    const current = this.currentDivisionOwnerId();
+    if (current && !options.some((option) => option.id === current)) {
+      options.unshift({ id: current, label: current });
+    }
+    return options;
+  });
+
+  /**
+   * An initiative has exactly one owner. Which picker supplies it depends on Owner Type, so the
+   * required rule lives on the group instead of on a single control.
+   */
+  private readonly ownerRequiredValidator = (group: AbstractControl): ValidationErrors | null => {
+    const type = group.get('ownerType')?.value as InitiativeOwnerType;
+    const id = type === 'Division'
+      ? group.get('divisionOwnerId')?.value
+      : group.get('ownerId')?.value;
+    return id ? null : { ownerRequired: true };
+  };
 
   /**
    * Mirrors InitiativeGuard.ValidateMilestoneDueDate, which rejects a due date outside the
@@ -377,14 +415,16 @@ export class InitiativeDetailPage {
       validators: [Validators.required, Validators.maxLength(200)],
     }),
     description: new FormControl('', { nonNullable: true, validators: [Validators.maxLength(2000)] }),
-    ownerId: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
+    ownerType: new FormControl<InitiativeOwnerType>('Individual', { nonNullable: true }),
+    ownerId: new FormControl('', { nonNullable: true }),
+    divisionOwnerId: new FormControl('', { nonNullable: true }),
     priority: new FormControl<Initiative['priority']>('Medium'),
     startDate: new FormControl<string | null>(null),
     endDate: new FormControl<string | null>(null),
     budget: new FormControl(0, { nonNullable: true, validators: [Validators.min(0)] }),
     actualExpenditure: new FormControl(0, { nonNullable: true, validators: [Validators.min(0)] }),
     resources: new FormControl('', { nonNullable: true }),
-  });
+  }, { validators: [this.ownerRequiredValidator] });
 
   /** FR-405: the closure picker is pre-filled with today (editable) and may never go past it. */
   readonly todayIso = (() => {
@@ -489,6 +529,7 @@ export class InitiativeDetailPage {
     });
 
     this.loadUsers();
+    this.loadDivisions();
     const id = this.route.snapshot.paramMap.get('id');
     if (id) {
       this.load(id);
@@ -505,6 +546,20 @@ export class InitiativeDetailPage {
       error: () => {
         this.userOptions.set([]);
         this.loadingUsers.set(false);
+      },
+    });
+  }
+
+  loadDivisions(): void {
+    this.loadingDivisions.set(true);
+    this.divisionService.getAll().subscribe({
+      next: (divisions) => {
+        this.divisions.set(divisions);
+        this.loadingDivisions.set(false);
+      },
+      error: () => {
+        this.divisions.set([]);
+        this.loadingDivisions.set(false);
       },
     });
   }
@@ -628,6 +683,36 @@ export class InitiativeDetailPage {
     if (!id) return '—';
     const user = this.userOptions().find((u) => u.id === id);
     return user?.fullName || user?.username || id;
+  }
+
+  divisionName(id: string): string {
+    if (!id) return '—';
+    const division = this.divisions().find((d) => d.id === id);
+    return division ? (division.code ? `${division.name} (${division.code})` : division.name) : id;
+  }
+
+  /** Owner label: an individual user or a division, whichever the initiative holds. */
+  ownerLabel(initiative: Initiative): string {
+    if (initiative.ownerId) {
+      return initiative.ownerName || this.ownerName(initiative.ownerId);
+    }
+    if (initiative.divisionOwnerId) {
+      return initiative.divisionOwnerName || this.divisionName(initiative.divisionOwnerId);
+    }
+    return '—';
+  }
+
+  /**
+   * Switching Owner Type keeps exactly one owner value in the form: the inactive picker is cleared
+   * so the other id can never be submitted alongside it.
+   */
+  onOwnerTypeChange(type: InitiativeOwnerType): void {
+    if (type === 'Division') {
+      this.editForm.controls.ownerId.setValue('');
+    } else {
+      this.editForm.controls.divisionOwnerId.setValue('');
+    }
+    this.editForm.updateValueAndValidity();
   }
 
   statusLabel(status: Initiative['status']): string {
@@ -813,10 +898,13 @@ export class InitiativeDetailPage {
     const initiative = this.initiative();
     if (!initiative) return;
     this.currentOwnerId.set(initiative.ownerId || null);
+    this.currentDivisionOwnerId.set(initiative.divisionOwnerId || null);
     this.editForm.setValue({
       name: initiative.name,
       description: initiative.description ?? '',
-      ownerId: initiative.ownerId,
+      ownerType: initiative.divisionOwnerId ? 'Division' : 'Individual',
+      ownerId: initiative.ownerId ?? '',
+      divisionOwnerId: initiative.divisionOwnerId ?? '',
       priority: initiative.priority,
       startDate: initiative.startDate ?? null,
       endDate: initiative.endDate ?? null,
@@ -830,6 +918,7 @@ export class InitiativeDetailPage {
   closeEdit(): void {
     this.showEditForm.set(false);
     this.currentOwnerId.set(null);
+    this.currentDivisionOwnerId.set(null);
   }
 
   saveEdit(): void {
@@ -841,7 +930,9 @@ export class InitiativeDetailPage {
     const request: UpdateInitiativeRequest = {
       name: v.name!,
       description: v.description || undefined,
-      ownerId: v.ownerId || undefined,
+      ...(v.ownerType === 'Division'
+        ? { divisionOwnerId: v.divisionOwnerId || undefined }
+        : { ownerId: v.ownerId || undefined }),
       priority: v.priority as UpdateInitiativeRequest['priority'],
       startDate: v.startDate || undefined,
       endDate: v.endDate || undefined,

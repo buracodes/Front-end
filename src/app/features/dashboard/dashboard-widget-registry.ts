@@ -45,6 +45,7 @@ const SLOTS: Record<string, WidgetSlot> = {
   overallScore: 'overallScore',
   ragDistribution: 'ragDistribution',
   performanceTrend: 'performanceTrend',
+  kpiPerformanceTrend: 'kpiPerformanceTrend',
   scorecardPerformance: 'scorecardPerformance',
   scorecardHealth: 'scorecardHealth',
   goalHealth: 'goalHealth',
@@ -90,6 +91,7 @@ export function resolveWidget(bundle: DashboardWidgetBundle, key: string): Dashb
     case 'ragDistribution':
       return isRag(value) ? { kind: 'ragDistribution', payload: value } : null;
     case 'performanceTrend':
+    case 'kpiPerformanceTrend':
     case 'milestoneTrend':
       return isTrend(value) ? { kind: 'trend', payload: value } : null;
     case 'targetVsActual':

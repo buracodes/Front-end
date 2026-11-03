@@ -153,7 +153,7 @@ export class ScorecardWorkspaceState {
   );
 
   readonly selectedKpi = computed(() =>
-    this.workspace().kpis.find((kpi) => kpi.id === this.selectedKpiId()) ?? null
+    this.kpis().find((kpi) => kpi.id === this.selectedKpiId()) ?? null
   );
 
   // ── FR-703 closure state ─────────────────────────────────────────────────
@@ -293,7 +293,8 @@ export class ScorecardWorkspaceState {
 
   readonly goals = computed(() => this.workspace().goals);
   readonly kras = computed(() => this.workspace().kras);
-  readonly kpis = computed(() => this.workspace().kpis);
+  /** Corporate KPIs only; division-owned KPIs are reported by division planning. */
+  readonly kpis = computed(() => this.workspace().kpis.filter((kpi) => !kpi.divisionGoalId));
   readonly snapshot = computed(() => this.workspace().snapshot);
   readonly locks = computed(() => this.workspace().locks);
   readonly kpiTargets = computed(() => this.workspace().kpiTargets);
@@ -319,7 +320,7 @@ export class ScorecardWorkspaceState {
   /** KPIs grouped by KRA. */
   readonly kpisByKra = computed(() => {
     const map = new Map<string, KPI[]>();
-    for (const kpi of this.workspace().kpis) {
+    for (const kpi of this.kpis()) {
       if (!kpi.kraId) continue;
       const list = map.get(kpi.kraId) ?? [];
       list.push(kpi);
@@ -328,9 +329,9 @@ export class ScorecardWorkspaceState {
     return map;
   });
 
-  /** KPIs with no parent (attached directly to a goal / scorecard). */
+  /** Corporate KPIs with no parent (attached directly to a goal / scorecard). */
   readonly unassignedKpis = computed(() =>
-    this.workspace().kpis.filter((kpi) => !kpi.kraId)
+    this.kpis().filter((kpi) => !kpi.kraId)
   );
 
   /** Latest overall scorecard snapshot score, preferring the aggregated period entry. */
@@ -614,12 +615,16 @@ export class ScorecardWorkspaceState {
     }).subscribe({
       next: ({ goals, kras, kpis, snapshot, locks }) => {
         if (request !== this.loadRequest || scorecardId !== this.scorecardId()) return;
-        
-        // Fetch targets for all KPIs
+
+        // Division KPIs share the corporate scorecard id but belong to a division goal, so
+        // they must never appear as corporate (unassigned) KPIs or in the RAG spread.
+        const corporateKpis = kpis.filter((kpi) => !kpi.divisionGoalId);
+
+        // Fetch targets for all corporate KPIs
         const kpiTargets = new Map<string, KpiTargetValue[]>();
-        if (kpis.length > 0) {
+        if (corporateKpis.length > 0) {
           // Load targets in parallel for all KPIs
-          const targetObservables = kpis.map(kpi => 
+          const targetObservables = corporateKpis.map(kpi => 
             this.kpiService.getTargets(kpi.id, fiscalYearId).pipe(
               map(targets => ({ kpiId: kpi.id, targets }))
             )
@@ -633,7 +638,7 @@ export class ScorecardWorkspaceState {
               this.workspace.set({
                 goals: goals.sort((a, b) => a.name.localeCompare(b.name)),
                 kras,
-                kpis,
+                kpis: corporateKpis,
                 snapshot,
                 locks,
                 kpiTargets,
@@ -650,7 +655,7 @@ export class ScorecardWorkspaceState {
           this.workspace.set({
             goals: goals.sort((a, b) => a.name.localeCompare(b.name)),
             kras,
-            kpis,
+            kpis: corporateKpis,
             snapshot,
             locks,
             kpiTargets,

@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { LucideDynamicIcon } from '@lucide/angular';
 import { RAG_LABELS, ragToneClass } from '../dashboard-widget-registry';
-import { GoalDrilldown, GoalKraDto } from '../role-dashboard.model';
+import { GoalDrilldown, GoalKraDto, GoalKraKpi } from '../role-dashboard.model';
 
 /**
  * Goal drill-down required by the FRD: KRA weight/score/RAG plus the KPI
@@ -54,6 +54,8 @@ export class DashboardGoalDrilldownComponent {
     }))
   );
 
+  protected readonly divisionKpis = computed<KpiRow[]>(() => this.toKpiRows(this.goal().kpis));
+
   protected toggle(kra: GoalKraDto): void {
     this.expanded.update((current) => (current === kra.kraId ? null : kra.kraId));
   }
@@ -63,7 +65,11 @@ export class DashboardGoalDrilldownComponent {
   }
 
   protected kpiCells(kra: GoalKraDto): KpiRow[] {
-    return kra.kpis.map((kpi) => ({
+    return this.toKpiRows(kra.kpis);
+  }
+
+  private toKpiRows(kpis: GoalKraKpi[]): KpiRow[] {
+    return kpis.map((kpi) => ({
       name: kpi.name,
       target: kpi.target == null ? '—' : `${kpi.target} ${kpi.unit}`,
       actual: kpi.actual == null ? '—' : `${kpi.actual} ${kpi.unit}`,

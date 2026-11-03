@@ -3,6 +3,14 @@ import { authGuard } from './core/guard/auth.guard';
 import { guestGuard } from './core/guard/guest.guard';
 import { permissionGuard } from './core/guard/permission.guard';
 
+/**
+ * Legacy planning/administration rights and the baseline division views both reach these
+ * read-only pages. The server still applies the employee's HR division scope to every read.
+ */
+const DIVISION_SCORECARD_ACCESS = ['divisions:view', 'division:scorecard.view', 'division:performance.view'];
+const INITIATIVE_ACCESS = ['initiatives:view', 'division:initiative.view'];
+const PERFORMANCE_ACCESS = ['dashboard:view', 'division:performance.view'];
+
 export const routes: Routes = [
   {
     path: 'login',
@@ -40,8 +48,16 @@ export const routes: Routes = [
         loadComponent: () => import('./features/score-plann/score').then((m) => m.score),
       },
       {
+        // Baseline employees land here without a scorecard id; the page resolves their own
+        // division's plan. The backend still decides which division and scorecard that is.
+        path: 'division-planning',
+        canActivate: [permissionGuard(DIVISION_SCORECARD_ACCESS)],
+        loadComponent: () =>
+          import('./features/division-planning/division-planning').then((m) => m.DivisionPlanningPage),
+      },
+      {
         path: 'division-planning/:scorecardId',
-        canActivate: [permissionGuard('divisions:view')],
+        canActivate: [permissionGuard(DIVISION_SCORECARD_ACCESS)],
         loadComponent: () =>
           import('./features/division-planning/division-planning').then((m) => m.DivisionPlanningPage),
       },
@@ -100,7 +116,7 @@ export const routes: Routes = [
       },
       {
         path: 'performance-monitoring',
-        canActivate: [permissionGuard('dashboard:view')],
+        canActivate: [permissionGuard(PERFORMANCE_ACCESS)],
         loadComponent: () =>
           import('./features/performance-monitoring/performance-monitoring').then((m) => m.PerformanceMonitoringPage),
       },
@@ -131,12 +147,12 @@ export const routes: Routes = [
       },
       {
         path: 'initiatives',
-        canActivate: [permissionGuard('initiatives:view')],
+        canActivate: [permissionGuard(INITIATIVE_ACCESS)],
         loadComponent: () => import('./features/initiative/initiative').then((m) => m.InitiativePage),
       },
       {
         path: 'initiatives/:id',
-        canActivate: [permissionGuard('initiatives:view')],
+        canActivate: [permissionGuard(INITIATIVE_ACCESS)],
         loadComponent: () =>
           import('./features/initiative/initiative-detail').then((m) => m.InitiativeDetailPage),
       },

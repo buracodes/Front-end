@@ -70,10 +70,14 @@ export class PerformanceMonitoringPage {
       next: (years) => this.fiscalYears.set(years),
       error: () => this.fiscalYears.set([]),
     });
-    this.scorecardService.getAll().subscribe({
-      next: (scorecards) => this.scorecards.set(scorecards),
-      error: () => this.scorecards.set([]),
-    });
+    // The scorecard picker is a corporate capability. A division employee keeps the
+    // scorecard the server resolves from their own division plan.
+    if (this.canViewCorporate() || this.userStore.hasPermission('scorecard:view')) {
+      this.scorecardService.getAll().subscribe({
+        next: (scorecards) => this.scorecards.set(scorecards),
+        error: () => this.scorecards.set([]),
+      });
+    }
     if (this.canViewCorporate()) {
       this.divisionService.getAll().subscribe({
         next: (divs) => this.divisions.set(divs),

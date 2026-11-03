@@ -17,6 +17,8 @@ export interface AuthUser {
   fullName: string;
   email?: string;
   divisionId?: string;
+  /** Every division this account is authorized for; the primary division is first. */
+  divisionIds?: string[];
   /** Null until the account's first successful sign-in. */
   lastLoginAtUtc?: string | null;
   roles: string[];

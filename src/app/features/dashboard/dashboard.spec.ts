@@ -10,6 +10,7 @@ import {
   GoalDrilldown,
 } from './role-dashboard.model';
 import { resolveWidget } from './dashboard-widget-registry';
+import { DashboardChartConfig, SPMS_COLORS } from './dashboard-chart-config.service';
 
 const FILTER: DashboardFilter = {
   fiscalYearId: 'fy-1',
@@ -85,6 +86,51 @@ const GOAL_TABLE = {
   showRowLinks: true,
 };
 
+const DIVISION_GOAL_TABLE = {
+  title: 'Division goals',
+  description: null,
+  columns: [
+    { key: 'goal', label: 'Goal', format: 'text' as const, align: 'left' as const, width: null },
+    { key: 'score', label: 'Score', format: 'percent' as const, align: 'right' as const, width: null },
+  ],
+  rows: [
+    {
+      id: 'div-goal-1',
+      route: '/division-planning/sc-1?divisionId=div-1',
+      cells: { goal: 'Operations delivery', score: 72 },
+    },
+  ],
+  emptyMessage: 'No division goals for the selected period.',
+  showRowLinks: true,
+};
+
+const DIVISION_DRILLDOWN: GoalDrilldown = {
+  goalId: 'div-goal-1',
+  goalName: 'Operations delivery',
+  weight: 100,
+  score: 72,
+  ragLabel: 'Amber',
+  trend: null,
+  isDivisionGoal: true,
+  kras: [],
+  kpis: [
+    {
+      kpiId: 'div-kpi-1',
+      name: 'Throughput',
+      unit: 'units',
+      optimizationType: 'Maximize',
+      weight: 100,
+      target: 100,
+      actual: 72,
+      score: 72,
+      ragLabel: 'Amber',
+      kpiType: 1,
+      hasData: true,
+      note: null,
+    },
+  ],
+};
+
 const DRILLDOWN: GoalDrilldown = {
   goalId: 'goal-1',
   goalName: 'Grow trade volume',
@@ -92,6 +138,8 @@ const DRILLDOWN: GoalDrilldown = {
   score: 88.4,
   ragLabel: 'Amber',
   trend: 2.5,
+  isDivisionGoal: false,
+  kpis: [],
   kras: [
     {
       kraId: 'kra-1',
@@ -303,6 +351,33 @@ describe('DashboardPage (role driven shell)', () => {
     expect(drawer.textContent).toContain('Yellow');
   });
 
+  it('opens a division goal drill-down with direct KPIs and no KRA layer', () => {
+    const divisionContext = contextFor('Division View', {
+      dataScope: 'Division',
+      readOnly: true,
+      widgets: [{ key: 'goalPerformance', title: 'Division goals', description: null, span: 2 }],
+    });
+    const fixture = render(
+      divisionContext,
+      bundleFor(divisionContext, { goalPerformance: DIVISION_GOAL_TABLE })
+    );
+
+    drilldown = DIVISION_DRILLDOWN;
+
+    const row = (fixture.nativeElement as HTMLElement).querySelector('tbody tr') as HTMLElement;
+    row.click();
+    fixture.detectChanges();
+    flushOutstanding();
+    fixture.detectChanges();
+
+    const drawer = (fixture.nativeElement as HTMLElement).querySelector('aside.drawer') as HTMLElement;
+    expect(drawer).toBeTruthy();
+    expect(drawer.textContent).toContain('Operations delivery');
+    expect(drawer.textContent).toContain('Throughput');
+    expect(drawer.textContent).toContain('72 units');
+    expect(drawer.textContent).not.toContain('No KRAs for this goal.');
+  });
+
   it('hides widgets that have no data and keeps the rest', () => {
     const bundle: DashboardWidgetBundle = {
       ...bundleFor(nextContext),
@@ -384,6 +459,68 @@ describe('DashboardPage (role driven shell)', () => {
     expect(text).toContain('Gray');
     expect(text).toContain('50%');
     expect(text).toContain('25%');
+  });
+
+  it('renders the KPI performance trend as its own trend chart', () => {
+    const trendContext = contextFor('Power User', {
+      widgets: [{ key: 'kpiPerformanceTrend', title: 'KPI performance trend', description: null, span: 2 }],
+    });
+    const trend = {
+      title: 'KPI performance trend',
+      description: 'Month by month score for the most material KPIs in scope.',
+      categories: ['Jan', 'Feb'],
+      series: [{
+        name: 'Trade value growth rate',
+        kind: 'line',
+        color: 'primary',
+        values: [40, 80],
+      }],
+      valueSuffix: '%',
+      emptyMessage: null,
+    };
+    const fixture = render(trendContext, bundleFor(trendContext, { kpiPerformanceTrend: trend }));
+
+    const payload = fixture.componentInstance.visibleWidgets()[0].payload;
+    expect(payload?.kind).toBe('trend');
+    if (payload?.kind === 'trend') {
+      expect(payload.payload.series[0].name).toBe('Trade value growth rate');
+      expect(payload.payload.series[0].values).toEqual([40, 80]);
+    }
+    expect((fixture.nativeElement as HTMLElement).querySelector('app-dashboard-chart[kind="trend"]')).toBeTruthy();
+  });
+
+  it('labels a division-scoped dashboard as the caller division', () => {
+    const division = contextFor('Division View', { dataScope: 'Division', readOnly: true });
+    const fixture = render(division);
+
+    expect(fixture.componentInstance.scopeLabel()).toBe('Your division');
+  });
+
+  it('applies RAG category colours only to the actual series that opts in', () => {
+    const config = TestBed.inject(DashboardChartConfig);
+    const option = config.comparisonBarOption({
+      categories: ['ETB', '%'],
+      series: [
+        { name: 'Target', color: SPMS_COLORS.primary, values: [1200, 10] },
+        { name: 'Actual', color: SPMS_COLORS.accent, values: [960, null], useCategoryColors: true },
+      ],
+      horizontal: false,
+      categoryColors: [SPMS_COLORS.amber, SPMS_COLORS.slateLight],
+      valueSuffix: '',
+      valueFormat: 'number',
+    }) as { series: { name: string; data: { value: number | null; itemStyle: { color: string } }[] }[] };
+
+    const target = option.series[0];
+    const actual = option.series[1];
+
+    // The target bars keep their own series colour...
+    expect(target.data.map((point) => point.itemStyle.color))
+      .toEqual([SPMS_COLORS.primary, SPMS_COLORS.primary]);
+
+    // ...while the actual bars carry the configured RAG band for each unit, and no-data stays null.
+    expect(actual.data.map((point) => point.value)).toEqual([960, null]);
+    expect(actual.data.map((point) => point.itemStyle.color))
+      .toEqual([SPMS_COLORS.amber, SPMS_COLORS.slateLight]);
   });
 
   it('shows a single empty state when the role has nothing in scope', () => {

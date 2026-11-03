@@ -47,6 +47,8 @@ export class TargetConfigPage implements OnInit {
   private kpiId = '';
   private requestedScorecardId = '';
   private requestedFiscalYearId = '';
+  /** Optional internal path to return to (e.g. the division plan the user came from). */
+  private returnUrl: string | null = null;
   private scorecardList: Scorecard[] = [];
   private kpiLoaded = false;
   private scorecardsLoaded = false;
@@ -67,6 +69,10 @@ export class TargetConfigPage implements OnInit {
     this.kpiId = kpiId;
     this.requestedScorecardId = qp.get('scorecardId')?.trim() ?? '';
     this.requestedFiscalYearId = qp.get('fiscalYearId')?.trim() ?? '';
+
+    // Only same-origin absolute paths are accepted, so the parameter cannot redirect off-site.
+    const returnUrl = qp.get('returnUrl')?.trim() ?? '';
+    this.returnUrl = returnUrl.startsWith('/') && !returnUrl.startsWith('//') ? returnUrl : null;
 
     // KPI detail, scorecards and fiscal years load in parallel; the scorecard and the
     // fiscal year are only resolved once all of them have arrived, and the target values
@@ -402,6 +408,10 @@ export class TargetConfigPage implements OnInit {
   }
 
   goBack(): void {
+    if (this.returnUrl) {
+      this.router.navigateByUrl(this.returnUrl);
+      return;
+    }
     const scorecardId = this.scorecard()?.id;
     this.router.navigate(scorecardId ? ['/scorecards', scorecardId] : ['/scorecards']);
   }

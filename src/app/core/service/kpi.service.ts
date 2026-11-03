@@ -15,6 +15,7 @@ import {
   SetPeriodLockConfigRequest,
   PeriodLockStatus,
   PeriodLockStatusItem,
+  KpiOwnerOption,
 } from '../model/goal.model';
 import { IResponse } from '../model/interface/response.interface';
 import { ApiService } from './apiService/api-service';
@@ -41,6 +42,22 @@ export class KPIService {
 
   getByKRA(kraId: string): Observable<KPI[]> {
     return this.getAll(undefined, kraId);
+  }
+
+  /**
+   * Active HR employees that can own a KPI (readable with kpi:view). Search runs on the
+   * HR side against name, HR id code and email so the picker never loads the directory.
+   */
+  getOwnerOptions(search?: string, take = 50): Observable<KpiOwnerOption[]> {
+    const params = new URLSearchParams();
+    const term = search?.trim();
+    if (term) {
+      params.set('search', term);
+    }
+    params.set('take', String(take));
+    return this.api
+      .get<IResponse<KpiOwnerOption[]>>(`${ApiEndpoint.User}/lookup?${params.toString()}`)
+      .pipe(map((res) => res.data ?? []));
   }
 
   getById(id: string): Observable<KPI> {

@@ -80,7 +80,7 @@
       <span class="dp-filter-label">Corporate scorecard</span>
       <select class="form-control dp-filter-control" [ngModel]="scorecardFilter()" (ngModelChange)="scorecardFilter.set($event); onScorecardChange()">
         @if (scorecards().length === 0) {
-          <option value="">No corporate scorecards</option>
+          <option [value]="plan()?.scorecardId ?? ''">{{ plan()?.scorecardName || 'No corporate scorecards' }}</option>
         }
         @for (s of scorecards(); track s.id) {
           <option [value]="s.id">{{ s.name }}{{ s.fiscalYearName ? ' · ' + s.fiscalYearName : '' }}</option>
@@ -209,23 +209,65 @@
                 </div>
               </div>
 
-              <div class="dp-kpi-chips">
-                @for (kpi of goal.kpis; track kpi.id) {
-                  <span class="dp-kpi-chip" [class.is-locked]="!canEdit()" (click)="canEdit() && openEditKpi(kpi, goal)">
-                    {{ kpi.name }}
-                    @if (kpi.score != null) { <span class="dp-kpi-chip-score"> · {{ kpi.score }}%</span> }
-                    @if (kpi.status) {
-                      <span class="dp-status-dot" [class.is-red]="kpi.status === 'red'" [class.is-amber]="kpi.status === 'amber'" aria-hidden="true"></span>
+              <div class="dp-kpi-table-wrap">
+                <table class="dp-table dp-kpi-table">
+                  <thead>
+                    <tr>
+                      <th>KPI</th>
+                      <th>Unit</th>
+                      <th>Type</th>
+                      <th>Method</th>
+                      <th class="dp-align-right">Weight</th>
+                      <th class="dp-align-right">Target</th>
+                      <th class="dp-align-right">Actual</th>
+                      <th class="dp-align-right">Score</th>
+                      @if (canEdit()) {
+                        <th class="dp-align-right">Actions</th>
+                      }
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @if (goal.kpis.length === 0) {
+                      <tr>
+                        <td class="dp-empty-cell" [attr.colspan]="canEdit() ? 9 : 8">No KPIs yet for this goal.</td>
+                      </tr>
+                    } @else {
+                      @for (kpi of goal.kpis; track kpi.id) {
+                        <tr>
+                          <td class="dp-cell-goal">{{ kpi.name }}</td>
+                          <td>{{ kpi.unit || '—' }}</td>
+                          <td>
+                            <span class="dp-type-badge" [class.is-leading]="kpi.kpiType === 'Leading'">{{ kpi.kpiType || '—' }}</span>
+                          </td>
+                          <td>{{ kpi.optimizationType || '—' }}</td>
+                          <td class="dp-align-right">{{ kpi.weight }}%</td>
+                          <td class="dp-align-right">{{ reportValue(kpi.target, kpi.unit) }}</td>
+                          <td class="dp-align-right">{{ reportValue(kpi.actual, kpi.unit) }}</td>
+                          <td class="dp-align-right dp-cell-score" [class.is-positive]="kpi.status === 'green'" [class.is-negative]="kpi.status === 'red'">
+                            {{ reportScore(kpi.score) }}
+                          </td>
+                          @if (canEdit()) {
+                            <td class="dp-align-right">
+                              <div class="dp-kpi-actions">
+                                @if (canConfigureTargets()) {
+                                  <button type="button" class="dp-icon-btn" title="Set target" aria-label="Set target" (click)="openKpiTargets(kpi)">
+                                    <svg aria-hidden="true" lucideIcon="target" size="14"></svg>
+                                  </button>
+                                }
+                                <button type="button" class="dp-icon-btn" title="Edit KPI" aria-label="Edit KPI" (click)="openEditKpi(kpi, goal)">
+                                  <svg aria-hidden="true" lucideIcon="square-pen" size="14"></svg>
+                                </button>
+                                <button type="button" class="dp-icon-btn dp-icon-btn-danger" title="Delete KPI" aria-label="Delete KPI" (click)="deleteKpi(kpi)">
+                                  <svg aria-hidden="true" lucideIcon="trash" size="14"></svg>
+                                </button>
+                              </div>
+                            </td>
+                          }
+                        </tr>
+                      }
                     }
-                    @if (canEdit()) {
-                      <span class="dp-kpi-chip-remove" role="button" title="Delete KPI" (click)="$event.stopPropagation(); deleteKpi(kpi)"><svg aria-hidden="true" lucideIcon="x" size="10" strokeWidth="3"></svg>
-                      </span>
-                    }
-                  </span>
-                }
-                @if (canEdit() && goal.kpis.length === 0) {
-                  <span class="dp-kpi-empty">No KPIs yet for this goal.</span>
-                }
+                  </tbody>
+                </table>
               </div>
 
               @if (canEdit()) {
@@ -622,7 +664,7 @@
               </div>
             </div>
             <p class="form-hint">
-              Annual, quarterly and monthly targets are configured on the Targets page.
+              Annual, quarterly and monthly targets are configured with the Set target action on the KPI row.
             </p>
           </div>
           <div class="modal-footer">

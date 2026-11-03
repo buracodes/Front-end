@@ -1,4 +1,4 @@
-import { Component, effect, inject, signal } from '@angular/core';
+import { Component, OnDestroy, computed, effect, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ColDef } from 'ag-grid-community';
@@ -28,7 +28,7 @@ import { LucideDynamicIcon } from '@lucide/angular';
   templateUrl: './kpi.html',
   styleUrl: './kpi.scss',
 })
-export class KpiPage {
+export class KpiPage implements OnDestroy {
   private readonly kpiService = inject(KpiService);
   private readonly scorecardService = inject(ScorecardService);
   private readonly kraService = inject(KraService);
@@ -45,12 +45,23 @@ export class KpiPage {
   readonly allKras = signal<Kra[]>([]);
   readonly formKras = signal<Kra[]>([]);
   readonly divisions = signal<Division[]>([]);
+  readonly divisionsLoading = signal(false);
+  readonly divisionLoadError = signal<string | null>(null);
+  readonly divisionSearch = signal('');
+  readonly selectedDivision = signal<Division | null>(null);
   readonly ownerOptions = signal<KpiOwnerOption[]>([]);
+  readonly ownerSearch = signal('');
+  readonly ownerSearching = signal(false);
+  readonly ownerSearchError = signal<string | null>(null);
+  readonly selectedOwner = signal<KpiOwnerOption | null>(null);
+  readonly ownerError = signal<string | null>(null);
   readonly loading = signal(false);
   readonly loadError = signal<string | null>(null);
   readonly showForm = signal(false);
   readonly submitting = signal(false);
   readonly editingId = signal<string | null>(null);
+  private ownerSearchTimer: ReturnType<typeof setTimeout> | null = null;
+  private ownerSearchRequest = 0;
   /** Latest score snapshot per KPI for the scorecards currently listed (Target / Actual / Score). */
   readonly kpiSnapshots = signal(new Map<string, ScoreSnapshotEntry>());
   private snapshotRequest = 0;
@@ -60,6 +71,19 @@ export class KpiPage {
   readonly optimizationTypes = ['Maximize', 'Minimize', 'ExactHit', 'Binary'] as const;
   readonly dataSources = ['Manual', 'Automated', 'Calculated'] as const;
   readonly kpiTypes = ['Leading', 'Lagging'] as const;
+
+  /** Local SPMS divisions, narrowed by the selector search (name or code). */
+  readonly divisionResults = computed(() => {
+    const term = this.divisionSearch().trim().toLowerCase();
+    return this.divisions()
+      .filter((division) => division.isActive !== false)
+      .filter(
+        (division) =>
+          !term ||
+          division.name.toLowerCase().includes(term) ||
+          (division.code ?? '').toLowerCase().includes(term),
+      );
+  });
 
   readonly form = new FormGroup({
     scorecardId: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
@@ -184,13 +208,18 @@ export class KpiPage {
     this.loadScorecards();
     this.loadAllKras();
     this.loadDivisions();
-    this.loadOwnerOptions();
 
     effect(() => {
       this.rows();
       this.scorecards();
       this.loadSnapshots();
     });
+  }
+
+  ngOnDestroy(): void {
+    if (this.ownerSearchTimer) {
+      clearTimeout(this.ownerSearchTimer);
+    }
   }
 
   loadScorecards(): void {
@@ -224,17 +253,111 @@ export class KpiPage {
   }
 
   loadDivisions(): void {
+    this.divisionsLoading.set(true);
+    this.divisionLoadError.set(null);
     this.divisionService.getAll().subscribe({
-      next: (divisions) => this.divisions.set(divisions),
-      error: () => this.divisions.set([]),
+      next: (divisions) => {
+        this.divisions.set(divisions);
+        const selected = this.selectedDivision();
+        if (selected) {
+          this.selectedDivision.set(divisions.find((division) => division.id === selected.id) ?? selected);
+        }
+      },
+      error: (error) => {
+        this.divisions.set([]);
+        this.divisionLoadError.set(toApiError(error).message);
+        this.divisionsLoading.set(false);
+      },
+      complete: () => this.divisionsLoading.set(false),
     });
   }
 
-  loadOwnerOptions(): void {
-    this.kpiService.getOwnerOptions().subscribe({
-      next: (owners) => this.ownerOptions.set(owners),
-      error: () => this.ownerOptions.set([]),
+  /** Loads the first page of active HR employees, or the matches for a server-side search. */
+  loadOwnerOptions(search = ''): void {
+    const request = ++this.ownerSearchRequest;
+    this.ownerSearching.set(true);
+    this.ownerSearchError.set(null);
+    this.kpiService.getOwnerOptions(search).subscribe({
+      next: (owners) => {
+        if (request !== this.ownerSearchRequest) return;
+        this.ownerOptions.set(owners);
+        const selected = this.selectedOwner();
+        if (selected) {
+          const match = owners.find((owner) => owner.id === selected.id);
+          if (match) this.selectedOwner.set(match);
+        }
+      },
+      error: (error) => {
+        if (request !== this.ownerSearchRequest) return;
+        this.ownerOptions.set([]);
+        this.ownerSearchError.set(toApiError(error).message);
+        this.ownerSearching.set(false);
+      },
+      complete: () => {
+        if (request === this.ownerSearchRequest) this.ownerSearching.set(false);
+      },
     });
+  }
+
+  onOwnerTypeChange(): void {
+    this.form.controls.ownerId.setValue('');
+    this.form.controls.divisionOwnerId.setValue('');
+    this.selectedOwner.set(null);
+    this.selectedDivision.set(null);
+    this.ownerSearch.set('');
+    this.divisionSearch.set('');
+    this.ownerOptions.set([]);
+    this.ownerError.set(null);
+
+    const ownerType = this.form.controls.ownerType.value;
+    if (ownerType === 'Individual') {
+      this.loadOwnerOptions();
+    } else if (ownerType === 'Division' && this.divisions().length === 0 && !this.divisionsLoading()) {
+      this.loadDivisions();
+    }
+  }
+
+  onOwnerSearchInput(value: string): void {
+    this.ownerSearch.set(value);
+    if (this.ownerSearchTimer) {
+      clearTimeout(this.ownerSearchTimer);
+    }
+    this.ownerSearchTimer = setTimeout(() => {
+      this.ownerSearchTimer = null;
+      this.loadOwnerOptions(this.ownerSearch());
+    }, 300);
+  }
+
+  selectOwner(owner: KpiOwnerOption): void {
+    this.form.controls.ownerId.setValue(owner.id);
+    this.form.controls.divisionOwnerId.setValue('');
+    this.selectedOwner.set(owner);
+    this.ownerSearch.set('');
+    this.ownerOptions.set([]);
+    this.ownerError.set(null);
+  }
+
+  clearOwnerSelection(): void {
+    this.form.controls.ownerId.setValue('');
+    this.selectedOwner.set(null);
+    this.loadOwnerOptions(this.ownerSearch());
+  }
+
+  onDivisionSearchInput(value: string): void {
+    this.divisionSearch.set(value);
+  }
+
+  selectDivision(division: Division): void {
+    this.form.controls.divisionOwnerId.setValue(division.id);
+    this.form.controls.ownerId.setValue('');
+    this.selectedDivision.set(division);
+    this.divisionSearch.set('');
+    this.ownerError.set(null);
+  }
+
+  clearDivisionSelection(): void {
+    this.form.controls.divisionOwnerId.setValue('');
+    this.selectedDivision.set(null);
   }
 
   ownerLabel(kpi: Kpi): string {
@@ -378,6 +501,7 @@ export class KpiPage {
   openAddModal(): void {
     this.editingId.set(null);
     this.formKras.set([]);
+    this.resetOwnerPicker();
     this.form.reset({
       scorecardId: '', kraId: '', name: '', description: '', unit: '', weight: 0,
       optimizationType: 'Maximize', dataSource: 'Manual', kpiType: 'Lagging',
@@ -389,6 +513,10 @@ export class KpiPage {
 
   onEdit(kpi: Kpi): void {
     this.editingId.set(kpi.id);
+    this.resetOwnerPicker();
+    // A legacy row could carry both ids; keep only the one matching the selected type so the
+    // form can never submit an inconsistent ownership.
+    const ownerType: KpiOwnerType | '' = kpi.ownerId ? 'Individual' : kpi.divisionOwnerId ? 'Division' : '';
     this.form.patchValue({
       name: kpi.name,
       description: kpi.description ?? '',
@@ -398,13 +526,29 @@ export class KpiPage {
       dataSource: kpi.dataSource,
       kpiType: kpi.kpiType,
       isCumulative: kpi.isCumulative,
-      ownerType: kpi.ownerId ? 'User' : kpi.divisionOwnerId ? 'Division' : '',
-      ownerId: kpi.ownerId ?? '',
-      divisionOwnerId: kpi.divisionOwnerId ?? '',
+      ownerType,
+      ownerId: ownerType === 'Individual' ? kpi.ownerId ?? '' : '',
+      divisionOwnerId: ownerType === 'Division' ? kpi.divisionOwnerId ?? '' : '',
       baseline: kpi.baseline ?? null,
       minValue: kpi.minValue ?? null,
       maxValue: kpi.maxValue ?? null,
     });
+
+    if (ownerType === 'Individual') {
+      this.selectedOwner.set({ id: kpi.ownerId!, fullName: kpi.ownerName ?? 'Selected employee' });
+      this.loadOwnerOptions(kpi.ownerName ?? '');
+    } else if (ownerType === 'Division') {
+      this.selectedDivision.set(
+        this.divisions().find((division) => division.id === kpi.divisionOwnerId) ?? {
+          id: kpi.divisionOwnerId!,
+          name: kpi.divisionOwnerName ?? 'Selected division',
+        },
+      );
+      if (this.divisions().length === 0) {
+        this.loadDivisions();
+      }
+    }
+
     this.formKras.set([]);
     this.kraService.getAll(kpi.scorecardId).subscribe({
       next: (kras) => {
@@ -422,6 +566,7 @@ export class KpiPage {
 
   onCancelEdit(): void {
     this.editingId.set(null);
+    this.resetOwnerPicker();
     this.form.reset({
       scorecardId: '', kraId: '', name: '', description: '', unit: '', weight: 0,
       optimizationType: 'Maximize', dataSource: 'Manual', kpiType: 'Lagging',
@@ -431,16 +576,47 @@ export class KpiPage {
     this.showForm.set(false);
   }
 
-  /** The form must state an explicit owner type and the matching owner. */
+  private resetOwnerPicker(): void {
+    if (this.ownerSearchTimer) {
+      clearTimeout(this.ownerSearchTimer);
+      this.ownerSearchTimer = null;
+    }
+    this.ownerSearchRequest++;
+    this.ownerSearch.set('');
+    this.divisionSearch.set('');
+    this.ownerOptions.set([]);
+    this.selectedOwner.set(null);
+    this.selectedDivision.set(null);
+    this.ownerSearching.set(false);
+    this.ownerSearchError.set(null);
+    this.ownerError.set(null);
+  }
+
+  /**
+   * The form must state an explicit owner type and exactly one matching owner. The stale
+   * field of the other type is always cleared so a KPI can never be sent with both.
+   */
   private ownerSelection(): { ownerId?: string; divisionOwnerId?: string } | null {
     const ownerType = this.form.controls.ownerType.value;
-    if (ownerType === 'User' && this.form.controls.ownerId.value) {
-      return { ownerId: this.form.controls.ownerId.value };
+    const ownerId = this.form.controls.ownerId.value.trim();
+    const divisionOwnerId = this.form.controls.divisionOwnerId.value.trim();
+
+    if (ownerType === 'Individual' && ownerId && !divisionOwnerId) {
+      this.ownerError.set(null);
+      return { ownerId };
     }
-    if (ownerType === 'Division' && this.form.controls.divisionOwnerId.value) {
-      return { divisionOwnerId: this.form.controls.divisionOwnerId.value };
+    if (ownerType === 'Division' && divisionOwnerId && !ownerId) {
+      this.ownerError.set(null);
+      return { divisionOwnerId };
     }
-    this.notifications.error('Choose an owner type and an owner for this KPI.');
+
+    this.ownerError.set(
+      !ownerType
+        ? 'Choose whether the owner is an individual or a division.'
+        : ownerType === 'Individual'
+          ? 'Select an active HR employee to own this KPI.'
+          : 'Select an active division to own this KPI.',
+    );
     return null;
   }
 

@@ -119,6 +119,19 @@ describe('PerformanceMonitoringPage', () => {
     expect(divisionGetAll).not.toHaveBeenCalled();
   });
 
+  it('keeps a division employee on their own scope without requesting corporate lists', () => {
+    const { page, scorecardGetAll, divisionGetAll } = setup({
+      permissions: ['dashboard:view', 'division:performance.view'],
+      divisionId: 'div-1',
+      response: payload({ scope: 'Division', divisionId: 'div-1', divisionName: 'Operations' }),
+    });
+
+    expect(scorecardGetAll).not.toHaveBeenCalled();
+    expect(divisionGetAll).not.toHaveBeenCalled();
+    expect(page.canViewCorporate()).toBe(false);
+    expect(page.isCorporate()).toBe(false);
+  });
+
   it('only offers the division picker after the corporate user selects division scope', () => {
     const { page } = setup();
 

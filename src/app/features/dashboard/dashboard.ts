@@ -77,9 +77,16 @@ export class DashboardPage implements OnInit {
   readonly periodOptions = computed(() => this.context()?.periods ?? []);
   readonly quickActions = computed(() => this.context()?.quickActions ?? []);
   readonly readOnly = computed(() => this.context()?.readOnly ?? false);
-  readonly scopeLabel = computed(() =>
-    this.context()?.dataScope === 'AssignedOnly' ? 'Your assignments only' : 'Organization wide'
-  );
+  readonly scopeLabel = computed(() => {
+    switch (this.context()?.dataScope) {
+      case 'AssignedOnly':
+        return 'Your assignments only';
+      case 'Division':
+        return 'Your division';
+      default:
+        return 'Organization wide';
+    }
+  });
   readonly appliedPeriod = computed(() => this.bundle()?.filter?.periodLabel ?? this.context()?.filter?.periodLabel ?? 'Year to date');
   readonly fiscalYearClosed = computed(() => this.bundle()?.filter?.fiscalYearClosed ?? false);
   readonly hasWidgets = computed(() => this.visibleWidgets().length > 0);

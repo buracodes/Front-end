@@ -165,7 +165,7 @@ export class DashboardChartConfig {
    */
   comparisonBarOption(options: {
     categories: string[];
-    series: { name: string; color: string; values: (number | null)[] }[];
+    series: { name: string; color: string; values: (number | null)[]; useCategoryColors?: boolean }[];
     horizontal: boolean;
     categoryColors: string[];
     valueSuffix: string;
@@ -231,7 +231,11 @@ export class DashboardChartConfig {
           // null stays null: no bar is better than a fake zero.
           value,
           itemStyle: {
-            color: single ? (options.categoryColors[index] ?? this.brandPrimary) : entry.color,
+            // A single ranked series is entirely category coloured; in a grouped chart only
+            // the series that opts in (the actual bars) takes the per-category RAG colour.
+            color: single || entry.useCategoryColors
+              ? (options.categoryColors[index] ?? entry.color)
+              : entry.color,
             borderRadius: horizontal ? [0, 4, 4, 0] : [4, 4, 0, 0],
           },
         })),

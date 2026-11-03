@@ -727,3 +727,126 @@
   width: 18px;
   height: 18px;
 }
+
+/* ── KPI owner picker ───────────────────────────────────────────────── */
+.owner-section {
+  align-items: flex-start;
+}
+
+.owner-type-group {
+  flex: 0 0 220px;
+}
+
+.owner-picker {
+  flex: 2;
+  min-width: 0;
+}
+
+.owner-placeholder {
+  padding-top: 1.65rem;
+}
+
+.picker-results {
+  margin-top: var(--sp-2);
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+}
+
+.picker-state {
+  margin: 0;
+  padding: var(--sp-3);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.picker-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  width: 100%;
+  padding: var(--sp-2) var(--sp-3);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  text-align: left;
+  color: var(--color-text);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--color-border);
+  cursor: pointer;
+
+  &:last-child {
+    border-bottom: 0;
+  }
+
+  &:hover,
+  &:focus-visible {
+    background: var(--color-primary-lighter);
+    outline: none;
+  }
+}
+
+.picker-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.picker-row-title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.picker-row-meta {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.picker-row-code {
+  flex: 0 0 auto;
+  padding: 2px var(--sp-2);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  background: var(--color-surface-muted);
+  border-radius: var(--radius-full);
+}
+
+.owner-selected {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--color-primary-lighter);
+  border: 1px solid var(--color-primary-light);
+  border-radius: var(--radius-sm);
+}
+
+.owner-selected-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.owner-selected-name {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.owner-selected-meta {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.owner-selected-code {
+  font-size: var(--font-size-xs);
+  color: var(--color-primary-dark);
+}

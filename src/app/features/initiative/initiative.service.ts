@@ -116,6 +116,7 @@ export class InitiativeService {
     if (query?.status) parts.push(`status=${encodeURIComponent(query.status)}`);
     if (query?.priority) parts.push(`priority=${encodeURIComponent(query.priority)}`);
     if (query?.ownerId) parts.push(`ownerId=${encodeURIComponent(query.ownerId)}`);
+    if (query?.divisionOwnerId) parts.push(`divisionOwnerId=${encodeURIComponent(query.divisionOwnerId)}`);
     if (query?.includeClosed !== undefined)
       parts.push(`includeClosed=${query.includeClosed}`);
     if (query?.page) parts.push(`page=${query.page}`);

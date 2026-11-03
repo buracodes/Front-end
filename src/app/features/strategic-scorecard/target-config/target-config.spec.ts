@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
+import { ActivatedRoute, Router, convertToParamMap, provideRouter } from '@angular/router';
 import { TargetConfigPage } from './target-config';
 
 const FISCAL_YEARS = [
@@ -173,6 +173,40 @@ describe('TargetConfigPage', () => {
     });
 
     expect(page.isReadOnly()).toBeTruthy();
+  });
+
+  it('returns to the internal page that opened it when a returnUrl is supplied', () => {
+    deepLink = { kpiId: 'kpi-1', returnUrl: '/division-planning/sc-2?divisionId=div-1' };
+    create();
+
+    kpiRequest().flush(ok(KPI));
+    scorecardRequest().flush(ok(SCORECARDS));
+    fiscalYearRequest().flush(ok(FISCAL_YEARS));
+    targetRequest().flush(ok({ targets: [] }));
+
+    const router = TestBed.inject(Router);
+    const navigateByUrl = vi.spyOn(router, 'navigateByUrl');
+    page.goBack();
+
+    expect(navigateByUrl).toHaveBeenCalledWith('/division-planning/sc-2?divisionId=div-1');
+  });
+
+  it('ignores an off-site returnUrl and falls back to the scorecard page', () => {
+    deepLink = { kpiId: 'kpi-1', returnUrl: '//evil.example/steal' };
+    create();
+
+    kpiRequest().flush(ok(KPI));
+    scorecardRequest().flush(ok(SCORECARDS));
+    fiscalYearRequest().flush(ok(FISCAL_YEARS));
+    targetRequest().flush(ok({ targets: [] }));
+
+    const router = TestBed.inject(Router);
+    const navigate = vi.spyOn(router, 'navigate');
+    const navigateByUrl = vi.spyOn(router, 'navigateByUrl');
+    page.goBack();
+
+    expect(navigateByUrl).not.toHaveBeenCalledWith('//evil.example/steal');
+    expect(navigate).toHaveBeenCalledWith(['/scorecards', 'sc-2']);
   });
 
   it('labels months and quarters from an arbitrary fiscal-year start (September)', () => {

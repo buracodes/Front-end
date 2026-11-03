@@ -58,41 +58,142 @@
               </div>
             </div>
 
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label" for="kpi-owner-type">Owner type</label>
-                <select id="kpi-owner-type" class="form-control" formControlName="ownerType">
-                  <option value="">�?" Select owner type �?"</option>
-                  <option value="User">User</option>
+            <div class="form-row owner-section">
+              <div class="form-group owner-type-group">
+                <label class="form-label" for="kpi-owner-type">Owner Type</label>
+                <select
+                  id="kpi-owner-type"
+                  class="form-control"
+                  formControlName="ownerType"
+                  (change)="onOwnerTypeChange()"
+                >
+                  <option value="" disabled>Select owner type</option>
+                  <option value="Individual">Individual</option>
                   <option value="Division">Division</option>
                 </select>
+                @if (ownerError()) {
+                  <p class="form-error" role="alert">{{ ownerError() }}</p>
+                }
               </div>
 
-              @if (form.controls.ownerType.value === 'User') {
-                <div class="form-group">
-                  <label class="form-label" for="kpi-owner">Owner (user)</label>
-                  <select id="kpi-owner" class="form-control" formControlName="ownerId">
-                    <option value="">�?" Select user �?"</option>
-                    @for (owner of ownerOptions(); track owner.id) {
-                      <option [value]="owner.id">
-                        {{ owner.fullName }}{{ owner.divisionName ? ' �?" ' + owner.divisionName : '' }}
-                      </option>
-                    }
-                  </select>
+              @if (form.controls.ownerType.value === 'Individual') {
+                <div class="form-group owner-picker">
+                  <label class="form-label" for="kpi-owner-search">Owner (individual)</label>
+
+                  @if (selectedOwner(); as owner) {
+                    <div class="owner-selected">
+                      <div class="owner-selected-main">
+                        <span class="owner-selected-name">{{ owner.fullName }}</span>
+                        <span class="owner-selected-meta">
+                          {{ owner.positionName || 'Position not recorded' }}{{ owner.divisionName ? ' · ' + owner.divisionName : '' }}
+                        </span>
+                        @if (owner.employeeCode) {
+                          <span class="owner-selected-code">HR ID {{ owner.employeeCode }}</span>
+                        }
+                      </div>
+                      <button type="button" class="btn btn-secondary btn-sm" (click)="clearOwnerSelection()">
+                        Change
+                      </button>
+                    </div>
+                  } @else {
+                    <input
+                      id="kpi-owner-search"
+                      class="form-control"
+                      type="search"
+                      autocomplete="off"
+                      placeholder="Search by name, employee ID or email"
+                      [value]="ownerSearch()"
+                      (input)="onOwnerSearchInput($any($event.target).value)"
+                    />
+                    <div class="picker-results" role="listbox" aria-label="Employee search results">
+                      @if (ownerSearching()) {
+                        <p class="picker-state">Searching active employees…</p>
+                      } @else if (ownerSearchError()) {
+                        <p class="form-error" role="alert">{{ ownerSearchError() }}</p>
+                      } @else if (ownerOptions().length === 0) {
+                        <p class="picker-state">
+                          {{ ownerSearch().trim() ? 'No active employees match this search.' : 'No active employees available.' }}
+                        </p>
+                      } @else {
+                        @for (owner of ownerOptions(); track owner.id) {
+                          <button type="button" class="picker-row" (click)="selectOwner(owner)">
+                            <span class="picker-row-main">
+                              <span class="picker-row-title">{{ owner.fullName }}</span>
+                              <span class="picker-row-meta">
+                                {{ owner.positionName || 'Position not recorded' }}{{ owner.divisionName ? ' · ' + owner.divisionName : '' }}
+                              </span>
+                            </span>
+                            @if (owner.employeeCode) {
+                              <span class="picker-row-code">{{ owner.employeeCode }}</span>
+                            }
+                          </button>
+                        }
+                      }
+                    </div>
+                  }
                 </div>
               } @else if (form.controls.ownerType.value === 'Division') {
-                <div class="form-group">
-                  <label class="form-label" for="kpi-division-owner">Owner (division)</label>
-                  <select id="kpi-division-owner" class="form-control" formControlName="divisionOwnerId">
-                    <option value="">�?" Select division �?"</option>
-                    @for (division of divisions(); track division.id) {
-                      <option [value]="division.id">{{ division.name }}</option>
-                    }
-                  </select>
+                <div class="form-group owner-picker">
+                  <label class="form-label" for="kpi-division-search">Owner (division)</label>
+
+                  @if (selectedDivision(); as division) {
+                    <div class="owner-selected">
+                      <div class="owner-selected-main">
+                        <span class="owner-selected-name">{{ division.name }}</span>
+                        @if (division.code) {
+                          <span class="owner-selected-code">Division code {{ division.code }}</span>
+                        }
+                      </div>
+                      <button type="button" class="btn btn-secondary btn-sm" (click)="clearDivisionSelection()">
+                        Change
+                      </button>
+                    </div>
+                  } @else {
+                    <input
+                      id="kpi-division-search"
+                      class="form-control"
+                      type="search"
+                      autocomplete="off"
+                      placeholder="Search divisions by name or code"
+                      [value]="divisionSearch()"
+                      (input)="onDivisionSearchInput($any($event.target).value)"
+                    />
+                    <div class="picker-results" role="listbox" aria-label="Division search results">
+                      @if (divisionsLoading()) {
+                        <p class="picker-state">Loading divisions…</p>
+                      } @else if (divisionLoadError()) {
+                        <p class="form-error" role="alert">{{ divisionLoadError() }}</p>
+                      } @else if (divisionResults().length === 0) {
+                        <p class="picker-state">
+                          {{ divisionSearch().trim() ? 'No active divisions match this search.' : 'No active divisions available.' }}
+                        </p>
+                      } @else {
+                        @for (division of divisionResults(); track division.id) {
+                          <button type="button" class="picker-row" (click)="selectDivision(division)">
+                            <span class="picker-row-main">
+                              <span class="picker-row-title">{{ division.name }}</span>
+                            </span>
+                            @if (division.code) {
+                              <span class="picker-row-code">{{ division.code }}</span>
+                            }
+                          </button>
+                        }
+                      }
+                    </div>
+                  }
+                </div>
+              } @else {
+                <div class="form-group owner-picker owner-placeholder">
+                  <p class="form-hint">
+                    Choose <strong>Individual</strong> to search active HR employees, or
+                    <strong>Division</strong> to pick a local SPMS division.
+                  </p>
                 </div>
               }
             </div>
-            <p class="form-hint">A KPI is owned by either one user or one division.</p>
+            <p class="form-hint">
+              A KPI is owned by exactly one individual employee or one division. Ownership does not grant access rights.
+            </p>
 
             <div class="form-group">
               <label class="form-label" for="kpi-name">Name</label>

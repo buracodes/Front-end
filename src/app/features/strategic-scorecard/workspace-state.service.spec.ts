@@ -12,6 +12,7 @@ import {
 } from './workspace-state.service';
 import { UserStore } from '../../core/service/user-store.service';
 import { FiscalYear, Scorecard } from '../../core/model/scorecard.model';
+import { KPI } from '../../core/model/goal.model';
 import { AuthUser } from '../../core/model/auth.model';
 
 const fiscalYear = (overrides: Partial<FiscalYear> = {}): FiscalYear => ({
@@ -357,5 +358,39 @@ describe('ScorecardWorkspaceState EAT rollover reactiveness', () => {
 
     expect(state.fiscalYearClosed()).toBe(true);
     expect(state.isReadOnly()).toBe(true);
+  });
+
+  it('keeps division-owned KPIs out of the corporate workspace lists', () => {
+    state = start();
+    const corporate = {
+      id: 'kpi-1',
+      scorecardId: 'sc-1',
+      name: 'Corporate trade value',
+      weight: 100,
+      optimizationType: 'Maximize',
+      dataSource: 'Manual',
+      kpiType: 'Lagging',
+      isCumulative: true,
+      isActive: true,
+      childKpiCount: 0,
+    } as KPI;
+    const division = {
+      ...corporate,
+      id: 'kpi-2',
+      name: 'Division branches opened',
+      divisionGoalId: 'dg-1',
+    } as KPI;
+
+    state.workspace.set({
+      goals: [],
+      kras: [],
+      kpis: [corporate, division],
+      snapshot: null,
+      locks: null,
+      kpiTargets: new Map(),
+    });
+
+    expect(state.kpis().map((kpi) => kpi.id)).toEqual(['kpi-1']);
+    expect(state.unassignedKpis().map((kpi) => kpi.id)).toEqual(['kpi-1']);
   });
 });

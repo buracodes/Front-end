@@ -554,59 +554,46 @@
   color: var(--color-text-muted);
 }
 
-.dp-kpi-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
+.dp-kpi-table-wrap {
   margin-top: var(--sp-3);
+  overflow-x: auto;
 }
 
-.dp-kpi-chip {
+.dp-kpi-table {
+  min-width: 640px;
+
+  th,
+  td {
+    padding: var(--sp-2) var(--sp-3);
+    white-space: nowrap;
+  }
+
+  td:first-child,
+  th:first-child {
+    white-space: normal;
+  }
+}
+
+.dp-type-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--sp-2);
+  border-radius: 9999px;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  background: var(--color-rag-yellow-light, #fef3c7);
+  color: #92400e;
+
+  &.is-leading {
+    background: var(--color-primary-light);
+    color: var(--color-primary);
+  }
+}
+
+.dp-kpi-actions {
   display: inline-flex;
   align-items: center;
   gap: var(--sp-1);
-  background: var(--color-surface-muted);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
-  border-radius: 9999px;
-  padding: 3px var(--sp-3);
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  font-family: inherit;
-  cursor: pointer;
-  transition: border-color 0.12s ease, background-color 0.12s ease;
-
-  &:hover {
-    border-color: var(--color-primary);
-  }
-
-  &.is-locked {
-    cursor: default;
-    &:hover {
-      border-color: var(--color-border);
-    }
-  }
-}
-
-.dp-kpi-chip-score {
-  color: var(--color-text-muted);
-  font-weight: 500;
-}
-
-.dp-kpi-chip-remove {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  color: var(--color-text-muted);
-  cursor: pointer;
-
-  &:hover {
-    background: var(--color-rag-red-light);
-    color: var(--color-rag-red);
-  }
 }
 
 .dp-add-kpi {
@@ -634,13 +621,6 @@
     color: var(--color-text-muted);
     cursor: not-allowed;
   }
-}
-
-.dp-kpi-empty {
-  align-self: center;
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-  font-style: italic;
 }
 
 .dp-modal-context {

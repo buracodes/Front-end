@@ -54,16 +54,24 @@ export class ShellComponent {
       permission: 'organization:view',
     },
     {
+      label: 'Fiscal Years',
+      route: '/admin/fiscal-years',
+      icon: 'calendar-days',
+      permission: 'admin:config.manage',
+    },
+    {
       label: 'Scorecards',
       route: '/scorecards',
       icon: 'layout-list',
       permission: 'scorecard:view',
     },
     {
-      label: 'Fiscal Years',
-      route: '/admin/fiscal-years',
-      icon: 'calendar-days',
-      permission: 'admin:config.manage',
+      // Read-only view of the employee's own division scorecard and KPIs. Baseline
+      // employees reach it without a scorecard id; the page resolves their own plan.
+      label: 'Division Scorecard',
+      route: '/division-planning',
+      icon: 'chart-pie',
+      permission: ['divisions:view', 'division:scorecard.view', 'division:performance.view'],
     },
     {
       label: 'Strategic Scorecard',
@@ -112,25 +120,25 @@ export class ShellComponent {
           icon: 'lock',
           permission: ['actuals:view', 'admin:config.manage'],
         },
-        // {
-        //   label: 'Scorecard Clone',
-        //   route: '/scorecard-clone',
-        //   icon: 'files',
-        //   permission: 'scorecard:clone',
-        // },
+        {
+          label: 'Scorecard Clone',
+          route: '/scorecard-clone',
+          icon: 'files',
+          permission: 'scorecard:clone',
+        },
       ],
     },
     {
       label: 'Initiatives',
       route: '/initiatives',
       icon: 'square-plus',
-      permission: 'initiatives:view',
+      permission: ['initiatives:view', 'division:initiative.view'],
     },
     {
       label: 'Performance Monitoring',
       route: '/performance-monitoring',
       icon: 'activity',
-      permission: 'dashboard:view',
+      permission: ['dashboard:view', 'division:performance.view'],
     },
     {
       label: 'Reports',

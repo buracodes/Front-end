@@ -7,6 +7,7 @@ import { toApiError } from '../../core/model/api-error';
 import {
   InitiativeListItem,
   InitiativeSummary,
+  InitiativeOwnerType,
   CreateInitiativeRequest,
   UpdateInitiativeRequest,
   ragSlug,
@@ -23,6 +24,8 @@ import { Kpi } from '../kpi/kpi.model';
 import { GoalService } from '../../core/service/goal.service';
 import { Goal } from '../../core/model/goal.model';
 import { UserStore } from '../../core/service/user-store.service';
+import { DivisionService } from '../division/division.service';
+import { Division } from '../division/division.model';
 
 @Component({
   selector: 'app-initiative',
@@ -39,6 +42,7 @@ export class InitiativePage {
   private readonly kraService = inject(KraService);
   private readonly kpiService = inject(KpiService);
   private readonly goalService = inject(GoalService);
+  private readonly divisionService = inject(DivisionService);
   private readonly userStore = inject(UserStore);
 
   readonly rows = signal<InitiativeListItem[]>([]);
@@ -52,6 +56,10 @@ export class InitiativePage {
   readonly userOptions = signal<AppUser[]>([]);
   readonly loadingUsers = signal(false);
 
+  // Divisions available to own an initiative instead of an individual user.
+  readonly divisions = signal<Division[]>([]);
+  readonly loadingDivisions = signal(false);
+
   // Goals / KRAs / KPIs available to link an initiative to (Goal → KRA → KPI hierarchy, all optional).
   readonly goalOptions = signal<Goal[]>([]);
   readonly kraOptions = signal<Kra[]>([]);
@@ -62,6 +70,7 @@ export class InitiativePage {
 
   // Owner currently loaded in the form (so an existing owner not in userOptions still renders).
   readonly currentOwnerId = signal<string | null>(null);
+  readonly currentDivisionOwnerId = signal<string | null>(null);
 
   readonly showForm = signal(false);
   readonly submitting = signal(false);
@@ -83,16 +92,42 @@ export class InitiativePage {
   readonly canDelete = computed(() => this.userStore.hasPermission('initiatives:delete'));
   readonly canClose = computed(() => this.userStore.hasPermission('initiatives:close'));
 
-  /** Unique owners across the visible initiatives as {value, label} pairs for the filter dropdown. */
+  /**
+   * Unique owners across the visible initiatives as {value, label} pairs for the filter dropdown.
+   * Individual owner ids are sent as-is for backward compatibility; division owners are prefixed
+   * with "division:" so the two id spaces stay distinct.
+   */
   readonly ownerFilterOptions = computed(() => {
     const seen = new Map<string, string>();
     for (const row of this.rows()) {
-      if (!row.ownerId) continue;
-      seen.set(row.ownerId, row.ownerName || this.ownerName(row.ownerId));
+      if (row.ownerId) {
+        seen.set(row.ownerId, row.ownerName || this.ownerName(row.ownerId));
+      }
+      if (row.divisionOwnerId) {
+        seen.set(
+          `division:${row.divisionOwnerId}`,
+          row.divisionOwnerName || this.divisionName(row.divisionOwnerId)
+        );
+      }
     }
     return Array.from(seen, ([value, label]) => ({ value, label })).sort((a, b) =>
       a.label.localeCompare(b.label)
     );
+  });
+
+  /** Active divisions offered as an initiative owner, plus the current one when it is not listed. */
+  readonly divisionOptions = computed(() => {
+    const options = this.divisions()
+      .filter((division) => division.isActive !== false)
+      .map((division) => ({
+        id: division.id,
+        label: division.code ? `${division.name} (${division.code})` : division.name,
+      }));
+    const current = this.currentDivisionOwnerId();
+    if (current && !options.some((option) => option.id === current)) {
+      options.unshift({ id: current, label: current });
+    }
+    return options;
   });
 
   /** Options for the owner <select> in the form: all users, plus the current owner if it isn't one. */
@@ -164,6 +199,18 @@ export class InitiativePage {
     return value < this.todayIso ? { pastStartDate: true } : null;
   };
 
+  /**
+   * An initiative has exactly one owner. Which picker supplies it depends on Owner Type, so the
+   * required rule lives on the group instead of on a single control.
+   */
+  private ownerRequiredValidator = (group: AbstractControl): ValidationErrors | null => {
+    const type = group.get('ownerType')?.value as InitiativeOwnerType;
+    const id = type === 'Division'
+      ? group.get('divisionOwnerId')?.value
+      : group.get('ownerId')?.value;
+    return id ? null : { ownerRequired: true };
+  };
+
   readonly form = new FormGroup({
     name: new FormControl('', {
       nonNullable: true,
@@ -173,7 +220,9 @@ export class InitiativePage {
       nonNullable: true,
       validators: [Validators.maxLength(2000)],
     }),
-    ownerId: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
+    ownerType: new FormControl<InitiativeOwnerType>('Individual', { nonNullable: true }),
+    ownerId: new FormControl('', { nonNullable: true }),
+    divisionOwnerId: new FormControl('', { nonNullable: true }),
     goalId: new FormControl('', { nonNullable: true }),
     kraId: new FormControl('', { nonNullable: true }),
     kpiId: new FormControl('', { nonNullable: true }),
@@ -185,12 +234,13 @@ export class InitiativePage {
     endDate: new FormControl<string | null>(null, { validators: [Validators.required] }),
     budget: new FormControl(0, { nonNullable: true, validators: [Validators.min(0)] }),
     resources: new FormControl('', { nonNullable: true }),
-  });
+  }, { validators: [this.ownerRequiredValidator] });
 
   constructor() {
     this.loadInitiatives();
     this.loadSummary();
     this.loadUsers();
+    this.loadDivisions();
     this.loadGoals();
     this.loadKras();
     this.loadKpis();
@@ -206,6 +256,20 @@ export class InitiativePage {
       error: () => {
         this.userOptions.set([]);
         this.loadingUsers.set(false);
+      },
+    });
+  }
+
+  loadDivisions(): void {
+    this.loadingDivisions.set(true);
+    this.divisionService.getAll().subscribe({
+      next: (divisions) => {
+        this.divisions.set(divisions);
+        this.loadingDivisions.set(false);
+      },
+      error: () => {
+        this.divisions.set([]);
+        this.loadingDivisions.set(false);
       },
     });
   }
@@ -287,6 +351,27 @@ export class InitiativePage {
     this.loadKpis();
   }
 
+  /**
+   * Switching Owner Type keeps exactly one owner value in the form: the inactive picker is cleared
+   * so the other id can never be submitted alongside it.
+   */
+  onOwnerTypeChange(type: InitiativeOwnerType): void {
+    if (type === 'Division') {
+      this.form.controls.ownerId.setValue('');
+    } else {
+      this.form.controls.divisionOwnerId.setValue('');
+    }
+    this.form.updateValueAndValidity();
+  }
+
+  /** Exactly one owner id is submitted: the picker selected by Owner Type. */
+  private ownerPayload(): { ownerId?: string; divisionOwnerId?: string } {
+    const v = this.form.value;
+    return v.ownerType === 'Division'
+      ? { divisionOwnerId: v.divisionOwnerId || undefined }
+      : { ownerId: v.ownerId || undefined };
+  }
+
   loadSummary(): void {
     this.initiativeService.getSummary().subscribe({
       next: (summary) => this.summary.set(summary),
@@ -299,11 +384,20 @@ export class InitiativePage {
     this.loading.set(true);
     this.loadError.set(null);
 
+    // Individual owners are filtered by their plain id (backward compatible); division owners are
+    // encoded as "division:<id>" in the dropdown and split back into the dedicated query parameter.
+    const ownerFilter = this.ownerFilter();
+    const divisionOwnerId = ownerFilter.startsWith('division:')
+      ? ownerFilter.slice('division:'.length)
+      : undefined;
+    const ownerId = ownerFilter === 'all' || divisionOwnerId ? undefined : ownerFilter;
+
     this.initiativeService
       .getAll({
         search: this.search().trim() || undefined,
         status: this.statusFilter() === 'all' ? undefined : (this.statusFilter() as InitiativeListItem['status']),
-        ownerId: this.ownerFilter() === 'all' ? undefined : this.ownerFilter(),
+        ownerId,
+        divisionOwnerId,
         includeClosed: this.includeClosed(),
         page: this.page(),
         pageSize: this.pageSize(),
@@ -384,6 +478,24 @@ export class InitiativePage {
     return user?.fullName || user?.username || id;
   }
 
+  /** Display name for a division id (falls back to the raw id when unknown/deleted). */
+  divisionName(id: string): string {
+    if (!id) return '—';
+    const division = this.divisions().find((d) => d.id === id);
+    return division ? (division.code ? `${division.name} (${division.code})` : division.name) : id;
+  }
+
+  /** Owner label for a row: an individual user or a division, whichever the initiative holds. */
+  ownerLabel(initiative: InitiativeListItem): string {
+    if (initiative.ownerId) {
+      return initiative.ownerName || this.ownerName(initiative.ownerId);
+    }
+    if (initiative.divisionOwnerId) {
+      return initiative.divisionOwnerName || this.divisionName(initiative.divisionOwnerId);
+    }
+    return '—';
+  }
+
   statusLabel(status: InitiativeListItem['status']): string {
     switch (status) {
       case 'InProgress':
@@ -416,8 +528,10 @@ export class InitiativePage {
     this.editingId.set(null);
     this.currentOwnerId.set(null);
     this.originalStartDateIso = null;
+    this.currentDivisionOwnerId.set(null);
     this.form.reset({
-      name: '', description: '', ownerId: '', goalId: '', kraId: '', kpiId: '', priority: 'Medium', status: 'NotStarted',
+      name: '', description: '', ownerType: 'Individual', ownerId: '', divisionOwnerId: '',
+      goalId: '', kraId: '', kpiId: '', priority: 'Medium', status: 'NotStarted',
       startDate: null, endDate: null, budget: 0, resources: '',
     });
     // A fresh form starts from the full hierarchy, not from the previous edit's cascade.
@@ -435,11 +549,14 @@ export class InitiativePage {
       next: (detail) => {
         this.editingId.set(detail.id);
         this.currentOwnerId.set(detail.ownerId || null);
+        this.currentDivisionOwnerId.set(detail.divisionOwnerId || null);
         this.originalStartDateIso = detail.startDate?.slice(0, 10) ?? null;
         this.form.setValue({
           name: detail.name,
           description: detail.description ?? '',
+          ownerType: detail.divisionOwnerId ? 'Division' : 'Individual',
           ownerId: detail.ownerId ?? '',
+          divisionOwnerId: detail.divisionOwnerId ?? '',
           goalId: detail.goalId ?? '',
           kraId: detail.kraId ?? '',
           kpiId: detail.kpiId ?? '',
@@ -463,9 +580,11 @@ export class InitiativePage {
   onCancelEdit(): void {
     this.editingId.set(null);
     this.currentOwnerId.set(null);
+    this.currentDivisionOwnerId.set(null);
     this.originalStartDateIso = null;
     this.form.reset({
-      name: '', description: '', ownerId: '', goalId: '', kraId: '', kpiId: '', priority: 'Medium', status: 'NotStarted',
+      name: '', description: '', ownerType: 'Individual', ownerId: '', divisionOwnerId: '',
+      goalId: '', kraId: '', kpiId: '', priority: 'Medium', status: 'NotStarted',
       startDate: null, endDate: null, budget: 0, resources: '',
     });
     this.showForm.set(false);
@@ -485,7 +604,7 @@ export class InitiativePage {
       goalId: v.goalId || undefined,
       kraId: v.kraId || undefined,
       kpiId: v.kpiId || undefined,
-      ownerId: v.ownerId ?? '',
+      ...this.ownerPayload(),
       priority: v.priority as CreateInitiativeRequest['priority'],
       status: v.status as CreateInitiativeRequest['status'],
       startDate: v.startDate || undefined,
@@ -536,7 +655,7 @@ export class InitiativePage {
       goalId: v.goalId || undefined,
       kraId: v.kraId || undefined,
       kpiId: v.kpiId || undefined,
-      ownerId: v.ownerId || undefined,
+      ...this.ownerPayload(),
       priority: v.priority as UpdateInitiativeRequest['priority'],
       startDate: v.startDate || undefined,
       endDate: v.endDate || undefined,

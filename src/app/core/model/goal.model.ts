@@ -58,11 +58,27 @@ export interface UpdateKraRequest {
   isActive?: boolean;
 }
 
+export type KpiOwnerType = 'Individual' | 'Division';
+
+/** An active HR employee, mapped by the backend to the stable local user id (EmpId). */
+export interface KpiOwnerOption {
+  id: string;
+  fullName: string;
+  employeeCode?: string;
+  email?: string;
+  positionName?: string;
+  positionLevel?: string;
+  divisionId?: string;
+  divisionName?: string;
+}
+
 export interface KPI {
   id: string;
   scorecardId: string;
   kraId?: string;
   goalId?: string;
+  /** Set for KPIs owned by a division goal; these never belong to the corporate workspace. */
+  divisionGoalId?: string;
   name: string;
   description?: string;
   code?: string;

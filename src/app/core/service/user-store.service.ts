@@ -8,7 +8,14 @@ export class UserStore {
   readonly user = this.userSignal.asReadonly();
   readonly isAuthenticated = computed(() => this.userSignal() !== null);
   readonly divisionId = computed(() => this.userSignal()?.divisionId ?? null);
-  readonly isDivisionAccount = computed(() => this.divisionId() != null);
+  readonly divisionIds = computed(() => {
+    const user = this.userSignal();
+    if (!user) {
+      return [];
+    }
+    return user.divisionIds?.length ? user.divisionIds : user.divisionId ? [user.divisionId] : [];
+  });
+  readonly isDivisionAccount = computed(() => this.divisionIds().length > 0);
   readonly roles = computed(() => this.userSignal()?.roles ?? []);
   readonly permissions = computed(() => this.userSignal()?.permissions ?? []);
 

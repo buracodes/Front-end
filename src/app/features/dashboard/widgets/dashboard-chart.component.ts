@@ -101,6 +101,7 @@ export class DashboardChartComponent {
         name: entry.name,
         color: this.colorFor(entry.color),
         values: entry.values,
+        useCategoryColors: entry.useCategoryColors === true,
       })),
       horizontal: chart.orientation !== 'vertical',
       categoryColors: chart.categoryColors.map((token) => this.colorFor(token)),

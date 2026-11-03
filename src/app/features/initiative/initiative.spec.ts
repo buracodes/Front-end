@@ -89,6 +89,7 @@ describe('InitiativePage', () => {
   /** Answers the option requests the grid fires on construction. */
   const flushOptions = (): void => {
     http.expectOne((r) => r.urlWithParams.endsWith('/api/user')).flush(ok([]));
+    http.expectOne((r) => r.urlWithParams.endsWith('/api/division')).flush(ok([]));
     http.expectOne((r) => r.urlWithParams.endsWith('/api/goal')).flush(ok([]));
     http.expectOne((r) => r.urlWithParams.endsWith('/api/kra')).flush(ok([]));
     http.expectOne((r) => r.urlWithParams.endsWith('/api/kpi')).flush(ok([]));
@@ -321,6 +322,124 @@ describe('InitiativePage', () => {
     expect(request.request.body.kraId).toBeUndefined();
     expect(request.request.body.kpiId).toBeUndefined();
     expect(request.request.body.clearStrategicLinks).toBeUndefined();
+    request.flush(ok(row()));
+
+    http.expectOne(isGrid).flush(
+      ok({ items: [], totalCount: 0, page: 1, pageSize: 25, totalPages: 0 })
+    );
+  });
+
+  it('sends a division owner filter as its own query parameter', () => {
+    const page = start();
+
+    page.onOwnerFilterChange('division:division-9');
+    const request = http.expectOne(isGrid);
+    expect(request.request.urlWithParams).toContain('divisionOwnerId=division-9');
+    expect(request.request.urlWithParams).not.toContain('ownerId=');
+    request.flush(ok({ items: [], totalCount: 0, page: 1, pageSize: 25, totalPages: 0 }));
+  });
+
+  it('labels a division-owned card with the division name', () => {
+    const page = start(
+      [],
+      [
+        row({
+          ownerId: undefined,
+          ownerName: undefined,
+          divisionOwnerId: 'division-1',
+          divisionOwnerName: 'Finance Department',
+        }),
+      ]
+    );
+
+    expect(page.ownerLabel(page.rows()[0])).toBe('Finance Department');
+    expect(page.ownerFilterOptions()).toContainEqual({
+      value: 'division:division-1',
+      label: 'Finance Department',
+    });
+  });
+
+  it('switches the owner picker and submits exactly one owner', () => {
+    const page = start(['initiatives:create']);
+
+    page.openAddModal();
+    flushCascade();
+
+    page.form.patchValue({ ownerId: 'user-1' });
+    // The template updates the form control through formControlName before the change handler runs.
+    page.form.controls.ownerType.setValue('Division');
+    page.onOwnerTypeChange('Division');
+
+    // Switching to a division clears the user picker, so only one owner can be submitted.
+    expect(page.form.controls.ownerId.value).toBe('');
+    expect(page.form.hasError('ownerRequired')).toBe(true);
+
+    page.form.patchValue({
+      name: 'Division initiative',
+      divisionOwnerId: 'division-1',
+      startDate: isoDay(1),
+      endDate: isoDay(40),
+    });
+    expect(page.form.valid).toBe(true);
+
+    page.onSubmit();
+    const created = http.expectOne(
+      (r) => r.method === 'POST' && r.urlWithParams.endsWith('/api/initiative')
+    );
+    expect(created.request.body.divisionOwnerId).toBe('division-1');
+    expect(created.request.body.ownerId).toBeUndefined();
+    created.flush(
+      ok(
+        row({
+          id: 'init-9',
+          ownerId: undefined,
+          ownerName: undefined,
+          divisionOwnerId: 'division-1',
+          divisionOwnerName: 'Finance Department',
+        })
+      )
+    );
+
+    http.expectOne(isGrid).flush(
+      ok({ items: [], totalCount: 0, page: 1, pageSize: 25, totalPages: 0 })
+    );
+    http.expectOne(isSummary).flush(ok(SUMMARY));
+  });
+
+  it('loads a division owner into the edit form without a user owner', () => {
+    const page = start(['initiatives:edit'], [
+      row({
+        ownerId: undefined,
+        ownerName: undefined,
+        divisionOwnerId: 'division-1',
+        divisionOwnerName: 'Finance Department',
+      }),
+    ]);
+
+    page.onEdit(page.rows()[0]);
+    http.expectOne((r) => r.urlWithParams.endsWith('/api/initiative/init-1')).flush(
+      ok(
+        row({
+          ownerId: undefined,
+          ownerName: undefined,
+          divisionOwnerId: 'division-1',
+          divisionOwnerName: 'Finance Department',
+        })
+      )
+    );
+    flushCascade({ kraId: 'kra-1' });
+
+    expect(page.form.controls.ownerType.value).toBe('Division');
+    expect(page.form.controls.divisionOwnerId.value).toBe('division-1');
+    expect(page.form.controls.ownerId.value).toBe('');
+    expect(page.form.valid).toBe(true);
+
+    page.onUpdate();
+    const request = http.expectOne(
+      (r) => r.method === 'PUT' && r.urlWithParams.endsWith('/api/initiative/init-1')
+    );
+    expect(request.request.body.divisionOwnerId).toBe('division-1');
+    expect(request.request.body.ownerId).toBeUndefined();
     request.flush(ok(row()));
 
     http.expectOne(isGrid).flush(

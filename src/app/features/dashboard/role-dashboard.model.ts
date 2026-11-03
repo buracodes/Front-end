@@ -1,7 +1,7 @@
 /** Mirrors the backend role dashboard contract (`Application/DTOS/Dashboard`). */
 
 export type DashboardPeriodType = 'Ytd' | 'Quarter' | 'Month' | 'Year';
-export type DashboardDataScope = 'OrganizationWide' | 'AssignedOnly';
+export type DashboardDataScope = 'OrganizationWide' | 'Division' | 'AssignedOnly';
 export type DashboardRagLabel = 'Green' | 'Amber' | 'Red' | 'NoData';
 
 export interface DashboardFilter {
@@ -123,6 +123,8 @@ export interface WidgetSeries {
   name: string;
   kind: string;
   color: string | null;
+  /** Per-point RAG colouring from the widget's category colours (target vs actual). */
+  useCategoryColors?: boolean;
   values: (number | null)[];
 }
 
@@ -240,7 +242,11 @@ export interface GoalDrilldown {
   score: number | null;
   ragLabel: DashboardRagLabel | null;
   trend: number | null;
+  /** A division goal sits directly above its KPIs; there is no corporate KRA layer. */
+  isDivisionGoal: boolean;
   kras: GoalKraDto[];
+  /** Direct KPIs for a division goal; always empty for a corporate goal. */
+  kpis: GoalKraKpi[];
 }
 
 /**
@@ -257,6 +263,7 @@ export interface DashboardWidgetBundle {
   overallScore?: GaugeWidget | null;
   ragDistribution?: RagDistributionWidget | null;
   performanceTrend?: TrendWidget | null;
+  kpiPerformanceTrend?: TrendWidget | null;
   scorecardPerformance?: TableWidget | null;
   scorecardHealth?: TableWidget | null;
   goalHealth?: TableWidget | null;

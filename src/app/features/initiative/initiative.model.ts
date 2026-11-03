@@ -11,6 +11,9 @@ export type InitiativeStatus =
 
 export type InitiativePriority = 'Low' | 'Medium' | 'High' | 'Critical';
 
+/** An initiative has exactly one owner: an individual user or a whole division. */
+export type InitiativeOwnerType = 'Individual' | 'Division';
+
 /** FRD milestone delivery state. Completion drives it, so there is no On Hold. */
 export type MilestoneStatus = 'NotStarted' | 'InProgress' | 'Completed';
 
@@ -59,6 +62,8 @@ export interface InitiativeListItem {
   actualExpenditure: number;
   ownerId?: string;
   ownerName?: string;
+  divisionOwnerId?: string;
+  divisionOwnerName?: string;
   goalId?: string;
   kraId?: string;
   kpiId?: string;
@@ -125,8 +130,11 @@ export interface Initiative {
   kraName?: string;
   kpiId?: string;
   kpiName?: string;
+  /** Individual owner. Empty when the initiative is owned by a division. */
   ownerId: string;
   ownerName?: string;
+  divisionOwnerId?: string;
+  divisionOwnerName?: string;
   priority: InitiativePriority;
   status: InitiativeStatus;
   startDate?: string;
@@ -180,7 +188,9 @@ export interface CreateInitiativeRequest {
   goalId?: string;
   kraId?: string;
   kpiId?: string;
-  ownerId: string;
+  /** Exactly one owner: an individual user (ownerId) or a division (divisionOwnerId). */
+  ownerId?: string;
+  divisionOwnerId?: string;
   priority?: InitiativePriority;
   status?: InitiativeStatus;
   startDate?: string;
@@ -198,7 +208,9 @@ export interface UpdateInitiativeRequest {
   clearStrategicLinks?: boolean;
   /** Set by forms that render every strategic select: the three ids are an authoritative snapshot. */
   strategicLinksSpecified?: boolean;
+  /** Setting one owner clears the other; omitting both leaves ownership untouched. */
   ownerId?: string;
+  divisionOwnerId?: string;
   priority?: InitiativePriority;
   status?: InitiativeStatus;
   startDate?: string;
@@ -246,6 +258,7 @@ export interface InitiativeListQuery {
   status?: InitiativeStatus;
   priority?: InitiativePriority;
   ownerId?: string;
+  divisionOwnerId?: string;
   includeClosed?: boolean;
   page?: number;
   pageSize?: number;

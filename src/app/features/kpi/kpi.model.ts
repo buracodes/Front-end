@@ -27,14 +27,7 @@ export interface Kpi {
   createdDate?: string;
 }
 
-export type KpiOwnerType = 'User' | 'Division';
-
-export interface KpiOwnerOption {
-  id: string;
-  fullName: string;
-  divisionId?: string;
-  divisionName?: string;
-}
+export type { KpiOwnerType, KpiOwnerOption } from '../../core/model/goal.model';
 
 export interface CreateKpiRequest {
   scorecardId: string;

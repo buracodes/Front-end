@@ -306,7 +306,7 @@
               </div>
               <div>
                 <dt>Owner</dt>
-                <dd>{{ initiative()!.ownerName || ownerName(initiative()!.ownerId) }}</dd>
+                <dd>{{ ownerLabel(initiative()!) }}</dd>
               </div>
             </dl>
             @if (initiative()!.resources) {

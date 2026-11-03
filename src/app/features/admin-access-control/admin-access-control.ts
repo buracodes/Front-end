@@ -17,9 +17,12 @@ import {
 
 type TabKey = 'groups' | 'group-rights' | 'group-members' | 'user-rights';
 
+/** Grant mode lists what is not assigned yet; revoke mode lists what is. */
+type AssignmentMode = 'grant' | 'revoke';
+
 type GroupDialog = { mode: 'create' } | { mode: 'edit'; group: AccessGroup } | null;
 
-type RightDecisionDialog = { right: AccessRight; effect: AccessEffect } | null;
+type RightDecisionDialog = { rights: AccessRight[] } | null;
 
 interface RightOptionRow extends AccessRight {
   /** Current effect for the selected target, or null when nothing is assigned. */
@@ -100,23 +103,77 @@ export class AdminAccessControlPage {
 
   // ── Group rights tab ───────────────────────────────────────────────────
 
+  readonly groupSearchTerm = signal('');
   readonly selectedGroupId = signal<string | null>(null);
   readonly selectedGroupRights = signal<Map<string, AccessEffect>>(new Map());
   readonly rightSearch = signal('');
+  readonly groupRightsMode = signal<AssignmentMode>('grant');
+  readonly groupRightSelection = signal<Set<string>>(new Set());
+  readonly loadingGroupRights = signal(false);
+  readonly savingGroupRights = signal(false);
 
   readonly selectedGroup = computed(
     () => this.groups().find((group) => group.id === this.selectedGroupId()) ?? null,
   );
 
+  readonly groupOptions = computed(() => {
+    const term = this.groupSearchTerm().trim().toLowerCase();
+    const rows = this.activeGroups();
+    if (!term) return rows;
+    return rows.filter(
+      (group) =>
+        group.name.toLowerCase().includes(term) ||
+        (group.description ?? '').toLowerCase().includes(term),
+    );
+  });
+
   readonly groupRightModules = computed<RightModule[]>(() =>
-    this.buildRightModules(this.selectedGroupRights(), this.rightSearch()),
+    this.buildRightModules(
+      this.selectedGroupRights(),
+      this.rightSearch(),
+      this.groupRightsMode() === 'grant' ? 'unassigned' : 'assigned',
+    ),
   );
+
+  readonly visibleGroupRights = computed<RightOptionRow[]>(() =>
+    this.groupRightModules().flatMap((module) => module.rights),
+  );
+
+  readonly selectedGroupRightRows = computed(() => {
+    const selected = this.groupRightSelection();
+    return this.rights().filter((right) => selected.has(right.id));
+  });
+
+  readonly groupRightSelectedCount = computed(() => this.groupRightSelection().size);
+
+  readonly allVisibleGroupRightsSelected = computed(() => {
+    const rows = this.visibleGroupRights();
+    return rows.length > 0 && rows.every((right) => this.groupRightSelection().has(right.id));
+  });
+
+  readonly someVisibleGroupRightsSelected = computed(
+    () =>
+      !this.allVisibleGroupRightsSelected() &&
+      this.visibleGroupRights().some((right) => this.groupRightSelection().has(right.id)),
+  );
+
+  readonly groupRightActionLabel = computed(() => {
+    const isGrant = this.groupRightsMode() === 'grant';
+    const verb = isGrant ? 'Grant' : 'Revoke';
+    if (this.savingGroupRights()) return isGrant ? 'Granting…' : 'Revoking…';
+    const count = this.groupRightSelectedCount();
+    return count > 0 ? `${verb} selected (${count})` : `${verb} selected`;
+  });
 
   // ── Group members tab ──────────────────────────────────────────────────
 
   readonly memberSearch = signal('');
   readonly memberEmployeeId = signal<string | null>(null);
   readonly memberRoleIds = signal<Set<string>>(new Set());
+  readonly memberMode = signal<AssignmentMode>('grant');
+  readonly memberGroupSelection = signal<Set<string>>(new Set());
+  readonly loadingMembers = signal(false);
+  readonly savingMembers = signal(false);
 
   readonly filteredEmployees = computed(() => {
     const term = this.memberSearch().trim().toLowerCase();
@@ -130,12 +187,48 @@ export class AdminAccessControlPage {
       this.employees().find((employee) => employee.empId === this.memberEmployeeId()) ?? null,
   );
 
+  readonly activeGroups = computed(() =>
+    this.groups()
+      .filter((group) => group.isActive)
+      .sort((a, b) => a.name.localeCompare(b.name)),
+  );
+
   readonly memberGroupRows = computed<GroupOptionRow[]>(() => {
     const assigned = this.memberRoleIds();
-    return [...this.groups()]
-      .filter((group) => group.isActive)
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .map((group) => ({ ...group, member: assigned.has(group.id) }));
+    return this.activeGroups().map((group) => ({ ...group, member: assigned.has(group.id) }));
+  });
+
+  readonly memberGrantGroups = computed(() =>
+    this.memberGroupRows().filter((group) => !group.member),
+  );
+
+  readonly memberRevokeGroups = computed(() =>
+    this.memberGroupRows().filter((group) => group.member),
+  );
+
+  readonly memberModeGroups = computed(() =>
+    this.memberMode() === 'grant' ? this.memberGrantGroups() : this.memberRevokeGroups(),
+  );
+
+  readonly memberGroupSelectedCount = computed(() => this.memberGroupSelection().size);
+
+  readonly allModeGroupsSelected = computed(() => {
+    const rows = this.memberModeGroups();
+    return rows.length > 0 && rows.every((group) => this.memberGroupSelection().has(group.id));
+  });
+
+  readonly someModeGroupsSelected = computed(
+    () =>
+      !this.allModeGroupsSelected() &&
+      this.memberModeGroups().some((group) => this.memberGroupSelection().has(group.id)),
+  );
+
+  readonly memberActionLabel = computed(() => {
+    const isGrant = this.memberMode() === 'grant';
+    const verb = isGrant ? 'Grant' : 'Revoke';
+    if (this.savingMembers()) return isGrant ? 'Granting…' : 'Revoking…';
+    const count = this.memberGroupSelectedCount();
+    return count > 0 ? `${verb} selected (${count})` : `${verb} selected`;
   });
 
   // ── User rights tab ────────────────────────────────────────────────────
@@ -144,6 +237,9 @@ export class AdminAccessControlPage {
   readonly rightEmployeeId = signal<string | null>(null);
   readonly rightEmployeeSearch = signal('');
   readonly userRights = signal<UserRightRow[]>([]);
+  readonly userRightsMode = signal<AssignmentMode>('grant');
+  readonly rightSelection = signal<Set<string>>(new Set());
+  readonly loadingUserRights = signal(false);
   readonly rightDialog = signal<RightDecisionDialog>(null);
   readonly rightReason = signal('');
   readonly savingRight = signal(false);
@@ -169,8 +265,42 @@ export class AdminAccessControlPage {
   });
 
   readonly userRightModules = computed<RightModule[]>(() =>
-    this.buildRightModules(this.directEffects(), this.rightSearchTerm()),
+    this.buildRightModules(
+      this.directEffects(),
+      this.rightSearchTerm(),
+      this.userRightsMode() === 'grant' ? 'unassigned' : 'assigned',
+    ),
   );
+
+  readonly visibleRights = computed<RightOptionRow[]>(() =>
+    this.userRightModules().flatMap((module) => module.rights),
+  );
+
+  readonly selectedRightCount = computed(() => this.rightSelection().size);
+
+  readonly selectedRights = computed(() => {
+    const selected = this.rightSelection();
+    return this.rights().filter((right) => selected.has(right.id));
+  });
+
+  readonly allVisibleRightsSelected = computed(() => {
+    const rows = this.visibleRights();
+    return rows.length > 0 && rows.every((right) => this.rightSelection().has(right.id));
+  });
+
+  readonly someVisibleRightsSelected = computed(
+    () =>
+      !this.allVisibleRightsSelected() &&
+      this.visibleRights().some((right) => this.rightSelection().has(right.id)),
+  );
+
+  readonly userRightActionLabel = computed(() => {
+    const isGrant = this.userRightsMode() === 'grant';
+    const verb = isGrant ? 'Grant' : 'Revoke';
+    if (this.savingRight()) return isGrant ? 'Granting…' : 'Revoking…';
+    const count = this.selectedRightCount();
+    return count > 0 ? `${verb} selected (${count})` : `${verb} selected`;
+  });
 
   constructor() {
     void this.loadGroups();
@@ -306,6 +436,9 @@ export class AdminAccessControlPage {
   async selectGroup(group: AccessGroup): Promise<void> {
     this.selectedGroupId.set(group.id);
     this.selectedGroupRights.set(new Map());
+    this.groupRightSelection.set(new Set());
+    this.groupRightsMode.set('grant');
+    this.loadingGroupRights.set(true);
     try {
       const rows = await this.firstValue(this.aclService.getGroupRights(group.id));
       if (this.selectedGroupId() !== group.id) return;
@@ -314,46 +447,165 @@ export class AdminAccessControlPage {
       );
     } catch (error) {
       this.notifications.error(toApiError(error).message);
+    } finally {
+      if (this.selectedGroupId() === group.id) this.loadingGroupRights.set(false);
     }
   }
 
-  async assignGroupRight(right: AccessRight): Promise<void> {
+  setGroupRightsMode(mode: AssignmentMode): void {
+    if (this.groupRightsMode() === mode) return;
+    this.groupRightsMode.set(mode);
+    this.groupRightSelection.set(new Set());
+  }
+
+  isGroupRightSelected(right: AccessRight): boolean {
+    return this.groupRightSelection().has(right.id);
+  }
+
+  toggleGroupRightSelection(right: AccessRight, selected: boolean): void {
+    this.groupRightSelection.update((current) => {
+      const next = new Set(current);
+      if (selected) next.add(right.id);
+      else next.delete(right.id);
+      return next;
+    });
+  }
+
+  toggleSelectAllGroupRights(selected: boolean): void {
+    this.groupRightSelection.update((current) => {
+      const next = new Set(current);
+      for (const right of this.visibleGroupRights()) {
+        if (selected) next.add(right.id);
+        else next.delete(right.id);
+      }
+      return next;
+    });
+  }
+
+  clearGroupRightSelection(): void {
+    this.groupRightSelection.set(new Set());
+  }
+
+  async grantSelectedGroupRights(): Promise<void> {
     const group = this.selectedGroup();
-    if (!group || !this.canManageGroups() || this.selectedGroupRights().get(right.id) === 'Grant') {
+    const rights = this.selectedGroupRightRows().filter(
+      (right) => !this.selectedGroupRights().has(right.id),
+    );
+    if (!group || !this.canManageGroups() || this.savingGroupRights() || rights.length === 0) {
       return;
     }
 
-    const added = !this.selectedGroupRights().has(right.id);
+    this.savingGroupRights.set(true);
+    let granted = 0;
+    const failedIds = new Set<string>();
+
     try {
-      await this.firstValue(this.aclService.assignGroupRight(group.id, right.id));
-      this.selectedGroupRights.update((current) => new Map(current).set(right.id, 'Grant'));
-      if (added) this.adjustGroupRightCount(group.id, 1);
-      this.notifications.success(`Right assigned to ${group.name}.`);
+      for (const right of rights) {
+        try {
+          await this.firstValue(this.aclService.assignGroupRight(group.id, right.id));
+          this.selectedGroupRights.update((current) =>
+            new Map(current).set(right.id, 'Grant'),
+          );
+          granted += 1;
+        } catch {
+          failedIds.add(right.id);
+        }
+      }
+
+      this.groupRightSelection.set(failedIds);
+
+      if (granted > 0) {
+        this.notifications.success(
+          `Granted ${granted} right${granted === 1 ? '' : 's'} to ${group.name}.`,
+        );
+      }
+      if (failedIds.size > 0) {
+        this.notifications.error(
+          `${failedIds.size} right${failedIds.size === 1 ? '' : 's'} could not be granted.`,
+        );
+      }
+
+      await this.loadGroups();
+      await this.refreshSelectedGroupRights();
     } catch (error) {
       this.notifications.error(toApiError(error).message);
+    } finally {
+      this.savingGroupRights.set(false);
     }
   }
 
-  async revokeGroupRight(right: AccessRight): Promise<void> {
+  async revokeSelectedGroupRights(): Promise<void> {
     const group = this.selectedGroup();
-    if (!group || !this.canManageGroups() || !this.selectedGroupRights().has(right.id)) return;
+    const rights = this.selectedGroupRightRows().filter((right) =>
+      this.selectedGroupRights().has(right.id),
+    );
+    if (!group || !this.canManageGroups() || this.savingGroupRights() || rights.length === 0) {
+      return;
+    }
 
     const confirmed = await this.confirmDialog.confirm(
-      'Revoke right',
-      `Revoke '${right.name}' from group '${group.name}'?`,
+      'Revoke rights',
+      `Revoke ${rights.length} selected right${rights.length === 1 ? '' : 's'} from group '${group.name}'?`,
       { confirmText: 'Revoke', variant: 'danger' },
     );
     if (!confirmed) return;
 
+    this.savingGroupRights.set(true);
+    let revoked = 0;
+    const failedIds = new Set<string>();
+
     try {
-      await this.firstValue(this.aclService.revokeGroupRight(group.id, right.id));
-      this.selectedGroupRights.update((current) => {
-        const next = new Map(current);
-        next.delete(right.id);
-        return next;
-      });
-      this.adjustGroupRightCount(group.id, -1);
-      this.notifications.success(`Right revoked from ${group.name}.`);
+      for (const right of rights) {
+        try {
+          await this.firstValue(this.aclService.revokeGroupRight(group.id, right.id));
+          this.selectedGroupRights.update((current) => {
+            const next = new Map(current);
+            next.delete(right.id);
+            return next;
+          });
+          revoked += 1;
+        } catch {
+          failedIds.add(right.id);
+        }
+      }
+
+      this.groupRightSelection.set(failedIds);
+
+      if (revoked > 0) {
+        this.notifications.success(
+          `Revoked ${revoked} right${revoked === 1 ? '' : 's'} from ${group.name}.`,
+        );
+      }
+      if (failedIds.size > 0) {
+        this.notifications.error(
+          `${failedIds.size} right${failedIds.size === 1 ? '' : 's'} could not be revoked.`,
+        );
+      }
+
+      await this.loadGroups();
+      await this.refreshSelectedGroupRights();
+    } catch (error) {
+      this.notifications.error(toApiError(error).message);
+    } finally {
+      this.savingGroupRights.set(false);
+    }
+  }
+
+  async applySelectedGroupRights(): Promise<void> {
+    if (this.groupRightsMode() === 'grant') await this.grantSelectedGroupRights();
+    else await this.revokeSelectedGroupRights();
+  }
+
+  private async refreshSelectedGroupRights(): Promise<void> {
+    const groupId = this.selectedGroupId();
+    if (!groupId) return;
+    try {
+      const rows = await this.firstValue(this.aclService.getGroupRights(groupId));
+      if (this.selectedGroupId() === groupId) {
+        this.selectedGroupRights.set(
+          new Map(rows.map((row) => [row.permissionId, row.effect === 'Deny' ? 'Deny' : 'Grant'])),
+        );
+      }
     } catch (error) {
       this.notifications.error(toApiError(error).message);
     }
@@ -370,57 +622,188 @@ export class AdminAccessControlPage {
 
     this.memberEmployeeId.set(employeeId);
     this.memberRoleIds.set(new Set());
+    this.memberGroupSelection.set(new Set());
+    this.memberMode.set('grant');
+    this.loadingMembers.set(true);
     try {
       const rows = await this.firstValue(this.aclService.getMemberships({ userId: employeeId }));
       if (this.memberEmployeeId() !== employeeId) return;
       this.memberRoleIds.set(new Set(rows.map((row) => row.roleId)));
     } catch (error) {
       this.notifications.error(toApiError(error).message);
+    } finally {
+      if (this.memberEmployeeId() === employeeId) this.loadingMembers.set(false);
     }
   }
 
-  async grantMembership(group: AccessGroup): Promise<void> {
-    const employeeId = this.memberEmployeeId();
-    if (!employeeId || !this.canManageGroups() || this.memberRoleIds().has(group.id)) return;
-
-    try {
-      await this.firstValue(this.aclService.assignMembership(group.id, employeeId));
-      this.memberRoleIds.update((current) => new Set(current).add(group.id));
-      this.notifications.success(`${this.memberEmployeeName()} added to ${group.name}.`);
-      await this.loadGroups();
-    } catch (error) {
-      this.notifications.error(toApiError(error).message);
-    }
-  }
-
-  async denyMembership(group: AccessGroup): Promise<void> {
-    const employeeId = this.memberEmployeeId();
-    if (!employeeId || !this.canManageGroups() || !this.memberRoleIds().has(group.id)) return;
-
-    const confirmed = await this.confirmDialog.confirm(
-      'Remove membership',
-      `Remove ${this.memberEmployeeName()} from group '${group.name}'?`,
-      { confirmText: 'Remove', variant: 'danger' },
-    );
-    if (!confirmed) return;
-
-    try {
-      await this.firstValue(this.aclService.removeMembership(group.id, employeeId));
-      this.memberRoleIds.update((current) => {
-        const next = new Set(current);
-        next.delete(group.id);
-        return next;
-      });
-      this.notifications.success(`Membership to ${group.name} removed.`);
-      await this.loadGroups();
-    } catch (error) {
-      this.notifications.error(toApiError(error).message);
-    }
+  setMemberMode(mode: AssignmentMode): void {
+    if (this.memberMode() === mode) return;
+    this.memberMode.set(mode);
+    this.memberGroupSelection.set(new Set());
   }
 
   memberEmployeeName(): string {
     const employee = this.memberEmployee();
     return employee ? this.employeeName(employee) : '';
+  }
+
+  isMemberGroupSelected(group: GroupOptionRow): boolean {
+    return this.memberGroupSelection().has(group.id);
+  }
+
+  toggleMemberGroupSelection(group: GroupOptionRow, selected: boolean): void {
+    if (!this.memberModeGroups().some((row) => row.id === group.id)) return;
+    this.memberGroupSelection.update((current) => {
+      const next = new Set(current);
+      if (selected) next.add(group.id);
+      else next.delete(group.id);
+      return next;
+    });
+  }
+
+  toggleSelectAllMemberGroups(selected: boolean): void {
+    this.memberGroupSelection.update((current) => {
+      const next = new Set(current);
+      for (const group of this.memberModeGroups()) {
+        if (selected) next.add(group.id);
+        else next.delete(group.id);
+      }
+      return next;
+    });
+  }
+
+  clearMemberGroupSelection(): void {
+    this.memberGroupSelection.set(new Set());
+  }
+
+  async grantSelectedGroups(): Promise<void> {
+    const employeeId = this.memberEmployeeId();
+    const employeeName = this.memberEmployeeName();
+    const groups = this.memberGrantGroups().filter((group) =>
+      this.memberGroupSelection().has(group.id),
+    );
+    if (!employeeId || !this.canManageGroups() || this.savingMembers() || groups.length === 0) {
+      return;
+    }
+
+    const confirmed = await this.confirmDialog.confirm(
+      'Grant group access',
+      `Add ${employeeName} to ${groups.length} selected group${groups.length === 1 ? '' : 's'}?`,
+      { confirmText: 'Grant', variant: 'info' },
+    );
+    if (!confirmed) return;
+
+    this.savingMembers.set(true);
+    let granted = 0;
+    const failedIds = new Set<string>();
+
+    try {
+      for (const group of groups) {
+        try {
+          await this.firstValue(this.aclService.assignMembership(group.id, employeeId));
+          this.memberRoleIds.update((current) => new Set(current).add(group.id));
+          granted += 1;
+        } catch {
+          failedIds.add(group.id);
+        }
+      }
+
+      this.memberGroupSelection.set(failedIds);
+
+      if (granted > 0) {
+        this.notifications.success(
+          `${employeeName} added to ${granted} group${granted === 1 ? '' : 's'}.`,
+        );
+      }
+      if (failedIds.size > 0) {
+        this.notifications.error(
+          `${failedIds.size} group${failedIds.size === 1 ? '' : 's'} could not be granted. The employee may be inactive in HR, or the change is not allowed for your own account.`,
+        );
+      }
+
+      await this.loadGroups();
+      await this.refreshMemberMemberships();
+    } catch (error) {
+      this.notifications.error(toApiError(error).message);
+    } finally {
+      this.savingMembers.set(false);
+    }
+  }
+
+  async revokeSelectedGroups(): Promise<void> {
+    const employeeId = this.memberEmployeeId();
+    const employeeName = this.memberEmployeeName();
+    const groups = this.memberRevokeGroups().filter((group) =>
+      this.memberGroupSelection().has(group.id),
+    );
+    if (!employeeId || !this.canManageGroups() || this.savingMembers() || groups.length === 0) {
+      return;
+    }
+
+    const confirmed = await this.confirmDialog.confirm(
+      'Revoke group access',
+      `Remove ${employeeName} from ${groups.length} selected group${groups.length === 1 ? '' : 's'}?`,
+      { confirmText: 'Revoke', variant: 'danger' },
+    );
+    if (!confirmed) return;
+
+    this.savingMembers.set(true);
+    let revoked = 0;
+    const failedIds = new Set<string>();
+
+    try {
+      for (const group of groups) {
+        try {
+          await this.firstValue(this.aclService.removeMembership(group.id, employeeId));
+          this.memberRoleIds.update((current) => {
+            const next = new Set(current);
+            next.delete(group.id);
+            return next;
+          });
+          revoked += 1;
+        } catch {
+          failedIds.add(group.id);
+        }
+      }
+
+      this.memberGroupSelection.set(failedIds);
+
+      if (revoked > 0) {
+        this.notifications.success(
+          `${employeeName} removed from ${revoked} group${revoked === 1 ? '' : 's'}.`,
+        );
+      }
+      if (failedIds.size > 0) {
+        this.notifications.error(
+          `${failedIds.size} group${failedIds.size === 1 ? '' : 's'} could not be revoked.`,
+        );
+      }
+
+      await this.loadGroups();
+      await this.refreshMemberMemberships();
+    } catch (error) {
+      this.notifications.error(toApiError(error).message);
+    } finally {
+      this.savingMembers.set(false);
+    }
+  }
+
+  async applySelectedGroups(): Promise<void> {
+    if (this.memberMode() === 'grant') await this.grantSelectedGroups();
+    else await this.revokeSelectedGroups();
+  }
+
+  private async refreshMemberMemberships(): Promise<void> {
+    const employeeId = this.memberEmployeeId();
+    if (!employeeId) return;
+    try {
+      const rows = await this.firstValue(this.aclService.getMemberships({ userId: employeeId }));
+      if (this.memberEmployeeId() === employeeId) {
+        this.memberRoleIds.set(new Set(rows.map((row) => row.roleId)));
+      }
+    } catch (error) {
+      this.notifications.error(toApiError(error).message);
+    }
   }
 
   // ── User rights tab ────────────────────────────────────────────────────
@@ -434,19 +817,65 @@ export class AdminAccessControlPage {
 
     this.rightEmployeeId.set(employeeId);
     this.userRights.set([]);
+    this.rightSelection.set(new Set());
+    this.userRightsMode.set('grant');
+    this.loadingUserRights.set(true);
     try {
       const rows = await this.firstValue(this.aclService.getUserRights(employeeId));
       if (this.rightEmployeeId() !== employeeId) return;
       this.userRights.set(rows);
     } catch (error) {
       this.notifications.error(toApiError(error).message);
+    } finally {
+      if (this.rightEmployeeId() === employeeId) this.loadingUserRights.set(false);
     }
   }
 
-  openRightDecision(right: AccessRight, effect: AccessEffect): void {
-    if (!this.rightEmployeeId() || !this.canManageUserRights()) return;
+  setUserRightsMode(mode: AssignmentMode): void {
+    if (this.userRightsMode() === mode) return;
+    this.userRightsMode.set(mode);
+    this.rightSelection.set(new Set());
+  }
+
+  isRightSelected(right: AccessRight): boolean {
+    return this.rightSelection().has(right.id);
+  }
+
+  toggleRightSelection(right: AccessRight, selected: boolean): void {
+    if (!this.visibleRights().some((row) => row.id === right.id)) return;
+    this.rightSelection.update((current) => {
+      const next = new Set(current);
+      if (selected) next.add(right.id);
+      else next.delete(right.id);
+      return next;
+    });
+  }
+
+  toggleSelectAllRights(selected: boolean): void {
+    this.rightSelection.update((current) => {
+      const next = new Set(current);
+      for (const right of this.visibleRights()) {
+        if (selected) next.add(right.id);
+        else next.delete(right.id);
+      }
+      return next;
+    });
+  }
+
+  clearRightSelection(): void {
+    this.rightSelection.set(new Set());
+  }
+
+  grantSelectedRights(): void {
+    if (!this.rightEmployeeId() || !this.canManageUserRights() || this.savingRight()) return;
+
+    const rights = this.selectedRights().filter(
+      (right) => !this.directEffects().has(right.id),
+    );
+    if (rights.length === 0) return;
+
     this.rightReason.set('');
-    this.rightDialog.set({ right, effect });
+    this.rightDialog.set({ rights });
   }
 
   closeRightDialog(): void {
@@ -466,15 +895,36 @@ export class AdminAccessControlPage {
     }
 
     this.savingRight.set(true);
+    let granted = 0;
+    const failedIds = new Set<string>();
+
     try {
-      await this.firstValue(
-        this.aclService.setUserRight(employeeId, dialog.right.id, dialog.effect, reason),
-      );
-      this.notifications.success(
-        `${dialog.effect === 'Grant' ? 'Granted' : 'Denied'} '${dialog.right.name}'.`,
-      );
+      for (const right of dialog.rights) {
+        try {
+          await this.firstValue(
+            this.aclService.setUserRight(employeeId, right.id, 'Grant', reason),
+          );
+          granted += 1;
+        } catch {
+          failedIds.add(right.id);
+        }
+      }
+
+      this.rightSelection.set(failedIds);
+
+      if (granted > 0) {
+        this.notifications.success(
+          `Granted ${granted} right${granted === 1 ? '' : 's'} directly.`,
+        );
+      }
+      if (failedIds.size > 0) {
+        this.notifications.error(
+          `${failedIds.size} right${failedIds.size === 1 ? '' : 's'} could not be granted.`,
+        );
+      }
+
       this.rightDialog.set(null);
-      this.userRights.set(await this.firstValue(this.aclService.getUserRights(employeeId)));
+      await this.refreshUserRights();
     } catch (error) {
       this.notifications.error(toApiError(error).message);
     } finally {
@@ -482,38 +932,82 @@ export class AdminAccessControlPage {
     }
   }
 
-  async revokeUserRight(right: AccessRight): Promise<void> {
+  async revokeSelectedRights(): Promise<void> {
     const employeeId = this.rightEmployeeId();
-    if (!employeeId || !this.canManageUserRights() || !this.directEffects().has(right.id)) return;
+    const employee = this.rightEmployee();
+    const rights = this.selectedRights().filter((right) => this.directEffects().has(right.id));
+    if (!employeeId || !this.canManageUserRights() || this.savingRight() || rights.length === 0) {
+      return;
+    }
 
     const confirmed = await this.confirmDialog.confirm(
-      'Revoke direct right',
-      `Remove the direct assignment of '${right.name}'? Group rights are unaffected.`,
+      'Revoke direct rights',
+      `Remove the direct assignment of ${rights.length} selected right${rights.length === 1 ? '' : 's'} from ${employee ? this.employeeName(employee) : 'the employee'}? Group rights are unaffected.`,
       { confirmText: 'Revoke', variant: 'danger' },
     );
     if (!confirmed) return;
 
+    this.savingRight.set(true);
+    let revoked = 0;
+    const failedIds = new Set<string>();
+
     try {
-      await this.firstValue(this.aclService.removeUserRight(employeeId, right.id));
-      this.notifications.success('Direct right removed.');
-      this.userRights.set(await this.firstValue(this.aclService.getUserRights(employeeId)));
+      for (const right of rights) {
+        try {
+          await this.firstValue(this.aclService.removeUserRight(employeeId, right.id));
+          revoked += 1;
+        } catch {
+          failedIds.add(right.id);
+        }
+      }
+
+      this.rightSelection.set(failedIds);
+
+      if (revoked > 0) {
+        this.notifications.success(
+          `Revoked ${revoked} direct right${revoked === 1 ? '' : 's'}.`,
+        );
+      }
+      if (failedIds.size > 0) {
+        this.notifications.error(
+          `${failedIds.size} right${failedIds.size === 1 ? '' : 's'} could not be revoked.`,
+        );
+      }
+
+      await this.refreshUserRights();
+    } catch (error) {
+      this.notifications.error(toApiError(error).message);
+    } finally {
+      this.savingRight.set(false);
+    }
+  }
+
+  applySelectedRights(): void {
+    if (this.userRightsMode() === 'grant') this.grantSelectedRights();
+    else void this.revokeSelectedRights();
+  }
+
+  private async refreshUserRights(): Promise<void> {
+    const employeeId = this.rightEmployeeId();
+    if (!employeeId) return;
+    try {
+      const rows = await this.firstValue(this.aclService.getUserRights(employeeId));
+      if (this.rightEmployeeId() === employeeId) {
+        this.userRights.set(rows);
+      }
     } catch (error) {
       this.notifications.error(toApiError(error).message);
     }
   }
 
-  rightEffectOf(rightId: string): AccessEffect | null {
-    return this.directEffects().get(rightId) ?? null;
-  }
-
   // ── Helpers ────────────────────────────────────────────────────────────
 
   employeeName(employee: EmployeeHrInfo): string {
-    const parts = [employee.firstName, employee.middleName].filter(
+    const parts = [employee.firstName, employee.middleName, employee.lastName].filter(
       (part): part is string => !!part && part.trim().length > 0,
     );
     if (parts.length > 0) return parts.join(' ');
-    return employee.lastName?.trim() || employee.idCode || employee.email || employee.empId || 'Unknown';
+    return employee.idCode || employee.email || employee.empId || 'Unknown';
   }
 
   employeeSubtitle(employee: EmployeeHrInfo): string {
@@ -545,12 +1039,17 @@ export class AdminAccessControlPage {
   private buildRightModules(
     effects: ReadonlyMap<string, AccessEffect>,
     term: string,
+    assignment: 'all' | 'assigned' | 'unassigned' = 'all',
   ): RightModule[] {
     const search = term.trim().toLowerCase();
     const byModule = new Map<string, RightOptionRow[]>();
     for (const right of this.rights()) {
       const haystack = `${right.name} ${right.module} ${right.description ?? ''}`.toLowerCase();
       if (search && !haystack.includes(search)) continue;
+
+      const assigned = effects.has(right.id);
+      if (assignment === 'assigned' && !assigned) continue;
+      if (assignment === 'unassigned' && assigned) continue;
 
       const moduleName = right.module || 'General';
       const rows = byModule.get(moduleName) ?? [];
@@ -568,16 +1067,6 @@ export class AdminAccessControlPage {
 
   private firstValue<T>(observable$: Observable<T>): Promise<T> {
     return firstValueFrom(observable$);
-  }
-
-  private adjustGroupRightCount(groupId: string, delta: number): void {
-    this.groups.update((groups) =>
-      groups.map((group) =>
-        group.id === groupId
-          ? { ...group, rightCount: Math.max(0, group.rightCount + delta) }
-          : group,
-      ),
-    );
   }
 
   private handleLoadError(error: unknown): void {

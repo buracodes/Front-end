@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal, HostListener, OnInit } from '@angular/core';
+import { Component, OnDestroy, computed, inject, signal, HostListener, OnInit } from '@angular/core';
 import { DecimalPipe, LowerCasePipe } from '@angular/common';
 import { FormControl, FormGroup, ReactiveFormsModule, FormsModule, Validators } from '@angular/forms';
 import { KpiDetailsDrawer } from '../strategic-scorecard/kpi-details/kpi-details';
@@ -22,6 +22,8 @@ import {
   Goal,
   KPI,
   KRA,
+  KpiOwnerOption,
+  KpiOwnerType,
   UpdateGoalRequest,
   UpdateKpiRequest,
   UpdateKraRequest,
@@ -48,7 +50,7 @@ const round1 = (n: number): number => Math.round(n * 10) / 10;
   templateUrl: './score.html',
   styleUrl: './score.scss',
 })
-export class score implements OnInit {
+export class score implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly scorecardListService = inject(ScorecardService);
@@ -222,9 +224,34 @@ export class score implements OnInit {
   readonly crudParentId = signal<string | null>(null);
   readonly kpiDetailLoading = signal(false);
 
-  // Owner list for KPI assignment (divisions, e.g. IT, Trade Operation)
+  // Owner assignment for KPI (exactly one HR individual or one local division)
   readonly divisions = signal<Division[]>([]);
   readonly divisionsLoading = signal(false);
+  readonly divisionLoadError = signal<string | null>(null);
+  readonly divisionSearch = signal('');
+  readonly selectedDivision = signal<Division | null>(null);
+  readonly ownerOptions = signal<KpiOwnerOption[]>([]);
+  readonly ownerSearch = signal('');
+  readonly ownerSearching = signal(false);
+  readonly ownerSearchError = signal<string | null>(null);
+  readonly selectedOwner = signal<KpiOwnerOption | null>(null);
+  readonly ownerError = signal<string | null>(null);
+  private ownerSearchTimer: ReturnType<typeof setTimeout> | null = null;
+  private ownerSearchRequest = 0;
+
+  /** Local SPMS divisions, narrowed by the selector search (name or code). */
+  readonly divisionResults = computed(() => {
+    const term = this.divisionSearch().trim().toLowerCase();
+    return this.divisions()
+      .filter((division) => division.isActive !== false)
+      .filter(
+        (division) =>
+          !term ||
+          division.name.toLowerCase().includes(term) ||
+          (division.code ?? '').toLowerCase().includes(term),
+      );
+  });
+
   readonly crudParentGoal = computed(() => {
     const id = this.crudParentId();
     return this.goals().find((g) => g.id === id) ?? null;
@@ -288,6 +315,8 @@ export class score implements OnInit {
     dataSource: new FormControl<'Manual' | 'Automated' | 'Calculated'>('Manual', {
       nonNullable: true,
     }),
+    ownerType: new FormControl<KpiOwnerType | ''>('', { nonNullable: true }),
+    ownerId: new FormControl('', { nonNullable: true }),
     divisionOwnerId: new FormControl('', { nonNullable: true }),
     isCumulative: new FormControl(true, { nonNullable: true }),
     baseline: new FormControl<number | null>(null, { nonNullable: true }),
@@ -325,18 +354,170 @@ export class score implements OnInit {
     this.loadDivisions();
   }
 
+  ngOnDestroy(): void {
+    if (this.ownerSearchTimer) {
+      clearTimeout(this.ownerSearchTimer);
+    }
+  }
+
   loadDivisions(): void {
     this.divisionsLoading.set(true);
+    this.divisionLoadError.set(null);
     this.divisionService.getAll().subscribe({
       next: (divisions) => {
         this.divisions.set(divisions);
+        const selected = this.selectedDivision();
+        if (selected) {
+          this.selectedDivision.set(
+            divisions.find((division) => division.id === selected.id) ?? selected,
+          );
+        }
+      },
+      error: (e) => {
+        this.divisions.set([]);
+        this.divisionLoadError.set(e?.message ?? 'Failed to load divisions.');
         this.divisionsLoading.set(false);
       },
-      error: () => {
-        this.divisionsLoading.set(false);
+      complete: () => this.divisionsLoading.set(false),
+    });
+  }
+
+  /** Loads the first page of active HR employees, or the matches for a server-side search. */
+  loadOwnerOptions(search = ''): void {
+    const request = ++this.ownerSearchRequest;
+    this.ownerSearching.set(true);
+    this.ownerSearchError.set(null);
+    this.kpiService.getOwnerOptions(search).subscribe({
+      next: (owners) => {
+        if (request !== this.ownerSearchRequest) return;
+        this.ownerOptions.set(owners);
+        const selected = this.selectedOwner();
+        if (selected) {
+          const match = owners.find((owner) => owner.id === selected.id);
+          if (match) this.selectedOwner.set(match);
+        }
+      },
+      error: (e) => {
+        if (request !== this.ownerSearchRequest) return;
+        this.ownerOptions.set([]);
+        this.ownerSearchError.set(e?.message ?? 'Failed to search employees.');
+        this.ownerSearching.set(false);
+      },
+      complete: () => {
+        if (request === this.ownerSearchRequest) this.ownerSearching.set(false);
       },
     });
   }
+
+  onOwnerTypeChange(): void {
+    this.kpiForm.controls.ownerId.setValue('');
+    this.kpiForm.controls.divisionOwnerId.setValue('');
+    this.selectedOwner.set(null);
+    this.selectedDivision.set(null);
+    this.ownerSearch.set('');
+    this.divisionSearch.set('');
+    this.ownerOptions.set([]);
+    this.ownerError.set(null);
+
+    const ownerType = this.kpiForm.controls.ownerType.value;
+    if (ownerType === 'Individual') {
+      this.loadOwnerOptions();
+    } else if (ownerType === 'Division' && this.divisions().length === 0 && !this.divisionsLoading()) {
+      this.loadDivisions();
+    }
+  }
+
+  onOwnerSearchInput(value: string): void {
+    this.ownerSearch.set(value);
+    if (this.ownerSearchTimer) {
+      clearTimeout(this.ownerSearchTimer);
+    }
+    this.ownerSearchTimer = setTimeout(() => {
+      this.ownerSearchTimer = null;
+      this.loadOwnerOptions(this.ownerSearch());
+    }, 300);
+  }
+
+  selectOwner(owner: KpiOwnerOption): void {
+    this.kpiForm.controls.ownerId.setValue(owner.id);
+    this.kpiForm.controls.divisionOwnerId.setValue('');
+    this.selectedOwner.set(owner);
+    this.ownerSearch.set('');
+    this.ownerOptions.set([]);
+    this.ownerError.set(null);
+  }
+
+  clearOwnerSelection(): void {
+    this.kpiForm.controls.ownerId.setValue('');
+    this.selectedOwner.set(null);
+    this.loadOwnerOptions(this.ownerSearch());
+  }
+
+  onDivisionSearchInput(value: string): void {
+    this.divisionSearch.set(value);
+  }
+
+  selectDivision(division: Division): void {
+    this.kpiForm.controls.divisionOwnerId.setValue(division.id);
+    this.kpiForm.controls.ownerId.setValue('');
+    this.selectedDivision.set(division);
+    this.divisionSearch.set('');
+    this.ownerError.set(null);
+  }
+
+  clearDivisionSelection(): void {
+    this.kpiForm.controls.divisionOwnerId.setValue('');
+    this.selectedDivision.set(null);
+  }
+
+  private resetOwnerPicker(): void {
+    if (this.ownerSearchTimer) {
+      clearTimeout(this.ownerSearchTimer);
+      this.ownerSearchTimer = null;
+    }
+    this.ownerSearchRequest++;
+    this.ownerSearch.set('');
+    this.divisionSearch.set('');
+    this.ownerOptions.set([]);
+    this.selectedOwner.set(null);
+    this.selectedDivision.set(null);
+    this.ownerSearching.set(false);
+    this.ownerSearchError.set(null);
+    this.ownerError.set(null);
+  }
+
+  /**
+   * The KPI must state an explicit owner type and exactly one matching owner. The stale
+   * field of the other type is always cleared so a KPI can never be sent with both.
+   */
+  private ownerSelection(): { ownerId?: string; divisionOwnerId?: string } | null {
+    const ownerType = this.kpiForm.controls.ownerType.value;
+    const ownerId = this.kpiForm.controls.ownerId.value.trim();
+    const divisionOwnerId = this.kpiForm.controls.divisionOwnerId.value.trim();
+
+    if (ownerType === 'Individual' && ownerId && !divisionOwnerId) {
+      this.ownerError.set(null);
+      return { ownerId };
+    }
+    if (ownerType === 'Division' && divisionOwnerId && !ownerId) {
+      if (this.selectedDivision()?.isActive === false) {
+        this.ownerError.set('The selected division is inactive. Choose an active division.');
+        return null;
+      }
+      this.ownerError.set(null);
+      return { divisionOwnerId };
+    }
+
+    this.ownerError.set(
+      !ownerType
+        ? 'Choose whether the owner is an individual or a division.'
+        : ownerType === 'Individual'
+          ? 'Select an active HR employee to own this KPI.'
+          : 'Select an active division to own this KPI.',
+    );
+    return null;
+  }
+
   loadSiblingScorecards(): void {
     this.siblingLoading.set(true);
     this.scorecardListService.getAll().subscribe({
@@ -890,6 +1071,7 @@ export class score implements OnInit {
     this.crudKind.set('kpi');
     this.crudEditingId.set(null);
     this.crudParentId.set(kraId);
+    this.resetOwnerPicker();
     this.kpiForm.reset({
       name: '',
       description: '',
@@ -898,6 +1080,8 @@ export class score implements OnInit {
       optimizationType: 'Maximize',
       kpiType: 'Lagging',
       dataSource: 'Manual',
+      ownerType: '',
+      ownerId: '',
       divisionOwnerId: '',
       isCumulative: true,
       baseline: null,
@@ -920,6 +1104,14 @@ export class score implements OnInit {
         this.crudKind.set('kpi');
         this.crudEditingId.set(kpi.id);
         this.crudParentId.set(full.kraId ?? null);
+        this.resetOwnerPicker();
+        // A legacy row could carry both ids; keep only the one matching the selected type so
+        // the form can never submit an inconsistent ownership.
+        const ownerType: KpiOwnerType | '' = full.ownerId
+          ? 'Individual'
+          : full.divisionOwnerId
+            ? 'Division'
+            : '';
         this.kpiForm.patchValue({
           name: full.name,
           description: full.description ?? '',
@@ -928,12 +1120,31 @@ export class score implements OnInit {
           optimizationType: full.optimizationType,
           kpiType: full.kpiType,
           dataSource: full.dataSource,
-          divisionOwnerId: full.divisionOwnerId ?? '',
+          ownerType,
+          ownerId: ownerType === 'Individual' ? full.ownerId ?? '' : '',
+          divisionOwnerId: ownerType === 'Division' ? full.divisionOwnerId ?? '' : '',
           isCumulative: full.isCumulative,
           baseline: full.baseline ?? null,
           minValue: full.minValue ?? null,
           maxValue: full.maxValue ?? null,
         });
+        if (ownerType === 'Individual') {
+          this.selectedOwner.set({
+            id: full.ownerId!,
+            fullName: full.ownerName ?? 'Selected employee',
+          });
+          this.loadOwnerOptions(full.ownerName ?? '');
+        } else if (ownerType === 'Division') {
+          this.selectedDivision.set(
+            this.divisions().find((division) => division.id === full.divisionOwnerId) ?? {
+              id: full.divisionOwnerId!,
+              name: full.divisionOwnerName ?? 'Selected division',
+            },
+          );
+          if (this.divisions().length === 0) {
+            this.loadDivisions();
+          }
+        }
         this.showCrudModal.set(true);
       },
       error: (e) => {
@@ -944,6 +1155,7 @@ export class score implements OnInit {
   }
 
   closeCrudModal(): void {
+    this.resetOwnerPicker();
     this.showCrudModal.set(false);
     this.crudEditingId.set(null);
     this.crudParentId.set(null);
@@ -1011,6 +1223,16 @@ export class score implements OnInit {
     if (!this.submitWeightAllowed(this.crudKind(), form.value.weight ?? 0)) {
       this.crudSubmitting.set(false);
       return;
+    }
+
+    // Exactly one owner is mandatory: an individual employee XOR a division.
+    let ownership: { ownerId?: string; divisionOwnerId?: string } | null = null;
+    if (this.crudKind() === 'kpi') {
+      ownership = this.ownerSelection();
+      if (!ownership) {
+        this.crudSubmitting.set(false);
+        return;
+      }
     }
 
     this.crudSubmitting.set(true);
@@ -1124,7 +1346,7 @@ export class score implements OnInit {
           optimizationType: this.kpiForm.controls.optimizationType.value,
           kpiType: this.kpiForm.controls.kpiType.value,
           dataSource: this.kpiForm.controls.dataSource.value,
-          divisionOwnerId: this.kpiForm.controls.divisionOwnerId.value || undefined,
+          ...ownership!,
           isCumulative: this.kpiForm.controls.isCumulative.value,
           baseline: this.kpiForm.controls.baseline.value ?? undefined,
           minValue: this.kpiForm.controls.minValue.value ?? undefined,
@@ -1153,7 +1375,7 @@ export class score implements OnInit {
           optimizationType: this.kpiForm.controls.optimizationType.value,
           kpiType: this.kpiForm.controls.kpiType.value,
           dataSource: this.kpiForm.controls.dataSource.value,
-          divisionOwnerId: this.kpiForm.controls.divisionOwnerId.value || undefined,
+          ...ownership!,
           isCumulative: this.kpiForm.controls.isCumulative.value,
           baseline: this.kpiForm.controls.baseline.value ?? undefined,
           minValue: this.kpiForm.controls.minValue.value ?? undefined,

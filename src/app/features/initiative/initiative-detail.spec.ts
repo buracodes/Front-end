@@ -115,6 +115,7 @@ describe('InitiativeDetailPage', () => {
 
     const page = TestBed.runInInjectionContext(() => new InitiativeDetailPage());
     http.expectOne((r) => r.urlWithParams.endsWith('/api/user')).flush(ok([]));
+    http.expectOne((r) => r.urlWithParams.endsWith('/api/division')).flush(ok([]));
     http.expectOne(isDetail).flush(ok(entity));
     http.expectOne(isMilestones).flush(ok(entity.milestones));
     http.expectOne(isHistory).flush(ok([]));
@@ -190,6 +191,7 @@ describe('InitiativeDetailPage', () => {
     const fixture = TestBed.createComponent(InitiativeDetailPage);
     const page = fixture.componentInstance;
     http.expectOne((r) => r.urlWithParams.endsWith('/api/user')).flush(ok([]));
+    http.expectOne((r) => r.urlWithParams.endsWith('/api/division')).flush(ok([]));
     http.expectOne(isDetail).flush(ok(entity));
     http.expectOne(isMilestones).flush(ok(entity.milestones));
     http.expectOne(isHistory).flush(ok([]));
@@ -572,6 +574,43 @@ describe('InitiativeDetailPage', () => {
     expect(page.canManageDependencies()).toBe(true);
   });
 
+  it('treats a member of the owning division as the initiative owner', () => {
+    const page = start(
+      ['initiatives:view'],
+      initiative({
+        ownerId: undefined,
+        ownerName: undefined,
+        divisionOwnerId: 'division-1',
+        divisionOwnerName: 'Finance Department',
+      })
+    );
+
+    // The initiative is owned by the member's division, so the guard accepts them as its owner.
+    store.setUser({ ...user(['initiatives:view']), divisionId: 'division-1' });
+    expect(page.isOwner()).toBe(true);
+    expect(page.canManageMilestones()).toBe(true);
+    expect(page.canUpdateExpenditure()).toBe(true);
+
+    // A member of a different division is a stranger.
+    store.setUser({ ...user(['initiatives:view']), divisionId: 'division-2' });
+    expect(page.isOwner()).toBe(false);
+    expect(page.canManageMilestones()).toBe(false);
+  });
+
+  it('labels a division-owned initiative with its division name', () => {
+    const page = start(
+      ['initiatives:view'],
+      initiative({
+        ownerId: undefined,
+        ownerName: undefined,
+        divisionOwnerId: 'division-1',
+        divisionOwnerName: 'Finance Department',
+      })
+    );
+
+    expect(page.ownerLabel(page.initiative()!)).toBe('Finance Department');
+  });
+
   it('mirrors the guard for the owner on progress and expenditure, but never on details', () => {
     // The owner is authorised for progress and spend, not for the initiative detail fields that
     // `initiatives:edit` - and therefore canEdit() - protects.
@@ -636,6 +675,7 @@ describe('InitiativeDetailPage', () => {
     const fixture = TestBed.createComponent(InitiativeDetailPage);
     const page = fixture.componentInstance;
     http.expectOne((r) => r.urlWithParams.endsWith('/api/user')).flush(ok([]));
+    http.expectOne((r) => r.urlWithParams.endsWith('/api/division')).flush(ok([]));
     http
       .expectOne(isDetail)
       .flush(
@@ -1124,6 +1164,7 @@ describe('InitiativeDetailPage', () => {
 
     const page = TestBed.runInInjectionContext(() => new InitiativeDetailPage());
     http.expectOne((r) => r.urlWithParams.endsWith('/api/user')).flush(ok([]));
+    http.expectOne((r) => r.urlWithParams.endsWith('/api/division')).flush(ok([]));
     http.expectOne(isDetail).flush(
       { success: false, message: 'Initiative not found.' },
       { status: 404, statusText: 'Not Found' }
@@ -1168,6 +1209,7 @@ describe('InitiativeDetailPage', () => {
     const fixture = TestBed.createComponent(InitiativeDetailPage);
     fixture.detectChanges();
     http.expectOne((r) => r.urlWithParams.endsWith('/api/user')).flush(ok([]));
+    http.expectOne((r) => r.urlWithParams.endsWith('/api/division')).flush(ok([]));
     http.expectOne(isDetail).flush(ok(initiative()));
     http.expectOne(isMilestones).flush(ok([milestone()]));
     http.expectOne(isHistory).flush(ok([]));
@@ -1208,6 +1250,7 @@ describe('InitiativeDetailPage', () => {
     const fixture = TestBed.createComponent(InitiativeDetailPage);
     fixture.detectChanges();
     http.expectOne((r) => r.urlWithParams.endsWith('/api/user')).flush(ok([]));
+    http.expectOne((r) => r.urlWithParams.endsWith('/api/division')).flush(ok([]));
     http.expectOne(isDetail).flush(ok(initiative()));
     http.expectOne(isMilestones).flush(ok([]));
     http.expectOne(isHistory).flush(ok([

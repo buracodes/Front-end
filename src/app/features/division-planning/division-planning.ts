@@ -105,6 +105,8 @@ private readonly notifications = inject(NotificationService);
   readonly canPlan = computed(() => this.userStore.hasPermission('divisions:plan'));
   /** Editing is only allowed while the plan is still a draft and the user may plan divisions. */
   readonly canEdit = computed(() => this.canPlan() && this.planStatus() === 'Draft');
+  /** Target configuration is its own capability, matching the corporate scorecard. */
+  readonly canConfigureTargets = computed(() => this.userStore.hasPermission('targets:edit'));
   /** FR-908: the division performance report is a separately granted capability. */
   readonly canViewReport = computed(() => this.userStore.hasPermission('divisions:reports.view'));
   readonly canExportReport = computed(
@@ -781,6 +783,25 @@ submitGoal(): void {
     });
   }
 
+  /**
+   * Reuses the corporate target-configuration page for a division KPI. The KPI is a normal
+   * Kpi row, so the same persisted KpiTarget values drive the scoring engine; the return
+   * URL brings the user back to this plan with the division still selected.
+   */
+  openKpiTargets(kpi: DivisionKpiDto): void {
+    const p = this.plan();
+    if (!p || !this.canEdit() || !this.canConfigureTargets()) return;
+    const returnUrl = `/division-planning/${p.scorecardId}?divisionId=${encodeURIComponent(p.divisionId)}`;
+    this.router.navigate(['/target-config'], {
+      queryParams: {
+        kpiId: kpi.id,
+        scorecardId: p.scorecardId,
+        fiscalYearId: p.fiscalYearId,
+        returnUrl,
+      },
+    });
+  }
+
   async deleteKpi(kpi: DivisionKpiDto): Promise<void> {
     if (!this.canEdit()) return;
     const ok = await this.dialog.confirm(
@@ -1078,6 +1099,11 @@ submitGoal(): void {
   // ── Load / render helpers ───────────────────────────────────────────────
 
   constructor() {
+    // Returning from target configuration carries the division that was selected so the
+    // plan reopens on the same division instead of falling back to the default.
+    const requestedDivisionId = this.route.snapshot?.queryParamMap?.get('divisionId')?.trim() ?? '';
+    if (requestedDivisionId) this.divisionFilter.set(requestedDivisionId);
+
     this.scorecardService.getFiscalYears().subscribe({
       next: (years) => this.fiscalYears.set(years),
     });
@@ -1091,31 +1117,75 @@ submitGoal(): void {
 
         // A plan always belongs to a division. Default to the account's own division, or to
         // the first division for corporate users, so linking goals never posts an empty
-        // DivisionId (the API rejects that with "Division is required.").
-        const preferred = ownId || this.divisionFilter() || scoped[0]?.id || '';
+        // DivisionId (the API rejects that with "Division is required."). A division restored
+        // from the return URL is kept only while it is still in the visible list.
+        const requested = this.divisionFilter();
+        const restored = scoped.some((d) => d.id === requested) ? requested : '';
+        const preferred = ownId || restored || scoped[0]?.id || '';
         if (preferred && preferred !== this.divisionFilter()) {
           this.divisionFilter.set(preferred);
           if (this.scorecardId()) this.reloadPlan();
         }
       },
     });
-    this.scorecardService.getAll().subscribe({
-      next: (scorecards) => {
-        this.allScorecards.set(scorecards);
-        const current = this.scorecardId();
-        if (current) this.ensureCorporateScorecard(current);
-      },
-    });
+    // The corporate scorecard picker is a corporate capability; a baseline employee is
+    // pinned to the scorecard their own division plan references and must not probe others.
+    if (this.userStore.hasPermission('scorecard:view')) {
+      this.scorecardService.getAll().subscribe({
+        next: (scorecards) => {
+          this.allScorecards.set(scorecards);
+          const current = this.scorecardId();
+          if (current) this.ensureCorporateScorecard(current);
+        },
+      });
+    }
     this.route.paramMap.subscribe((params) => {
       const id = params.get('scorecardId') ?? '';
       if (!id) {
-        this.loading.set(false);
-        this.loadError.set('No corporate scorecard was selected.');
+        this.openOwnDivisionPlan();
         return;
       }
       this.scorecardId.set(id);
       if (!this.ensureCorporateScorecard(id)) return;
       this.reloadPlan();
+    });
+  }
+
+  /**
+   * Baseline employees have no corporate scorecard list, so the navigation entry lands here
+   * without an id. Their own division is known from the authenticated scope; the plan summaries
+   * are already scoped by the backend, so any id returned here belongs to that division.
+   */
+  private openOwnDivisionPlan(): void {
+    const ownDivisionId = this.userStore.divisionId();
+    if (!ownDivisionId) {
+      this.loading.set(false);
+      this.loadError.set('No corporate scorecard was selected.');
+      return;
+    }
+
+    this.loading.set(true);
+    this.loadError.set(null);
+    this.divisionService.getPlans(ownDivisionId).subscribe({
+      next: (plans) => {
+        const plan = plans[0];
+        if (!plan) {
+          this.loading.set(false);
+          this.loadError.set('No scorecard has been assigned to your division yet.');
+          return;
+        }
+
+        this.divisionFilter.set(ownDivisionId);
+        this.scorecardFilter.set(plan.scorecardId);
+        void this.router.navigate(['/division-planning', plan.scorecardId], {
+          queryParams: { divisionId: ownDivisionId },
+          replaceUrl: true,
+        });
+      },
+      error: (error) => {
+        this.loading.set(false);
+        this.loadError.set(toApiError(error).message);
+      },
     });
   }
 

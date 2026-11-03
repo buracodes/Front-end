@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { of, throwError } from 'rxjs';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, convertToParamMap } from '@angular/router';
 import { DivisionPlanningPage } from './division-planning';
 import { DivisionService } from '../division/division.service';
 import { ScorecardService } from '../scorecard/scorecard.service';
@@ -16,6 +16,7 @@ import { FiscalYear, Scorecard } from '../../core/model/scorecard.model';
 import { PeriodLockStatusItem } from '../../core/model/goal.model';
 
 const DEFAULT_PERMISSIONS = [
+  'scorecard:view',
   'divisions:view',
   'divisions:plan',
   'divisions:reports.view',
@@ -75,13 +76,6 @@ const PLAN: DivisionPlanDto = {
   ] as unknown as DivisionGoalDto[],
 };
 
-const paramMap = {
-  get: (key: string) => (key === 'scorecardId' ? 'sc-1' : null),
-  getAll: () => [],
-  has: (key: string) => key === 'scorecardId',
-  keys: () => ['scorecardId'],
-};
-
 const CORPORATE_SCORECARD: Scorecard = {
   id: 'sc-1',
   fiscalYearId: 'fy-1',
@@ -101,6 +95,7 @@ const DIVISION_SCORECARD: Scorecard = {
 describe('DivisionPlanningPage', () => {
   let divisionService: {
     getAll: ReturnType<typeof vi.fn>;
+    getPlans: ReturnType<typeof vi.fn>;
     getPlanContextByScorecard: ReturnType<typeof vi.fn>;
     setContributions: ReturnType<typeof vi.fn>;
     updateGoal: ReturnType<typeof vi.fn>;
@@ -118,25 +113,48 @@ describe('DivisionPlanningPage', () => {
   let notifications: { success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
   let router: { navigate: ReturnType<typeof vi.fn> };
   let permissions: string[];
+  let ownDivisionId: string | null = null;
+  let scorecardGetAll: ReturnType<typeof vi.fn>;
 
   const userStore = {
     hasPermission: (permission: string) => permissions.includes(permission),
-    divisionId: () => null,
-    isDivisionAccount: () => false,
+    divisionId: () => ownDivisionId,
+    isDivisionAccount: () => ownDivisionId !== null,
   };
+
+  const routeParams = (scorecardId: string | null) =>
+    scorecardId
+      ? {
+          get: (key: string) => (key === 'scorecardId' ? scorecardId : null),
+          getAll: () => [],
+          has: (key: string) => key === 'scorecardId',
+          keys: () => ['scorecardId'],
+        }
+      : { get: () => null, getAll: () => [], has: () => false, keys: () => [] };
 
   const start = (
     scorecards: Scorecard[] = [],
-    granted: string[] = DEFAULT_PERMISSIONS
+    granted: string[] = DEFAULT_PERMISSIONS,
+    divisionId = '',
+    routeScorecardId: string | null = 'sc-1',
+    ownDivision: string | null = null
   ): DivisionPlanningPage => {
     permissions = granted;
+    ownDivisionId = ownDivision;
+    scorecardGetAll = vi.fn(() => of(scorecards));
     TestBed.configureTestingModule({
       providers: [
         { provide: Router, useValue: router },
-        { provide: ActivatedRoute, useValue: { paramMap: of(paramMap) } },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            paramMap: of(routeParams(routeScorecardId)),
+            snapshot: { queryParamMap: convertToParamMap(divisionId ? { divisionId } : {}) },
+          },
+        },
         {
           provide: ScorecardService,
-          useValue: { getFiscalYears: () => of([FY]), getAll: () => of(scorecards) },
+          useValue: { getFiscalYears: () => of([FY]), getAll: scorecardGetAll },
         },
         { provide: DivisionService, useValue: divisionService },
         { provide: KPIService, useValue: { getLockStatus: () => of({ periods: [] }) } },
@@ -153,6 +171,7 @@ describe('DivisionPlanningPage', () => {
     permissions = DEFAULT_PERMISSIONS;
     divisionService = {
       getAll: vi.fn(() => of([])),
+      getPlans: vi.fn(() => of([])),
       getPlanContextByScorecard: vi.fn(() => of(PLAN)),
       setContributions: vi.fn(() => of(PLAN)),
       updateGoal: vi.fn(() => of({})),
@@ -183,6 +202,34 @@ describe('DivisionPlanningPage', () => {
 
     expect(page.plan()?.divisionName).toBe('Retail Operations');
     expect(divisionService.getPlanContextByScorecard).toHaveBeenCalledTimes(1);
+  });
+
+  it('resolves the own-division plan when the route has no scorecard id', () => {
+    divisionService.getPlans.mockReturnValue(
+      of([
+        {
+          id: 'plan-1',
+          divisionId: 'div-9',
+          scorecardId: 'sc-9',
+          fiscalYearId: 'fy-1',
+          planStatus: 'draft',
+        },
+      ])
+    );
+
+    start([], ['division:scorecard.view', 'division:performance.view'], '', null, 'div-9');
+
+    expect(divisionService.getPlans).toHaveBeenCalledWith('div-9');
+    expect(router.navigate).toHaveBeenCalledWith(
+      ['/division-planning', 'sc-9'],
+      { queryParams: { divisionId: 'div-9' }, replaceUrl: true }
+    );
+  });
+
+  it('never requests the corporate scorecard catalog for a baseline employee', () => {
+    start([CORPORATE_SCORECARD], ['division:scorecard.view'], '', 'sc-1', 'div-9');
+
+    expect(scorecardGetAll).not.toHaveBeenCalled();
   });
 
   it('offers only corporate scorecards in the scorecard picker', () => {
@@ -815,5 +862,64 @@ describe('DivisionPlanningPage', () => {
 
     expect(divisionService.getPlanContextByScorecard).toHaveBeenCalledTimes(2);
     expect(page.loadError()).toBeNull();
+  });
+
+  // ── Division KPI target configuration (reuses /target-config) ───────────
+
+  it('opens the corporate target page for a division KPI and returns to this plan', () => {
+    const page = start([], [...DEFAULT_PERMISSIONS, 'targets:edit']);
+
+    page.openKpiTargets(page.divisionGoals()[0].kpis[0]);
+
+    expect(router.navigate).toHaveBeenCalledWith(['/target-config'], {
+      queryParams: {
+        kpiId: 'k1',
+        scorecardId: 'sc-1',
+        fiscalYearId: 'fy-1',
+        returnUrl: '/division-planning/sc-1?divisionId=div-1',
+      },
+    });
+  });
+
+  it('requires targets:edit before opening target configuration', () => {
+    const page = start();
+
+    expect(page.canConfigureTargets()).toBe(false);
+    page.openKpiTargets(page.divisionGoals()[0].kpis[0]);
+
+    expect(router.navigate).not.toHaveBeenCalled();
+  });
+
+  it('restores the division selected before opening target configuration', () => {
+    divisionService.getAll.mockReturnValue(
+      of([
+        { id: 'div-1', name: 'Alpha Division' },
+        { id: 'div-2', name: 'Beta Division' },
+      ])
+    );
+    divisionService.getPlanContextByScorecard.mockReturnValue(
+      of({ ...PLAN, divisionId: 'div-2', divisionName: 'Beta Division' })
+    );
+
+    const page = start([], DEFAULT_PERMISSIONS, 'div-2');
+
+    expect(page.divisionFilter()).toBe('div-2');
+    expect(divisionService.getPlanContextByScorecard).toHaveBeenCalledWith(
+      'sc-1',
+      expect.anything(),
+      'div-2'
+    );
+  });
+
+  it('does not open target configuration after the plan is finalized', () => {
+    const page = start([], [...DEFAULT_PERMISSIONS, 'targets:edit']);
+    (page as unknown as { plan: { set: (p: DivisionPlanDto | null) => void } }).plan.set({
+      ...PLAN,
+      planStatus: 'finalized',
+    });
+
+    page.openKpiTargets(page.divisionGoals()[0].kpis[0]);
+
+    expect(router.navigate).not.toHaveBeenCalled();
   });
 });

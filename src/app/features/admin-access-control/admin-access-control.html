@@ -113,21 +113,26 @@
       <div class="split">
         <aside class="card list-card">
           <h2 class="card-title">Groups</h2>
+          <input
+            type="search"
+            class="search-input"
+            placeholder="Search groups"
+            [ngModel]="groupSearchTerm()"
+            (ngModelChange)="groupSearchTerm.set($event)"
+          />
           <div class="list">
-            @for (group of groups(); track group.id) {
-              @if (group.isActive) {
-                <button
-                  type="button"
-                  class="list-item"
-                  [class.active]="selectedGroupId() === group.id"
-                  (click)="selectGroup(group)"
-                >
-                  <span class="list-item-title">{{ group.name }}</span>
-                  <span class="list-item-meta">{{ group.rightCount }} rights</span>
-                </button>
-              }
+            @for (group of groupOptions(); track group.id) {
+              <button
+                type="button"
+                class="list-item"
+                [class.active]="selectedGroupId() === group.id"
+                (click)="selectGroup(group)"
+              >
+                <span class="list-item-title">{{ group.name }}</span>
+                <span class="list-item-meta">{{ group.rightCount }} rights</span>
+              </button>
             } @empty {
-              <p class="empty">No active groups.</p>
+              <p class="empty">No active groups match this search.</p>
             }
           </div>
         </aside>
@@ -149,17 +154,86 @@
               (ngModelChange)="rightSearch.set($event)"
             />
 
-            <div class="right-modules">
-              @for (module of groupRightModules(); track module.module) {
-                <section class="right-module">
-                  <h3 class="module-title">{{ module.module }}</h3>
-                  @for (right of module.rights; track right.id) {
-                    <div class="right-row">
-                      <div class="right-label">
-                        <span class="right-name">{{ right.name }}</span>
-                        <span class="right-sub">{{ right.description || right.name }}</span>
-                      </div>
-                      @if (canManageGroups()) {
+            <div class="list-toolbar">
+              <div class="mode-switch" role="group" aria-label="Right assignment mode">
+                <button
+                  type="button"
+                  class="mode-btn"
+                  [class.active]="groupRightsMode() === 'grant'"
+                  [attr.aria-pressed]="groupRightsMode() === 'grant'"
+                  (click)="setGroupRightsMode('grant')"
+                >
+                  Grant
+                </button>
+                <button
+                  type="button"
+                  class="mode-btn"
+                  [class.active]="groupRightsMode() === 'revoke'"
+                  [attr.aria-pressed]="groupRightsMode() === 'revoke'"
+                  (click)="setGroupRightsMode('revoke')"
+                >
+                  Revoke
+                </button>
+              </div>
+              @if (canManageGroups()) {
+                <label class="select-all">
+                  <input
+                    type="checkbox"
+                    [checked]="allVisibleGroupRightsSelected()"
+                    [indeterminate]="someVisibleGroupRightsSelected()"
+                    [disabled]="visibleGroupRights().length === 0 || savingGroupRights()"
+                    (change)="toggleSelectAllGroupRights($any($event.target).checked)"
+                  />
+                  Select all
+                </label>
+                <div class="toolbar-actions">
+                  <span class="selection-count">{{ groupRightSelectedCount() }} selected</span>
+                  @if (groupRightSelectedCount() > 0) {
+                    <button
+                      type="button"
+                      class="link-btn"
+                      [disabled]="savingGroupRights()"
+                      (click)="clearGroupRightSelection()"
+                    >
+                      Clear
+                    </button>
+                  }
+                  <button
+                    type="button"
+                    class="btn btn-small"
+                    [class.btn-primary]="groupRightsMode() === 'grant'"
+                    [class.danger]="groupRightsMode() === 'revoke'"
+                    [disabled]="groupRightSelectedCount() === 0 || savingGroupRights()"
+                    (click)="applySelectedGroupRights()"
+                  >
+                    {{ groupRightActionLabel() }}
+                  </button>
+                </div>
+              }
+            </div>
+
+            @if (loadingGroupRights()) {
+              <p class="empty">Loading rights…</p>
+            } @else {
+              <div class="right-modules">
+                @for (module of groupRightModules(); track module.module) {
+                  <section class="right-module">
+                    <h3 class="module-title">{{ module.module }}</h3>
+                    @for (right of module.rights; track right.id) {
+                      <div class="right-row">
+                        @if (canManageGroups()) {
+                          <input
+                            type="checkbox"
+                            [checked]="isGroupRightSelected(right)"
+                            [disabled]="savingGroupRights()"
+                            [attr.aria-label]="'Select ' + right.name"
+                            (change)="toggleGroupRightSelection(right, $any($event.target).checked)"
+                          />
+                        }
+                        <div class="right-label">
+                          <span class="right-name">{{ right.name }}</span>
+                          <span class="right-sub">{{ right.description || right.name }}</span>
+                        </div>
                         @if (right.effect) {
                           <span
                             class="status-pill"
@@ -168,38 +242,29 @@
                           >
                             {{ right.effect }}
                           </span>
-                          <button
-                            type="button"
-                            class="btn btn-small danger"
-                            (click)="revokeGroupRight(right)"
-                          >
-                            Revoke
-                          </button>
-                        } @else {
-                          <button
-                            type="button"
-                            class="btn btn-small"
-                            (click)="assignGroupRight(right)"
-                          >
-                            Assign
-                          </button>
                         }
-                      } @else if (right.effect) {
-                        <span
-                          class="status-pill"
-                          [class.ok]="right.effect === 'Grant'"
-                          [class.denied]="right.effect === 'Deny'"
-                        >
-                          {{ right.effect }}
-                        </span>
-                      }
-                    </div>
-                  }
-                </section>
-              } @empty {
-                <p class="empty">No rights match this search.</p>
-              }
-            </div>
+                      </div>
+                    }
+                  </section>
+                } @empty {
+                  <p class="empty">
+                    @if (groupRightsMode() === 'grant') {
+                      {{
+                        rightSearch().trim()
+                          ? 'No unassigned rights match this search.'
+                          : 'Every right is already granted to this group.'
+                      }}
+                    } @else {
+                      {{
+                        rightSearch().trim()
+                          ? 'No granted rights match this search.'
+                          : 'This group has no rights to revoke.'
+                      }}
+                    }
+                  </p>
+                }
+              </div>
+            }
           } @else {
             <p class="empty">Select a group to review and change its rights.</p>
           }
@@ -252,36 +317,100 @@
               <span class="status-pill muted">{{ memberRoleIds().size }} groups</span>
             </div>
 
-            <div class="right-modules">
-              @for (group of memberGroupRows(); track group.id) {
-                <div class="right-row">
-                  <div class="right-label">
-                    <span class="right-name">{{ group.name }}</span>
-                    <span class="right-sub">{{ group.description || 'No description' }}</span>
-                  </div>
-                  @if (group.member) {
-                    <span class="status-pill ok">Member</span>
-                    @if (canManageGroups()) {
-                      <button
-                        type="button"
-                        class="btn btn-small danger"
-                        (click)="denyMembership(group)"
-                      >
-                        Deny
-                      </button>
-                    }
-                  } @else if (canManageGroups()) {
-                    <button type="button" class="btn btn-small" (click)="grantMembership(group)">
-                      Grant
+            <div class="list-toolbar">
+              <div class="mode-switch" role="group" aria-label="Group assignment mode">
+                <button
+                  type="button"
+                  class="mode-btn"
+                  [class.active]="memberMode() === 'grant'"
+                  [attr.aria-pressed]="memberMode() === 'grant'"
+                  (click)="setMemberMode('grant')"
+                >
+                  Grant
+                </button>
+                <button
+                  type="button"
+                  class="mode-btn"
+                  [class.active]="memberMode() === 'revoke'"
+                  [attr.aria-pressed]="memberMode() === 'revoke'"
+                  (click)="setMemberMode('revoke')"
+                >
+                  Revoke
+                </button>
+              </div>
+              @if (canManageGroups()) {
+                <label class="select-all">
+                  <input
+                    type="checkbox"
+                    [checked]="allModeGroupsSelected()"
+                    [indeterminate]="someModeGroupsSelected()"
+                    [disabled]="memberModeGroups().length === 0 || savingMembers()"
+                    (change)="toggleSelectAllMemberGroups($any($event.target).checked)"
+                  />
+                  Select all
+                </label>
+                <div class="toolbar-actions">
+                  <span class="selection-count">{{ memberGroupSelectedCount() }} selected</span>
+                  @if (memberGroupSelectedCount() > 0) {
+                    <button
+                      type="button"
+                      class="link-btn"
+                      [disabled]="savingMembers()"
+                      (click)="clearMemberGroupSelection()"
+                    >
+                      Clear
                     </button>
                   }
+                  <button
+                    type="button"
+                    class="btn btn-small"
+                    [class.btn-primary]="memberMode() === 'grant'"
+                    [class.danger]="memberMode() === 'revoke'"
+                    [disabled]="memberGroupSelectedCount() === 0 || savingMembers()"
+                    (click)="applySelectedGroups()"
+                  >
+                    {{ memberActionLabel() }}
+                  </button>
                 </div>
-              } @empty {
-                <p class="empty">No active groups.</p>
               }
             </div>
+
+            @if (loadingMembers()) {
+              <p class="empty">Loading group access…</p>
+            } @else {
+              <div class="right-modules">
+                @for (group of memberModeGroups(); track group.id) {
+                  <div class="right-row">
+                    @if (canManageGroups()) {
+                      <input
+                        type="checkbox"
+                        [checked]="isMemberGroupSelected(group)"
+                        [disabled]="savingMembers()"
+                        [attr.aria-label]="'Select ' + group.name"
+                        (change)="toggleMemberGroupSelection(group, $any($event.target).checked)"
+                      />
+                    }
+                    <div class="right-label">
+                      <span class="right-name">{{ group.name }}</span>
+                      <span class="right-sub">{{ group.description || 'No description' }}</span>
+                    </div>
+                    @if (group.member) {
+                      <span class="status-pill ok">Granted</span>
+                    }
+                  </div>
+                } @empty {
+                  <p class="empty">
+                    @if (memberMode() === 'grant') {
+                      Every active group is already granted to this employee.
+                    } @else {
+                      This employee has no group access to revoke.
+                    }
+                  </p>
+                }
+              </div>
+            }
           } @else {
-            <p class="empty">Select an employee to grant or deny group membership.</p>
+            <p class="empty">Select an employee to review and assign their groups.</p>
           }
         </section>
       </div>
@@ -339,61 +468,117 @@
               (ngModelChange)="rightSearchTerm.set($event)"
             />
 
-            <div class="right-modules">
-              @for (module of userRightModules(); track module.module) {
-                <section class="right-module">
-                  <h3 class="module-title">{{ module.module }}</h3>
-                  @for (right of module.rights; track right.id) {
-                    <div class="right-row">
-                      <div class="right-label">
-                        <span class="right-name">{{ right.name }}</span>
-                        <span class="right-sub">{{ right.description || right.name }}</span>
-                      </div>
-                      @if (right.effect) {
-                        <span
-                          class="status-pill"
-                          [class.ok]="right.effect === 'Grant'"
-                          [class.denied]="right.effect === 'Deny'"
-                        >
-                          {{ right.effect }}
-                        </span>
-                      }
-                      @if (canManageUserRights()) {
-                        @if (rightEffectOf(right.id) !== 'Grant') {
-                          <button
-                            type="button"
-                            class="btn btn-small"
-                            (click)="openRightDecision(right, 'Grant')"
-                          >
-                            Grant
-                          </button>
-                        }
-                        @if (rightEffectOf(right.id) !== 'Deny') {
-                          <button
-                            type="button"
-                            class="btn btn-small danger"
-                            (click)="openRightDecision(right, 'Deny')"
-                          >
-                            Deny
-                          </button>
-                        }
-                        @if (right.effect) {
-                          <button
-                            type="button"
-                            class="btn btn-small"
-                            (click)="revokeUserRight(right)"
-                          >
-                            Revoke
-                          </button>
-                        }
-                      }
-                    </div>
+            <div class="list-toolbar">
+              <div class="mode-switch" role="group" aria-label="Right assignment mode">
+                <button
+                  type="button"
+                  class="mode-btn"
+                  [class.active]="userRightsMode() === 'grant'"
+                  [attr.aria-pressed]="userRightsMode() === 'grant'"
+                  (click)="setUserRightsMode('grant')"
+                >
+                  Grant
+                </button>
+                <button
+                  type="button"
+                  class="mode-btn"
+                  [class.active]="userRightsMode() === 'revoke'"
+                  [attr.aria-pressed]="userRightsMode() === 'revoke'"
+                  (click)="setUserRightsMode('revoke')"
+                >
+                  Revoke
+                </button>
+              </div>
+              @if (canManageUserRights()) {
+                <label class="select-all">
+                  <input
+                    type="checkbox"
+                    [checked]="allVisibleRightsSelected()"
+                    [indeterminate]="someVisibleRightsSelected()"
+                    [disabled]="visibleRights().length === 0 || savingRight()"
+                    (change)="toggleSelectAllRights($any($event.target).checked)"
+                  />
+                  Select all
+                </label>
+                <div class="toolbar-actions">
+                  <span class="selection-count">{{ selectedRightCount() }} selected</span>
+                  @if (selectedRightCount() > 0) {
+                    <button
+                      type="button"
+                      class="link-btn"
+                      [disabled]="savingRight()"
+                      (click)="clearRightSelection()"
+                    >
+                      Clear
+                    </button>
                   }
-                </section>
-              } @empty {
-                <p class="empty">No rights match this search.</p>
+                  <button
+                    type="button"
+                    class="btn btn-small"
+                    [class.btn-primary]="userRightsMode() === 'grant'"
+                    [class.danger]="userRightsMode() === 'revoke'"
+                    [disabled]="selectedRightCount() === 0 || savingRight()"
+                    (click)="applySelectedRights()"
+                  >
+                    {{ userRightActionLabel() }}
+                  </button>
+                </div>
               }
             </div>
+
+            @if (loadingUserRights()) {
+              <p class="empty">Loading direct rights…</p>
+            } @else {
+              <div class="right-modules">
+                @for (module of userRightModules(); track module.module) {
+                  <section class="right-module">
+                    <h3 class="module-title">{{ module.module }}</h3>
+                    @for (right of module.rights; track right.id) {
+                      <div class="right-row">
+                        @if (canManageUserRights()) {
+                          <input
+                            type="checkbox"
+                            [checked]="isRightSelected(right)"
+                            [disabled]="savingRight()"
+                            [attr.aria-label]="'Select ' + right.name"
+                            (change)="toggleRightSelection(right, $any($event.target).checked)"
+                          />
+                        }
+                        <div class="right-label">
+                          <span class="right-name">{{ right.name }}</span>
+                          <span class="right-sub">{{ right.description || right.name }}</span>
+                        </div>
+                        @if (right.effect) {
+                          <span
+                            class="status-pill"
+                            [class.ok]="right.effect === 'Grant'"
+                            [class.denied]="right.effect === 'Deny'"
+                          >
+                            {{ right.effect }}
+                          </span>
+                        }
+                      </div>
+                    }
+                  </section>
+                } @empty {
+                  <p class="empty">
+                    @if (userRightsMode() === 'grant') {
+                      {{
+                        rightSearchTerm().trim()
+                          ? 'No unassigned rights match this search.'
+                          : 'Every right is already granted directly to this employee.'
+                      }}
+                    } @else {
+                      {{
+                        rightSearchTerm().trim()
+                          ? 'No direct rights match this search.'
+                          : 'This employee has no direct rights to revoke.'
+                      }}
+                    }
+                  </p>
+                }
+              </div>
+            }
           } @else {
             <p class="empty">Select an employee to grant or deny individual rights.</p>
           }
@@ -461,26 +646,36 @@
     <div class="modal-backdrop" (click)="closeRightDialog()">
       <div class="modal-dialog" (click)="$event.stopPropagation()">
         <div class="modal-header">
-          <h3>{{ dialog.effect === 'Grant' ? 'Grant right' : 'Deny right' }}</h3>
+          <h3>Grant rights</h3>
           <button type="button" class="icon-btn" aria-label="Close" (click)="closeRightDialog()">
             ×
           </button>
         </div>
         <div class="modal-body">
           <p class="dialog-lead">
-            {{ dialog.right.name }} for {{ rightEmployee() ? employeeName(rightEmployee()!) : 'the selected employee' }}
+            {{ dialog.rights.length }}
+            {{ dialog.rights.length === 1 ? 'right' : 'rights' }}
+            for
+            {{ rightEmployee() ? employeeName(rightEmployee()!) : 'the selected employee' }}
           </p>
+          <ul class="dialog-rights">
+            @for (right of dialog.rights; track right.id) {
+              <li>{{ right.name }}</li>
+            }
+          </ul>
           <div class="field">
             <label class="form-label" for="acl-right-reason">Reason</label>
             <textarea
               id="acl-right-reason"
               class="form-control"
               rows="3"
-              placeholder="Why does this person need this right?"
+              placeholder="Why does this person need these rights?"
               [ngModel]="rightReason()"
               (ngModelChange)="rightReason.set($event)"
             ></textarea>
-            <p class="form-hint">Every direct right is recorded with its justification.</p>
+            <p class="form-hint">
+              The same justification is recorded on every direct right in this batch.
+            </p>
           </div>
         </div>
         <div class="modal-footer">
@@ -489,13 +684,17 @@
           </button>
           <button
             type="button"
-            class="btn"
-            [class.btn-primary]="dialog.effect === 'Grant'"
-            [class.btn-danger]="dialog.effect === 'Deny'"
+            class="btn btn-primary"
             [disabled]="savingRight()"
             (click)="confirmRightDecision()"
           >
-            {{ savingRight() ? 'Saving…' : dialog.effect === 'Grant' ? 'Grant' : 'Deny' }}
+            {{
+              savingRight()
+                ? 'Saving…'
+                : 'Grant ' +
+                  dialog.rights.length +
+                  (dialog.rights.length === 1 ? ' right' : ' rights')
+            }}
           </button>
         </div>
       </div>

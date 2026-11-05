@@ -3,7 +3,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { KPIService } from '../../../core/service/kpi.service';
 import { ScorecardService } from '../../../core/service/scorecard.service';
 import { Scorecard, FiscalYear } from '../../../core/model/scorecard.model';
-import { KPI, SetKpiTargetsRequest } from '../../../core/model/goal.model';
+import { KPI, KpiTargetValue, SetKpiTargetsRequest } from '../../../core/model/goal.model';
 import { NotificationService } from '../../../core/service/notification.service';
 import { fiscalMonthLabel, isFiscalYearClosed } from '../workspace-state.service';
 
@@ -187,6 +187,7 @@ export class TargetConfigPage implements OnInit {
     this.annualTarget.set(null);
     this.quarterly.set([0, 0, 0, 0]);
     this.monthly.set([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    this.autoCalc.set(false);
   }
 
   private loadExistingTargets(kpiId: string, fiscalYearId: string): void {
@@ -206,6 +207,9 @@ export class TargetConfigPage implements OnInit {
         this.annualTarget.set(annual?.targetValue ?? null);
         this.quarterly.set(quarterly);
         this.monthly.set(monthly);
+        // The monthly and quarterly rows obey the same reconciliation rule either way, so the
+        // flag on the quarter rows is the only record of the mode they were entered in.
+        this.autoCalc.set(this.deriveAutoCalc(values));
         this.loading.set(false);
       },
       error: () => {
@@ -215,8 +219,14 @@ export class TargetConfigPage implements OnInit {
     });
   }
 
-  // ── Label helpers ────────────────────────────────────────────────────────
+  /** Restored only when every stored quarter row was computed from its monthly targets. */
+  private deriveAutoCalc(values: KpiTargetValue[]): boolean {
+    if (!this.isCumulative()) return false;
+    const quarters = values.filter((v) => v.granularity === 'Quarterly');
+    return quarters.length > 0 && quarters.every((v) => v.isDerivedFromMonthly === true);
+  }
 
+  // ── Label helpers ────────────────────────────────────────────────────────
   monthLabel(mi: number): string {
     // The fiscal month is 1-based; the shared helper derives the Gregorian month name from the
     // fiscal-year start, so labels follow any start month instead of assuming July–June.
@@ -393,6 +403,7 @@ export class TargetConfigPage implements OnInit {
       monthlyTargets: this.monthly().slice(),
       quarterlyTargets: this.quarterly().slice(),
       annualTarget: this.annualTarget(),
+      autoCalculateQuarterly: this.autoCalc() && this.isCumulative(),
     };
     this.kpiService.setTargets(req).subscribe({
       next: () => {

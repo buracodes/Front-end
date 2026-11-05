@@ -306,7 +306,7 @@
                 <td class="col-method">{{ kpi.optimizationType }}</td>
                 <td class="col-weight">{{ kpi.kpiType === 'Leading' ? 'n/a' : (kpi.weight + '%') }}</td>
                 <td class="col-target">{{ getKpiTarget(kpi) !== null ? (getKpiTarget(kpi)! | number:'1.0-1') : '' }}</td>
-                <td class="col-actual">{{ getKpiActual(kpi) !== null ? (getKpiActual(kpi)! | number:'1.0-1') : '—' }}</td>
+                <td class="col-actual">{{ getKpiActual(kpi) !== null ? (getKpiActual(kpi)! | number:'1.0-1') : '' }}</td>
                 <td class="col-score">
                   <span class="score-badge" [class]="ragBadgeClass(kpiSnapshots().get(kpi.id)?.score ?? null)">
                     {{ ((kpiSnapshots().get(kpi.id)?.score ?? 0) | number:'1.0-1') + '%' }}

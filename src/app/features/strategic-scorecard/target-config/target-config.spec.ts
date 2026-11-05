@@ -230,4 +230,68 @@ describe('TargetConfigPage', () => {
     expect(page.quarterLabel(0)).toBe('Q1 · Sep–Nov 2026');
     expect(page.quarterLabel(3)).toBe('Q4 · Jun–Aug 2027');
   });
+
+  describe('auto-calculate mode', () => {
+    const cumulativeKpi = { ...KPI, isCumulative: true };
+
+    // Months 1..12 sum to 78 and each quarter is its three months, so the same rows come back
+    // whether the quarters were typed or derived — only the flag distinguishes them.
+    const targetRows = (derived: boolean) => [
+      ...[6, 15, 24, 33].map((value, i) => ({
+        fiscalMonth: (i + 1) * 3,
+        quarter: i + 1,
+        granularity: 'Quarterly',
+        targetValue: value,
+        isDerivedFromMonthly: derived,
+      })),
+      ...Array.from({ length: 12 }, (_, i) => ({
+        fiscalMonth: i + 1,
+        quarter: Math.floor(i / 3) + 1,
+        granularity: 'Monthly',
+        targetValue: i + 1,
+      })),
+      { fiscalMonth: 12, quarter: 4, granularity: 'Annual', targetValue: 78 },
+    ];
+
+    const loadWith = (rows: unknown[]): void => {
+      create();
+      kpiRequest().flush(ok(cumulativeKpi));
+      scorecardRequest().flush(ok(SCORECARDS));
+      fiscalYearRequest().flush(ok(FISCAL_YEARS));
+      targetRequest().flush(ok({ targets: rows }));
+    };
+
+    const check = (checked: boolean) => ({ target: { checked } }) as unknown as Event;
+
+    it('reopens in auto-calculate mode when the saved quarter rows are derived', () => {
+      loadWith(targetRows(true));
+
+      expect(page.autoCalc()).toBe(true);
+    });
+
+    it('reopens with auto-calculate off when the quarter rows were typed', () => {
+      loadWith(targetRows(false));
+
+      expect(page.autoCalc()).toBe(false);
+    });
+
+    it('sends the mode the user chose when saving', () => {
+      create();
+      kpiRequest().flush(ok(cumulativeKpi));
+      scorecardRequest().flush(ok(SCORECARDS));
+      fiscalYearRequest().flush(ok(FISCAL_YEARS));
+      targetRequest().flush(ok({ targets: [] }));
+
+      page.annualTarget.set(78);
+      page.monthly.set(Array.from({ length: 12 }, (_, i) => i + 1));
+      page.quarterly.set([6, 15, 24, 33]);
+      page.setAutoCalc(check(true));
+
+      page.save();
+
+      const post = http.expectOne((r) => r.method === 'POST' && r.url.includes('/api/kpitarget'));
+      expect(post.request.body).toMatchObject({ autoCalculateQuarterly: true });
+      post.flush(ok(true));
+    });
+  });
 });

@@ -156,6 +156,8 @@ export interface KpiTargetValue {
   quarter: number;
   granularity: 'Monthly' | 'Quarterly' | 'Annual';
   targetValue: number;
+  /** Set on a quarterly row that was computed from its monthly targets. */
+  isDerivedFromMonthly?: boolean;
 }
 
 export interface SetKpiTargetsRequest {
@@ -164,6 +166,8 @@ export interface SetKpiTargetsRequest {
   monthlyTargets: number[];
   quarterlyTargets?: number[] | null;
   annualTarget?: number | null;
+  /** Editor mode the quarterly values were produced in; recorded on the quarter rows. */
+  autoCalculateQuarterly?: boolean;
 }
 
 /** One KPI's targets as returned by the bulk read. */

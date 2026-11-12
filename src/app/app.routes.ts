@@ -121,10 +121,12 @@ export const routes: Routes = [
           import('./features/performance-monitoring/performance-monitoring').then((m) => m.PerformanceMonitoringPage),
       },
       {
-        // Viewing period locks only needs actuals:view; the page itself hides the unlock
-        // controls unless the user also holds admin:config.manage.
+        // Period locks are a lock-administration screen, so it opens for the rights that act on
+        // locks: configuring them (admin:config.manage) or overriding a locked period
+        // (kpi:override). The plain entry read (actuals:view) deliberately does not open it —
+        // reporters see their own window status on the Data Entry page instead.
         path: 'data-locking',
-        canActivate: [permissionGuard(['actuals:view', 'admin:config.manage'])],
+        canActivate: [permissionGuard(['admin:config.manage', 'kpi:override'])],
         loadComponent: () =>
           import('./features/data-locking/data-locking').then((m) => m.DataLockingPage),
       },

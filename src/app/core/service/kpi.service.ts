@@ -12,6 +12,7 @@ import {
   SetKpiTargetsBulkResult,
   EnterKpiActualRequest,
   KpiActualValue,
+  EntryBoard,
   SetPeriodLockConfigRequest,
   PeriodLockStatus,
   PeriodLockStatusItem,
@@ -146,6 +147,27 @@ export class KPIService {
         `${ApiEndpoint.KpiActual}/history?kpiId=${kpiId}&fiscalPeriodId=${fiscalPeriodId}`
       )
       .pipe(map((res) => res.data ?? []));
+  }
+
+  /**
+   * The Data Entry board resolved for the signed-in principal: their KPIs in the fiscal year
+   * with monthly targets and recorded actuals, plus the scorecards holding them. It needs only
+   * the actuals read right, so the page works without corporate catalog access.
+   */
+  getEntryBoard(fiscalYearId: string): Observable<EntryBoard> {
+    return this.api
+      .get<IResponse<EntryBoard>>(
+        `${ApiEndpoint.KpiActual}/entry-board?fiscalYearId=${fiscalYearId}`
+      )
+      .pipe(
+        map((res) => ({
+          fiscalYearId: res.data?.fiscalYearId ?? fiscalYearId,
+          scorecards: res.data?.scorecards ?? [],
+          kpis: res.data?.kpis ?? [],
+          targets: res.data?.targets ?? [],
+          actuals: res.data?.actuals ?? [],
+        }))
+      );
   }
 
   enterActual(request: EnterKpiActualRequest): Observable<KpiActualValue> {

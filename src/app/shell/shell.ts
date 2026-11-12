@@ -10,7 +10,6 @@ import { LucideDynamicIcon } from '@lucide/angular';
 interface NavItem {
   label: string;
   route?: string;
-  /** Lucide icon slug, resolved through the registry in core/icon/app-icons. */
   icon: string;
   /** Required capability; an array means "any of these" (matches permissionGuard). */
   permission?: string | string[];
@@ -48,7 +47,7 @@ export class ShellComponent {
       icon: 'layout-dashboard',
     },
     {
-      label: 'Org Profile',
+      label: 'Organization Profile',
       route: '/org-profile',
       icon: 'building',
       permission: 'organization:view',
@@ -118,7 +117,7 @@ export class ShellComponent {
           label: 'Data Locking',
           route: '/data-locking',
           icon: 'lock',
-          permission: ['actuals:view', 'admin:config.manage'],
+          permission: ['admin:config.manage', 'kpi:override'],
         },
         {
           label: 'Scorecard Clone',

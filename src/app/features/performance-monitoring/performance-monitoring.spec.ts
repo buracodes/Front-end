@@ -38,6 +38,7 @@ describe('PerformanceMonitoringPage', () => {
   function setup(options: {
     permissions?: string[];
     divisionId?: string;
+    divisions?: { id: string; name: string }[];
     response?: PerformanceMonitoring;
     error?: unknown;
   } = {}) {
@@ -66,7 +67,7 @@ describe('PerformanceMonitoringPage', () => {
         },
       ]),
     );
-    const divisionGetAll = vi.fn(() => of([{ id: 'div-1', name: 'Operations' }]));
+    const divisionGetAll = vi.fn(() => of(options.divisions ?? [{ id: 'div-1', name: 'Operations' }]));
     const notifications = { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() };
 
     TestBed.configureTestingModule({
@@ -144,6 +145,33 @@ describe('PerformanceMonitoringPage', () => {
     expect(page.canPickDivision()).toBe(true);
   });
 
+  it('offers every division to corporate accounts without a division claim', () => {
+    const { page } = setup({
+      divisions: [
+        { id: 'div-1', name: 'Operations' },
+        { id: 'div-2', name: 'Finance' },
+      ],
+    });
+
+    expect(page.pickableDivisions().map((d) => d.id)).toEqual(['div-1', 'div-2']);
+  });
+
+  it('limits the division picker to the divisions a division-claimed account may read', () => {
+    const { page } = setup({
+      divisionId: 'div-1',
+      divisions: [
+        { id: 'div-1', name: 'Operations' },
+        { id: 'div-2', name: 'Finance' },
+      ],
+      response: payload({ scope: 'Division', divisionId: 'div-1', divisionName: 'Operations' }),
+    });
+
+    page.onScopeModeChange('division');
+
+    expect(page.pickableDivisions().map((d) => d.id)).toEqual(['div-1']);
+    expect(page.divisionId()).toBe('div-1');
+  });
+
   it('drills into a division by setting the division filter and reloading', () => {
     const { page, get } = setup();
 
@@ -166,6 +194,19 @@ describe('PerformanceMonitoringPage', () => {
 
     expect(page.divisionId()).toBe('');
     expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ divisionId: undefined }));
+  });
+
+  it('shows division scope when the server pins a division-claimed account to its own division', () => {
+    const { page } = setup({
+      response: payload({ scope: 'Division', divisionId: 'div-1', divisionName: 'Operations' }),
+    });
+
+    page.onScopeModeChange('corporate');
+
+    expect(page.scopeMode()).toBe('division');
+    expect(page.divisionId()).toBe('div-1');
+    expect(page.canPickDivision()).toBe(true);
+    expect(page.isCorporate()).toBe(false);
   });
 
   it('drops a scorecard from another year and adopts the new year default', () => {
@@ -231,26 +272,56 @@ describe('PerformanceMonitoringService', () => {
     return { http: TestBed.inject(HttpTestingController), service: TestBed.inject(PerformanceMonitoringService) };
   }
 
-  it('normalizes camelCase scope tokens and defaults missing collections', () => {
+  it('reads the bare DTO the endpoint answers with, normalizing scope and defaulting collections', () => {
     const { http, service } = setup();
     let result: PerformanceMonitoring | undefined;
+    let failure: unknown;
 
-    service.get().subscribe((r) => (result = r));
+    service.get().subscribe({ next: (r) => (result = r), error: (err) => (failure = err) });
 
     const req = http.expectOne((r) => r.method === 'GET' && r.url.includes('performancemonitoring'));
     req.flush({
-      success: true,
-      data: {
-        ...payload(),
-        scope: 'corporate',
-        kpis: undefined,
-        divisions: undefined,
-      },
+      ...payload(),
+      scope: 'corporate',
+      kpis: undefined,
+      divisions: undefined,
     });
 
+    expect(failure).toBeUndefined();
     expect(result?.scope).toBe('Corporate');
     expect(result?.kpis).toEqual([]);
     expect(result?.divisions).toEqual([]);
+  });
+
+  it('keeps the no-fiscal-year payload usable so the page can show its empty state', () => {
+    const { http, service } = setup();
+    let result: PerformanceMonitoring | undefined;
+    let failure: unknown;
+
+    service.get().subscribe({ next: (r) => (result = r), error: (err) => (failure = err) });
+
+    const req = http.expectOne((r) => r.method === 'GET' && r.url.includes('performancemonitoring'));
+    req.flush({
+      scope: 'corporate',
+      fiscalYearId: null,
+      fiscalYearName: null,
+      scorecardId: null,
+      periodType: 'Ytd',
+      scorecardCount: 0,
+      goalsCount: 0,
+      kpiCount: 0,
+      greenCount: 0,
+      amberCount: 0,
+      redCount: 0,
+      noDataCount: 0,
+      kpis: [],
+      divisions: [],
+      fiscalPeriods: [],
+    });
+
+    expect(failure).toBeUndefined();
+    expect(result?.fiscalYearId).toBeNull();
+    expect(result?.scope).toBe('Corporate');
   });
 
   it('serializes every provided filter into the query string', () => {
@@ -274,7 +345,7 @@ describe('PerformanceMonitoringService', () => {
     expect(req.request.url).toContain('quarter=2');
     expect(req.request.url).toContain('fromMonth=4');
     expect(req.request.url).toContain('toMonth=6');
-    req.flush({ success: true, data: payload() });
+    req.flush(payload());
     http.verify();
   });
 
@@ -285,6 +356,6 @@ describe('PerformanceMonitoringService', () => {
 
     const req = http.expectOne((r) => r.method === 'GET' && r.url.includes('performancemonitoring'));
     expect(req.request.url).not.toContain('?');
-    req.flush({ success: true, data: payload() });
+    req.flush(payload());
   });
 });

@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import {
   ScorecardWorkspaceState,
   businessDate,
@@ -12,7 +13,7 @@ import {
 } from './workspace-state.service';
 import { UserStore } from '../../core/service/user-store.service';
 import { FiscalYear, Scorecard } from '../../core/model/scorecard.model';
-import { KPI } from '../../core/model/goal.model';
+import { EntryBoard, KPI } from '../../core/model/goal.model';
 import { AuthUser } from '../../core/model/auth.model';
 
 const fiscalYear = (overrides: Partial<FiscalYear> = {}): FiscalYear => ({
@@ -392,5 +393,165 @@ describe('ScorecardWorkspaceState EAT rollover reactiveness', () => {
 
     expect(state.kpis().map((kpi) => kpi.id)).toEqual(['kpi-1']);
     expect(state.unassignedKpis().map((kpi) => kpi.id)).toEqual(['kpi-1']);
+  });
+});
+
+const API = 'https://localhost:5211/api/';
+const ok = (data: unknown) => ({ success: true, message: 'ok', data });
+
+const entryBoard = (): EntryBoard => ({
+  fiscalYearId: 'fy-1',
+  scorecards: [
+    {
+      id: 'sc-1',
+      fiscalYearId: 'fy-1',
+      name: 'Corporate Scorecard',
+      // The API serializes enums camel-cased, exactly as the board read returns them.
+      scope: 'corporate',
+      scorecardStatus: 'active',
+    },
+    {
+      id: 'sc-2',
+      fiscalYearId: 'fy-1',
+      name: 'Finance Scorecard',
+      scope: 'corporate',
+      scorecardStatus: 'draft',
+    },
+  ],
+  kpis: [
+    { id: 'kpi-1', scorecardId: 'sc-1', name: 'Application uptime', weight: 100 } as KPI,
+    { id: 'kpi-2', scorecardId: 'sc-2', name: 'Budget execution', weight: 100 } as KPI,
+  ],
+  targets: [
+    {
+      kpiId: 'kpi-1',
+      fiscalYearId: 'fy-1',
+      targets: [{ fiscalMonth: 5, quarter: 2, granularity: 'Monthly', targetValue: 99 }],
+    },
+  ],
+  actuals: [
+    {
+      kpiId: 'kpi-1',
+      fiscalYearId: 'fy-1',
+      values: [
+        {
+          id: 'actual-1',
+          kpiId: 'kpi-1',
+          fiscalPeriodId: 'fp-5',
+          fiscalMonth: 5,
+          quarter: 2,
+          value: 98.5,
+          dataSource: 'Manual',
+          asOfDate: '2026-11-03T10:00:00',
+        },
+      ],
+    },
+  ],
+});
+
+describe('ScorecardWorkspaceState entry board', () => {
+  let state: ScorecardWorkspaceState;
+  let http: HttpTestingController;
+
+  const start = (permissions: string[]): ScorecardWorkspaceState => {
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(), provideHttpClientTesting()],
+    });
+    TestBed.inject(UserStore).setUser({
+      id: 'user-1',
+      username: 'entry.user',
+      fullName: 'Entry User',
+      email: 'entry.user@spms.local',
+      roles: ['DataInputUser'],
+      permissions,
+    });
+    http = TestBed.inject(HttpTestingController);
+    return TestBed.runInInjectionContext(() => new ScorecardWorkspaceState());
+  };
+
+  /** Fiscal years, then the board, then the period windows of the scorecard it selects. */
+  const loadBoard = (permissions: string[] = ['actuals:view']): ScorecardWorkspaceState => {
+    const s = start(permissions);
+    s.loadFiscalYearsAndScorecards();
+    http
+      .expectOne(`${API}fiscalyear`)
+      .flush(ok([{ ...fiscalYear(), status: 'active' }]));
+    http.expectOne(`${API}kpiactual/entry-board?fiscalYearId=fy-1`).flush(ok(entryBoard()));
+    http.expectOne(`${API}periodlock?scorecardId=sc-1&fiscalYearId=fy-1`).flush(ok(null));
+    return s;
+  };
+
+  afterEach(() => {
+    try {
+      http.verify();
+    } finally {
+      TestBed.resetTestingModule();
+    }
+  });
+
+  it('reads the entry board instead of the corporate catalog', () => {
+    state = loadBoard();
+
+    expect(state.usesEntryScope()).toBe(true);
+    expect(state.fiscalYearId()).toBe('fy-1');
+    expect(state.scorecardId()).toBe('sc-1');
+    expect(state.scorecards().map((sc: Scorecard) => sc.id)).toEqual(['sc-1', 'sc-2']);
+    expect(state.workspace().kpis.map((kpi) => kpi.id)).toEqual(['kpi-1', 'kpi-2']);
+    expect(state.kpiTargets().get('kpi-1')?.[0].targetValue).toBe(99);
+    expect(state.entryActuals().get('kpi-1')?.[0].value).toBe(98.5);
+    http.expectNone((req) => req.url === `${API}scorecard`);
+  });
+
+  it('restores the camel-cased board enums for the picker', () => {
+    state = loadBoard();
+    const first = state.scorecards()[0];
+    expect(first.scope).toBe('Corporate');
+    expect(first.scorecardStatus).toBe('Active');
+  });
+
+  it('narrows the board KPIs to the selected scorecard and stays off the catalog', () => {
+    state = loadBoard();
+    expect(state.kpis().map((kpi) => kpi.id)).toEqual(['kpi-1']);
+
+    state.selectScorecard('sc-2');
+    http.expectOne(`${API}periodlock?scorecardId=sc-2&fiscalYearId=fy-1`).flush(ok(null));
+
+    expect(state.kpis().map((kpi) => kpi.id)).toEqual(['kpi-2']);
+  });
+
+  it('never asks for a score snapshot an entry account cannot read', () => {
+    state = loadBoard();
+    state.reloadScores();
+    http.expectNone((req) => req.url.startsWith(`${API}scoresnapshot`));
+  });
+
+  it('re-reads the board when the fiscal year changes', () => {
+    state = loadBoard();
+    state.selectFiscalYear('fy-2');
+    http.expectOne(`${API}kpiactual/entry-board?fiscalYearId=fy-2`).flush(ok(entryBoard()));
+    http.expectOne(`${API}periodlock?scorecardId=sc-1&fiscalYearId=fy-2`).flush(ok(null));
+    expect(state.fiscalYearId()).toBe('fy-2');
+  });
+
+  it('reports a failed board read instead of leaving the grid spinning', () => {
+    state = start(['actuals:view']);
+    state.loadEntryBoard('fy-1');
+    http
+      .expectOne(`${API}kpiactual/entry-board?fiscalYearId=fy-1`)
+      .flush(ok(null), { status: 403, statusText: 'Forbidden' });
+
+    expect(state.loading()).toBe(false);
+    expect(state.error()).not.toBeNull();
+    expect(state.workspace().kpis).toEqual([]);
+  });
+
+  it('keeps the corporate catalog path for a principal with scorecard:view', () => {
+    state = start(['scorecard:view', 'actuals:view']);
+    state.loadFiscalYearsAndScorecards();
+    http.expectOne(`${API}fiscalyear`).flush(ok([]));
+    http.expectOne(`${API}scorecard`).flush(ok([]));
+
+    expect(state.usesEntryScope()).toBe(false);
+    http.expectNone((req) => req.url.includes('entry-board'));
   });
 });

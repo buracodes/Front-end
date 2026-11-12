@@ -1,7 +1,7 @@
 import { Injectable, inject, computed, signal, effect, DestroyRef } from '@angular/core';
 import { Observable, forkJoin, map } from 'rxjs';
-import { Scorecard, FiscalYear } from '../../core/model/scorecard.model';
-import { Goal, KRA, KPI } from '../../core/model/goal.model';
+import { Scorecard, FiscalYear, titleCaseEnumName } from '../../core/model/scorecard.model';
+import { Goal, KRA, KPI, KpiActualValue, EntryBoard, EntryScorecard } from '../../core/model/goal.model';
 import { GoalService } from '../../core/service/goal.service';
 import { KRAService } from '../../core/service/kra.service';
 import { KPIService, ScoreSnapshotDto, ScoreSnapshotEntry, KpiTargetValue, PeriodFilterParams } from '../../core/service/kpi.service';
@@ -188,6 +188,19 @@ export class ScorecardWorkspaceState {
    */
   readonly canEnterActuals = computed(() => !this.isReadOnly() || this.hasActualsOverride());
 
+  /**
+   * True for a principal that reports actuals but cannot browse the corporate scorecard, so the
+   * whole workspace comes from the entry-scoped board read instead of the corporate catalog reads.
+   * Resolved from the live permission list, exactly like the page guards.
+   */
+  readonly usesEntryScope = computed(() => !this.userStore.hasPermission('scorecard:view'));
+
+  /** Actual values of the entry board, per KPI. Empty for a corporate account, which reads them per KPI. */
+  readonly entryActuals = signal<Map<string, KpiActualValue[]>>(new Map());
+
+  /** Monotonic token so a slow board response can't clobber a newer fiscal year. */
+  private boardRequest = 0;
+
   readonly hasPeriodFilter = computed(
     () =>
       (this.periodType() === 'quarter' && !!this.quarterFilter()) ||
@@ -293,8 +306,17 @@ export class ScorecardWorkspaceState {
 
   readonly goals = computed(() => this.workspace().goals);
   readonly kras = computed(() => this.workspace().kras);
-  /** Corporate KPIs only; division-owned KPIs are reported by division planning. */
-  readonly kpis = computed(() => this.workspace().kpis.filter((kpi) => !kpi.divisionGoalId));
+  /**
+   * Corporate KPIs only; division-owned KPIs are reported by division planning. An entry-scope
+   * account holds the whole fiscal year's board in one read, so its list narrows to the scorecard
+   * selected in the picker.
+   */
+  readonly kpis = computed(() => {
+    const scorecardId = this.usesEntryScope() ? this.scorecardId() : null;
+    return this.workspace().kpis.filter(
+      (kpi) => !kpi.divisionGoalId && (!scorecardId || kpi.scorecardId === scorecardId)
+    );
+  });
   readonly snapshot = computed(() => this.workspace().snapshot);
   readonly locks = computed(() => this.workspace().locks);
   readonly kpiTargets = computed(() => this.workspace().kpiTargets);
@@ -485,6 +507,11 @@ export class ScorecardWorkspaceState {
   });
 
   loadFiscalYearsAndScorecards(preferredScorecardId?: string): void {
+    if (this.usesEntryScope()) {
+      this.loadEntryFiscalYears(preferredScorecardId);
+      return;
+    }
+
     forkJoin({
       fiscalYears: this.scorecardService.getFiscalYears(),
       scorecards: this.scorecardService.getAll(),
@@ -528,8 +555,91 @@ export class ScorecardWorkspaceState {
     return now >= start && now <= end;
   }
 
+  /** Entry boot: only the fiscal-year dimension, because the scorecard catalog needs a corporate read. */
+  private loadEntryFiscalYears(preferredScorecardId?: string): void {
+    this.scorecardService.getFiscalYears().subscribe({
+      next: (fiscalYears) => {
+        this.fiscalYears.set(fiscalYears);
+        const current = this.fiscalYearId();
+        const selected =
+          (current && fiscalYears.some((fy) => fy.id === current)
+            ? current
+            : (fiscalYears.find((fy) => fy.status.toLowerCase() === 'active' || this.isCurrentYear(fy)) ??
+                fiscalYears[0])?.id) ?? null;
+        if (!selected) return;
+        this.fiscalYearId.set(selected);
+        this.loadEntryBoard(selected, preferredScorecardId);
+      },
+      error: (err) => this.error.set(err?.message ?? 'Failed to load fiscal years.'),
+    });
+  }
+
+  /**
+   * Loads the board an entry account works from — the KPIs they report on with their monthly
+   * targets and recorded actuals in one request — and the scorecards holding them. The picker
+   * keeps the same scorecard across refreshes, so a save cannot jump the page to another one.
+   */
+  loadEntryBoard(fiscalYearId: string, preferredScorecardId?: string): void {
+    const request = ++this.boardRequest;
+    const keepScorecardId = preferredScorecardId ?? this.scorecardId();
+    this.loading.set(true);
+    this.error.set(null);
+    this.selectedKpiId.set(null);
+
+    this.kpiService.getEntryBoard(fiscalYearId).subscribe({
+      next: (board: EntryBoard) => {
+        if (request !== this.boardRequest || fiscalYearId !== this.fiscalYearId()) return;
+
+        const scorecards = board.scorecards.map(entryScorecard);
+        this.scorecards.set(scorecards);
+
+        const kpiTargets = new Map<string, KpiTargetValue[]>();
+        for (const bundle of board.targets) kpiTargets.set(bundle.kpiId, bundle.targets);
+        const actuals = new Map<string, KpiActualValue[]>();
+        for (const bundle of board.actuals) actuals.set(bundle.kpiId, bundle.values);
+
+        this.entryActuals.set(actuals);
+        this.workspace.set({
+          goals: [],
+          kras: [],
+          kpis: board.kpis,
+          snapshot: null,
+          locks: null,
+          kpiTargets,
+        });
+
+        const wanted =
+          keepScorecardId && scorecards.some((sc) => sc.id === keepScorecardId)
+            ? keepScorecardId
+            : (scorecards.find((sc) => sc.scorecardStatus === 'Active') ?? scorecards[0])?.id ?? null;
+        this.scorecardId.set(wanted);
+        this.loading.set(false);
+        if (wanted) this.reloadLocks();
+      },
+      error: (err) => {
+        if (request !== this.boardRequest) return;
+        this.loading.set(false);
+        this.error.set(err?.message ?? 'Failed to load the data entry board.');
+        // Re-emitting the values lets a grid built from the board finish loading instead of
+        // spinning on a read that will not return.
+        this.entryActuals.set(new Map(this.entryActuals()));
+      },
+    });
+  }
+
+  /** Re-reads the board after a write so the grid reflects the stored values. */
+  reloadEntryBoard(): void {
+    const fiscalYearId = this.fiscalYearId();
+    if (!fiscalYearId) return;
+    this.loadEntryBoard(fiscalYearId);
+  }
+
   selectFiscalYear(id: string): void {
     this.fiscalYearId.set(id);
+    if (this.usesEntryScope()) {
+      this.loadEntryBoard(id);
+      return;
+    }
     const candidates = this.scorecards().filter((sc) => sc.fiscalYearId === id);
     const preferred = candidates.find((sc) => sc.scorecardStatus === 'Active') ?? candidates[0];
     if (preferred) {
@@ -545,10 +655,18 @@ export class ScorecardWorkspaceState {
     this.scorecardId.set(id);
     const scorecard = this.scorecards().find((sc) => sc.id === id);
     if (scorecard) this.fiscalYearId.set(scorecard.fiscalYearId);
+    if (this.usesEntryScope()) {
+      // The board already carries every KPI of the fiscal year, so only the period windows
+      // belong to the scorecard and have to be re-read.
+      this.reloadLocks();
+      return;
+    }
     this.loadWorkspace(id);
   }
 
   reloadScores(): void {
+    // The entry board is the entry account's only score read; it is refreshed with the values.
+    if (this.usesEntryScope()) return;
     const scorecardId = this.scorecardId();
     const fiscalYearId = this.fiscalYearId();
     const periodFilter = this.periodFilterParams();
@@ -679,6 +797,20 @@ export class ScorecardWorkspaceState {
 export function latestEntry(entries: ScoreSnapshotEntry[]): ScoreSnapshotEntry | undefined {
   if (!entries.length) return undefined;
   return entries.reduce((a, b) => (b.fiscalMonth > a.fiscalMonth ? b : a));
+}
+
+/**
+ * Maps a board scorecard onto the picker model. The entry read carries only the fields the
+ * Data Entry selectors show, so the scorecard catalog itself stays behind its own read right.
+ */
+function entryScorecard(entry: EntryScorecard): Scorecard {
+  return {
+    id: entry.id,
+    fiscalYearId: entry.fiscalYearId,
+    name: entry.name,
+    scope: titleCaseEnumName(entry.scope) as Scorecard['scope'],
+    scorecardStatus: titleCaseEnumName(entry.scorecardStatus) as Scorecard['scorecardStatus'],
+  };
 }
 
 export function scorecardEntries(snap: ScoreSnapshotDto | null | undefined): ScoreSnapshotEntry[] {

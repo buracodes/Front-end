@@ -25,6 +25,15 @@ interface FiscalYearGroup {
   scorecards: Scorecard[];
 }
 
+function withoutMenu(set: Set<string>, id: string): Set<string> {
+  if (!set.has(id)) {
+    return set;
+  }
+  const next = new Set(set);
+  next.delete(id);
+  return next;
+}
+
 @Component({
   selector: 'app-scorecard',
   imports: [ReactiveFormsModule, DatePipe, LucideDynamicIcon, FiscalYearFormComponent],
@@ -57,6 +66,8 @@ export class ScorecardPage implements OnInit {
   readonly statusFilter = signal('');
 
   readonly openMenuId = signal<string | null>(null);
+  /** Cards whose menu opens upward because it would be clipped at the viewport bottom. */
+  readonly openUpMenuIds = signal<Set<string>>(new Set());
 
   readonly scopes: Scorecard['scope'][] = ['Corporate', 'Division'];
   readonly statuses: Scorecard['scorecardStatus'][] = ['Active', 'Closed'];
@@ -329,7 +340,31 @@ export class ScorecardPage implements OnInit {
 
   toggleCardMenu(scorecardId: string, event: MouseEvent): void {
     event.stopPropagation();
+    const opening = this.openMenuId() !== scorecardId;
     this.openMenuId.update((current) => (current === scorecardId ? null : scorecardId));
+    if (!opening) {
+      this.openUpMenuIds.update((set) => withoutMenu(set, scorecardId));
+      return;
+    }
+    // The menu renders downward first; correct its direction once it can be measured
+    // so a card near the bottom of the viewport opens upward instead of being clipped.
+    setTimeout(() => {
+      const button = (event.target as HTMLElement).closest('.actions-menu-btn') as HTMLElement | null;
+      const menu = button
+        ?.closest('.actions-dropdown')
+        ?.querySelector('.actions-dropdown-menu') as HTMLElement | null;
+      if (!button || !menu) return;
+      const buttonRect = button.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - buttonRect.bottom - 8;
+      const spaceAbove = buttonRect.top - 8;
+      const openUp = menu.offsetHeight > spaceBelow && spaceAbove > spaceBelow;
+      this.openUpMenuIds.update((set) => {
+        if (!openUp) return withoutMenu(set, scorecardId);
+        const next = new Set(set);
+        next.add(scorecardId);
+        return next;
+      });
+    });
   }
 
   isCardMenuOpen(scorecardId: string): boolean {
@@ -338,6 +373,7 @@ export class ScorecardPage implements OnInit {
 
   closeCardMenu(): void {
     this.openMenuId.set(null);
+    this.openUpMenuIds.set(new Set());
   }
 
   @HostListener('document:click', ['$event'])

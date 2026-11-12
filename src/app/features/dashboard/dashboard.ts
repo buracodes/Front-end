@@ -10,9 +10,11 @@ import { DashboardFiltersComponent } from './widgets/dashboard-filters.component
 import { DashboardGoalDrilldownComponent } from './widgets/dashboard-goal-drilldown.component';
 import { DashboardWidgetPayload, isEmptyPayload, resolveWidget } from './dashboard-widget-registry';
 import { RoleDashboardService } from './role-dashboard.service';
+import { FiscalYearService } from '../fiscal-year/fiscal-year.service';
 import { LucideDynamicIcon } from '@lucide/angular';
 import {
   DashboardFilter,
+  DashboardFilterOption,
   DashboardRoleContext,
   DashboardWidgetBundle,
   DashboardWidgetDescriptor,
@@ -37,6 +39,7 @@ import {
 })
 export class DashboardPage implements OnInit {
   private readonly roleDashboard = inject(RoleDashboardService);
+  private readonly fiscalYearService = inject(FiscalYearService);
   private readonly notifications = inject(NotificationService);
   readonly userStore = inject(UserStore);
 
@@ -72,9 +75,18 @@ export class DashboardPage implements OnInit {
 
   readonly visibleWidgets = computed(() => this.widgets().filter((entry) => !isEmptyPayload(entry.payload)));
 
-  readonly fiscalYearOptions = computed(() => this.context()?.fiscalYears ?? []);
+  /**
+   * The server owns the fiscal-year list; the start dates only feed the period labels so
+   * months and quarters follow the year's own start month instead of the calendar year.
+   */
+  private readonly fiscalYearStarts = signal<Record<string, string>>({});
+  readonly fiscalYearOptions = computed<DashboardFilterOption[]>(() => {
+    const starts = this.fiscalYearStarts();
+    return (this.context()?.fiscalYears ?? []).map((year) =>
+      starts[year.id] ? { ...year, startDate: starts[year.id] } : year,
+    );
+  });
   readonly scorecardOptions = computed(() => this.context()?.scorecards ?? []);
-  readonly periodOptions = computed(() => this.context()?.periods ?? []);
   readonly quickActions = computed(() => this.context()?.quickActions ?? []);
   readonly readOnly = computed(() => this.context()?.readOnly ?? false);
   readonly scopeLabel = computed(() => {
@@ -108,7 +120,18 @@ export class DashboardPage implements OnInit {
   }
 
   ngOnInit(): void {
+    this.loadFiscalYearStarts();
     this.load(true);
+  }
+
+  private loadFiscalYearStarts(): void {
+    this.fiscalYearService.getAll().subscribe({
+      next: (years) => this.fiscalYearStarts.set(
+        Object.fromEntries(years.map((year) => [year.id, year.startDate])),
+      ),
+      // Without dates the period dropdowns fall back to fiscal-month numbering.
+      error: () => this.fiscalYearStarts.set({}),
+    });
   }
 
   /** Any filter change refilters the whole page - there is no per-widget filtering. */

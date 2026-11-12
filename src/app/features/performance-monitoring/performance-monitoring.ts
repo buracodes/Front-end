@@ -47,6 +47,11 @@ export class PerformanceMonitoringPage {
   /** Corporate-wide monitoring requires the explicit permission (not "no division assigned"). */
   readonly canViewCorporate = computed(() => this.userStore.hasPermission('performance:monitor.view'));
   readonly canPickDivision = computed(() => this.canViewCorporate() && this.scopeMode() === 'division');
+  /** A division claim never widens, so only the divisions the server accepts are offered. */
+  readonly pickableDivisions = computed(() => {
+    const scoped = this.userStore.divisionIds();
+    return scoped.length ? this.divisions().filter((d) => scoped.includes(d.id)) : this.divisions();
+  });
   readonly isCorporate = computed(() => (this.data()?.scope ?? '').toLowerCase() === 'corporate');
   readonly hasData = computed(() => !!this.data()?.fiscalYearId);
 
@@ -101,6 +106,11 @@ export class PerformanceMonitoringPage {
           if (res.fiscalYearId && !this.fiscalYearId()) this.fiscalYearId.set(res.fiscalYearId);
           if (res.scorecardId && !this.scorecardId()) this.scorecardId.set(res.scorecardId);
           if (res.divisionId && !this.divisionId()) this.divisionId.set(res.divisionId);
+          // A division claim pins the server to that division even when corporate scope was
+          // requested, so the selector must show the scope actually answered.
+          if ((res.scope ?? '').toLowerCase() === 'division' && this.scopeMode() !== 'division') {
+            this.scopeMode.set('division');
+          }
           this.loading.set(false);
         },
         error: (err) => {
@@ -128,8 +138,8 @@ export class PerformanceMonitoringPage {
   onScopeModeChange(mode: PerformanceScopeMode): void {
     this.scopeMode.set(mode);
     if (mode === 'division') {
-      if (!this.divisionId() && this.divisions().length) {
-        this.divisionId.set(this.divisions()[0].id);
+      if (!this.divisionId() && this.pickableDivisions().length) {
+        this.divisionId.set(this.pickableDivisions()[0].id);
       }
     } else {
       this.divisionId.set('');

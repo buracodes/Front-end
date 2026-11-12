@@ -140,3 +140,77 @@ describe('ShellComponent', () => {
     expect(sidebar.classList.contains('mobile-open')).toBe(true);
   });
 });
+
+describe('ShellComponent navigation permissions', () => {
+  /** Every menu label the persona can reach, flattening the grouped entries. */
+  const labelsFor = (permissions: string[]): string[] => {
+    TestBed.configureTestingModule({
+      imports: [ShellComponent],
+      providers: [
+        provideRouter([]),
+        provideAppIcons(),
+        { provide: AuthService, useValue: { logout: () => undefined } },
+      ],
+    });
+    TestBed.inject(UserStore).setUser({
+      id: 'user-1',
+      username: 'entry.user',
+      fullName: 'Entry User',
+      email: 'entry.user@spms.local',
+      roles: ['DataInputUser'],
+      permissions,
+    });
+
+    const shellFixture = TestBed.createComponent(ShellComponent);
+    shellFixture.detectChanges();
+    const shell = shellFixture.componentInstance;
+    return shell.visibleNavItems().flatMap((item) => [item.label, ...(item.children ?? []).map((child) => child.label)]);
+  };
+
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('offers the entry persona only Data Entry from the scorecard pages', () => {
+    const labels = labelsFor([
+      'dashboard:view',
+      'division:scorecard.view',
+      'division:performance.view',
+      'actuals:view',
+      'actuals:enter',
+    ]);
+
+    expect(labels).toContain('Data Entry');
+    expect(labels).not.toContain('Scorecards');
+    expect(labels).not.toContain('Goals');
+    expect(labels).not.toContain('KRAs');
+    expect(labels).not.toContain('KPIs');
+    expect(labels).not.toContain('Targets');
+    expect(labels).not.toContain('Scorecard Clone');
+    // Lock administration is not an entry surface: reporting already shows the window status.
+    expect(labels).not.toContain('Data Locking');
+  });
+
+  it('keeps the scorecard catalog open for a principal that can view it', () => {
+    const labels = labelsFor([
+      'dashboard:view',
+      'scorecard:view',
+      'goals:view',
+      'kra:view',
+      'kpi:view',
+      'targets:view',
+      'actuals:view',
+    ]);
+
+    expect(labels).toContain('Scorecards');
+    expect(labels).toContain('Targets');
+    expect(labels).toContain('Data Entry');
+    expect(labels).not.toContain('Data Locking');
+  });
+
+  it('opens Data Locking to the account that configures locks', () => {
+    expect(labelsFor(['actuals:view', 'admin:config.manage'])).toContain('Data Locking');
+  });
+
+  it('opens Data Locking to the account that overrides locked periods', () => {
+    expect(labelsFor(['actuals:view', 'kpi:override'])).toContain('Data Locking');
+  });
+});

@@ -77,9 +77,10 @@
         } @else {
           <ul>
             <li>Annual target is <strong>required</strong>.</li>
+            <li>Enter the annual target once &mdash; all four quarters and all twelve months fill in automatically.</li>
             <li>Every <strong>quarterly target must equal</strong> the annual target.</li>
             <li>Every <strong>monthly target must equal</strong> its quarterly target.</li>
-            <li>Auto-calculate is <strong>not available</strong> for non-cumulative KPIs.</li>
+            <li>Quarterly and monthly targets are <strong>read-only</strong>; auto-calculate is <strong>not available</strong> for non-cumulative KPIs.</li>
           </ul>
         }
       </section>
@@ -124,6 +125,9 @@
       <section class="tc-section">
         <div class="tc-section-head">
           <h4>Quarterly &amp; Monthly Targets</h4>
+          @if (!isCumulative()) {
+            <span class="hint">Filled from the annual target</span>
+          }
         </div>
         <div class="quarter-grid">
           @for (q of quarterIndexes; track q) {
@@ -137,13 +141,13 @@
                 }
               </div>
 
-              <label class="field" [class.field-readonly]="isCumulative() && autoCalc()">
+              <label class="field" [class.field-readonly]="!isCumulative() || autoCalc()">
                 <span class="field-label">Quarter target</span>
                 <input
                   type="number"
                   inputmode="decimal"
                   [value]="quarterDisplay(q)"
-                  [readonly]="isReadOnly() || (isCumulative() && autoCalc())"
+                  [readonly]="isReadOnly() || !isCumulative() || autoCalc()"
                   (input)="setQuarterly(q, $event)"
                 />
               </label>
@@ -159,7 +163,7 @@
                       type="number"
                       inputmode="decimal"
                       [value]="monthly()[mi]"
-                      [readonly]="isReadOnly()"
+                      [readonly]="isReadOnly() || !isCumulative()"
                       (input)="setMonthly(mi, $event)"
                     />
                   </label>
@@ -168,6 +172,13 @@
 
               @if (qError(q); as err) {
                 <p class="tc-error">{{ err }}</p>
+              } @else if (!isCumulative()) {
+                <p class="quarter-sum">
+                  Each month follows the annual target of {{ quarterDisplay(q) }}
+                  @if (kpi()?.unit; as u) {
+                    &nbsp;{{ u }}
+                  }
+                </p>
               } @else {
                 <p class="quarter-sum">
                   &Sigma; months = {{ quarterSum(q) }} &middot; target = {{ quarterDisplay(q) }}

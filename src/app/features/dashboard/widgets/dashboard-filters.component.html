@@ -5,8 +5,8 @@
       id="dx-fy"
       class="select"
       [disabled]="disabled() || busy()"
-      [ngModel]="current().fiscalYearId ?? ''"
-      (ngModelChange)="onFiscalYear($event)"
+      [value]="current().fiscalYearId ?? ''"
+      (change)="onFiscalYear($any($event.target).value)"
     >
       <option value="">All fiscal years</option>
       @for (year of fiscalYears(); track year.id) {
@@ -21,8 +21,8 @@
       id="dx-scorecard"
       class="select"
       [disabled]="disabled() || busy()"
-      [ngModel]="current().scorecardId ?? ''"
-      (ngModelChange)="onScorecard($event)"
+      [value]="current().scorecardId ?? ''"
+      (change)="onScorecard($any($event.target).value)"
     >
       <option value="">All scorecards</option>
       @for (scorecard of scorecards(); track scorecard.id) {
@@ -31,72 +31,102 @@
     </select>
   </div>
 
-  <div class="field">
+  <div class="field period-field" [class.open]="periodOpen()">
     <label for="dx-period">Period</label>
-    <select
+    <button
+      #periodTrigger
       id="dx-period"
-      class="select"
+      type="button"
+      class="btn btn-secondary period-btn"
+      [class.active]="periodOpen()"
       [disabled]="disabled() || busy()"
-      [ngModel]="current().periodType"
-      (ngModelChange)="onPeriod($event)"
+      aria-haspopup="dialog"
+      [attr.aria-expanded]="periodOpen()"
+      (click)="togglePeriod()"
     >
-      @for (period of periods(); track period.value) {
-        <option [value]="period.value">{{ period.label }}</option>
+      Filter by Period
+      @if (hasPeriodFilter()) {
+        <span class="period-dot" title="Period filter active"></span>
       }
-    </select>
+      <svg lucideIcon="chevron-down" size="12"></svg>
+    </button>
+
+    @if (periodOpen()) {
+      <div
+        class="period-panel"
+        role="dialog"
+        aria-label="Filter by period"
+        [style.top.px]="panelPosition().top"
+        [style.left.px]="panelPosition().left"
+      >
+        <div class="period-types">
+          <button type="button" [class.active]="tab() === 'Ytd'" (click)="selectTab('Ytd')">YTD</button>
+          <button type="button" [class.active]="tab() === 'Month'" (click)="selectTab('Month')">Month</button>
+          <button type="button" [class.active]="tab() === 'Quarter'" (click)="selectTab('Quarter')">Quarter</button>
+          <button type="button" [class.active]="tab() === 'Year'" (click)="selectTab('Year')">Year</button>
+        </div>
+
+        @if (tab() === 'Ytd') {
+          <p class="period-hint">Shows the fiscal year from its start through the current period.</p>
+        } @else if (tab() === 'Month') {
+          <div class="period-month-row" [class.invalid]="monthRangeInvalid()">
+            <select
+              class="select"
+              aria-label="From month"
+              [disabled]="disabled() || busy()"
+              (change)="onMonthFrom($event)"
+            >
+              <option value="">From</option>
+              @for (month of monthOptions(); track month.value) {
+                <option [value]="month.value" [selected]="month.value === monthFrom()">{{ month.label }}</option>
+              }
+            </select>
+            <span class="period-sep">to</span>
+            <select
+              class="select"
+              aria-label="To month"
+              [disabled]="disabled() || busy()"
+              (change)="onMonthTo($event)"
+            >
+              <option value="">To</option>
+              @for (month of monthOptions(); track month.value) {
+                <option [value]="month.value" [selected]="month.value === monthTo()">{{ month.label }}</option>
+              }
+            </select>
+          </div>
+          @if (monthRangeInvalid()) {
+            <p class="period-error">From month must be before or equal to To month.</p>
+          }
+        } @else if (tab() === 'Quarter') {
+          <select
+            class="select period-select"
+            aria-label="Quarter"
+            [disabled]="disabled() || busy()"
+            (change)="onQuarter($event)"
+          >
+            <option value="">Select quarter</option>
+            @for (option of quarterOptions(); track option.value) {
+              <option [value]="option.value" [selected]="option.value === quarter()">{{ option.label }}</option>
+            }
+          </select>
+        } @else {
+          <select
+            class="select period-select"
+            aria-label="Fiscal year"
+            [disabled]="disabled() || busy()"
+            (change)="onPeriodFiscalYear($any($event.target).value)"
+          >
+            <option value="">Select fiscal year</option>
+            @for (year of fiscalYears(); track year.id) {
+              <option [value]="year.id" [selected]="year.id === current().fiscalYearId">{{ year.label }}</option>
+            }
+          </select>
+        }
+
+        <button type="button" class="period-clear" (click)="clearPeriodFilter()">Clear Period Filter</button>
+      </div>
+    }
   </div>
-
-  @if (current().periodType === 'Quarter') {
-    <div class="field field--narrow">
-      <label for="dx-quarter">Quarter</label>
-      <select
-        id="dx-quarter"
-        class="select"
-        [disabled]="disabled() || busy()"
-        [ngModel]="current().quarter ?? ''"
-        (ngModelChange)="onQuarter($event)"
-      >
-        <option value="">All quarters</option>
-        @for (q of [1, 2, 3, 4]; track q) {
-          <option [value]="q">Q{{ q }}</option>
-        }
-      </select>
-    </div>
-  }
-
-  @if (current().periodType === 'Month') {
-    <div class="field field--narrow">
-      <label for="dx-from">From month</label>
-      <select
-        id="dx-from"
-        class="select"
-        [disabled]="disabled() || busy()"
-        [ngModel]="current().fromMonth ?? ''"
-        (ngModelChange)="onMonthFrom($event)"
-      >
-        <option value="">Start</option>
-        @for (month of monthOptions; track month) {
-          <option [value]="month">{{ monthName(month) }}</option>
-        }
-      </select>
-    </div>
-
-    <div class="field field--narrow">
-      <label for="dx-to">To month</label>
-      <select
-        id="dx-to"
-        class="select"
-        [disabled]="disabled() || busy()"
-        [ngModel]="current().toMonth ?? ''"
-        (ngModelChange)="onMonthTo($event)"
-      >
-        <option value="">End</option>
-        @for (month of monthOptions; track month) {
-          <option [value]="month">{{ monthName(month) }}</option>
-        }
-      </select>
-    </div>
-  }
 
   @if (busy()) {
     <span class="spinner" aria-label="Refreshing"></span>

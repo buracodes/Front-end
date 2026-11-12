@@ -287,6 +287,39 @@ describe('DashboardPage (role driven shell)', () => {
     expect(text).toContain('One thing worth knowing today.');
   });
 
+  it('renders the Filter by Period trigger inside the global filters', () => {
+    const fixture = render(nextContext);
+
+    const trigger = (fixture.nativeElement as HTMLElement).querySelector('.period-btn');
+    expect(trigger?.textContent).toContain('Filter by Period');
+  });
+
+  it('merges fiscal-year start dates into the period filter options', () => {
+    const fixture = TestBed.createComponent(DashboardPage);
+    fixture.detectChanges();
+
+    httpMock
+      .expectOne((req) => req.url.includes('/fiscalyear'))
+      .flush({
+        success: true,
+        message: 'ok',
+        data: [
+          {
+            id: 'fy-1',
+            label: '2026/2027',
+            startDate: '2026-07-01',
+            endDate: '2027-06-30',
+            status: 'Open',
+          },
+        ],
+      });
+
+    flushOutstanding();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.fiscalYearOptions()[0].startDate).toBe('2026-07-01');
+  });
+
   it('re-filters the whole dashboard when a global filter changes', () => {
     const fixture = render(nextContext);
 

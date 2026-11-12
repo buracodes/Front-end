@@ -296,6 +296,12 @@
   input {
     width: 100%;
   }
+
+  input[readonly] {
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+    cursor: not-allowed;
+  }
 }
 
 .tc-error {

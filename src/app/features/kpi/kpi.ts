@@ -98,7 +98,7 @@ export class KpiPage implements OnDestroy {
     optimizationType: new FormControl<Kpi['optimizationType']>('Maximize', { nonNullable: true }),
     dataSource: new FormControl<Kpi['dataSource']>('Manual', { nonNullable: true }),
     kpiType: new FormControl<Kpi['kpiType']>('Lagging', { nonNullable: true }),
-    isCumulative: new FormControl(false, { nonNullable: true }),
+    isCumulative: new FormControl(true, { nonNullable: true }),
     ownerType: new FormControl<KpiOwnerType | ''>('', { nonNullable: true }),
     ownerId: new FormControl('', { nonNullable: true }),
     divisionOwnerId: new FormControl('', { nonNullable: true }),
@@ -505,7 +505,7 @@ export class KpiPage implements OnDestroy {
     this.form.reset({
       scorecardId: '', kraId: '', name: '', description: '', unit: '', weight: 0,
       optimizationType: 'Maximize', dataSource: 'Manual', kpiType: 'Lagging',
-      isCumulative: false, ownerType: '', ownerId: '', divisionOwnerId: '',
+      isCumulative: true, ownerType: '', ownerId: '', divisionOwnerId: '',
       baseline: null, minValue: null, maxValue: null,
     });
     this.showForm.set(true);
@@ -570,7 +570,7 @@ export class KpiPage implements OnDestroy {
     this.form.reset({
       scorecardId: '', kraId: '', name: '', description: '', unit: '', weight: 0,
       optimizationType: 'Maximize', dataSource: 'Manual', kpiType: 'Lagging',
-      isCumulative: false, ownerType: '', ownerId: '', divisionOwnerId: '',
+      isCumulative: true, ownerType: '', ownerId: '', divisionOwnerId: '',
       baseline: null, minValue: null, maxValue: null,
     });
     this.showForm.set(false);

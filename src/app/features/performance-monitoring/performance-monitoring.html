@@ -4,10 +4,10 @@
       <h1 class="pm-title">Performance Monitoring</h1>
       <p class="pm-subtitle">Centralized view of corporate and division performance</p>
     </div>
-    <button type="button" class="pm-refresh" (click)="refresh()" [disabled]="loading()">
+    <!-- <button type="button" class="pm-refresh" (click)="refresh()" [disabled]="loading()">
       <svg lucideIcon="refresh-cw" size="16"></svg>
       <span>{{ loading() ? 'Refreshing...' : 'Refresh' }}</span>
-    </button>
+    </button> -->
   </header>
 
   <section class="pm-filters" aria-label="Performance filters">
@@ -48,7 +48,7 @@
       <div class="pm-filter">
         <label for="pm-division">Division</label>
         <select id="pm-division" [(ngModel)]="divisionId" (change)="onFilterChange()">
-          @for (d of divisions(); track d.id) {
+          @for (d of pickableDivisions(); track d.id) {
             <option [value]="d.id">{{ d.name }}</option>
           }
         </select>

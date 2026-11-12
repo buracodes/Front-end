@@ -229,6 +229,35 @@ export interface EnterKpiActualRequest {
   overrideReason?: string;
 }
 
+/** One KPI's recorded actual values for a fiscal year, as returned by the entry board. */
+export interface KpiActualsBundle {
+  kpiId: string;
+  fiscalYearId: string;
+  values: KpiActualValue[];
+}
+
+/** A scorecard holding at least one KPI the signed-in principal reports on. */
+export interface EntryScorecard {
+  id: string;
+  fiscalYearId: string;
+  name: string;
+  scope: string;
+  scorecardStatus: string;
+}
+
+/**
+ * The Data Entry board the API resolves for the signed-in principal: the KPIs they report on
+ * in one fiscal year, each with its monthly targets and recorded actuals, plus the scorecards
+ * holding them. Resolved server side, so an entry account never receives another division's KPIs.
+ */
+export interface EntryBoard {
+  fiscalYearId: string;
+  scorecards: EntryScorecard[];
+  kpis: KPI[];
+  targets: KpiTargetsBundle[];
+  actuals: KpiActualsBundle[];
+}
+
 export interface PeriodLockStatusItem {
   fiscalPeriodId: string;
   fiscalMonth: number;

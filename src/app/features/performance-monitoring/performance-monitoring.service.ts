@@ -2,7 +2,6 @@ import { Injectable, inject } from '@angular/core';
 import { Observable, map } from 'rxjs';
 import { ApiEndpoint } from '../../core/constant/ApiEndpoints';
 import { ApiService } from '../../core/service/apiService/api-service';
-import { IResponse } from '../../core/model/interface/response.interface';
 import { titleCaseEnumName } from '../../core/model/scorecard.model';
 import { PerformanceMonitoring } from './performance-monitoring.model';
 
@@ -32,9 +31,10 @@ export class PerformanceMonitoringService {
 
     const query = params.toString();
     const url = query ? `${ApiEndpoint.PerformanceMonitoring}?${query}` : ApiEndpoint.PerformanceMonitoring;
+    // This endpoint answers with the DTO itself, not the Response<T> envelope other reads use.
     return this.api
-      .get<IResponse<PerformanceMonitoring>>(url)
-      .pipe(map((r) => this.normalize(r.data!)));
+      .get<PerformanceMonitoring>(url)
+      .pipe(map((data) => this.normalize(data)));
   }
 
   /** The API serializes enums as camelCase ("corporate"); the UI compares TitleCase. */

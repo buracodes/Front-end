@@ -56,6 +56,146 @@ label {
   }
 }
 
+/* ── Period filter popover ─────────────────────────────────────────── */
+.period-field {
+  position: relative;
+
+  /* The trigger sits at the right edge of the header controls, so while the
+     popover is open its field owns the stacking order above the sticky
+     topbar/sidebar and the widget panels underneath. */
+  &.open {
+    z-index: 1200;
+  }
+}
+
+.period-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  height: 36px;
+
+  &.active {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+    background-color: var(--color-primary-light);
+  }
+}
+
+.period-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background-color: var(--color-primary);
+}
+
+.period-panel {
+  /* Fixed and viewport-clamped in the component, so no ancestor's overflow,
+     scroll container or stacking context can clip or cover the menu. */
+  position: fixed;
+  width: min(300px, calc(100vw - 24px));
+  z-index: 1200;
+  padding: var(--sp-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  animation: dx-panel-in 0.12s ease;
+}
+
+@keyframes dx-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.period-types {
+  display: flex;
+  gap: var(--sp-1);
+  margin-bottom: var(--sp-3);
+  padding: 3px;
+  background: var(--color-surface-muted);
+  border-radius: var(--radius-sm);
+
+  button {
+    flex: 1;
+    padding: var(--sp-1) var(--sp-2);
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    cursor: pointer;
+
+    &.active {
+      background: var(--color-surface);
+      color: var(--color-text);
+      box-shadow: var(--shadow-sm);
+    }
+  }
+}
+
+.period-select {
+  width: 100%;
+}
+
+.period-month-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+
+  .select {
+    flex: 1;
+    min-width: 0;
+  }
+
+  &.invalid .select {
+    border-color: var(--color-danger);
+  }
+}
+
+.period-sep {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.period-hint {
+  display: block;
+  margin: 0;
+  padding: var(--sp-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  background: var(--color-surface-muted);
+  border-radius: var(--radius-sm);
+}
+
+.period-error {
+  font-size: var(--font-size-xs);
+  color: var(--color-danger);
+  margin: var(--sp-1) 0 0;
+}
+
+.period-clear {
+  display: block;
+  margin-top: var(--sp-3);
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-primary);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
 .spinner {
   width: 18px;
   height: 18px;

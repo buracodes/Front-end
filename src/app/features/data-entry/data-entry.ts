@@ -221,7 +221,9 @@ export class DataEntryPage implements OnInit {
       departments.size === 1
         ? [...departments][0]
         : (this.state.selectedScorecard()?.name ?? '');
-    const kpiScope = this.canOverride() ? 'All KPIs in scope' : 'KPIs assigned to me';
+    const kpiScope = this.canOverride()
+      ? 'All KPIs in scope'
+      : (this.state.usesEntryScope() ? 'KPIs assigned to my division' : 'KPIs assigned to me');
     return scope ? `${scope} · ${kpiScope}` : kpiScope;
   });
 
@@ -284,7 +286,35 @@ export class DataEntryPage implements OnInit {
       const scorecardId = this.state.scorecardId();
       const fiscalYearId = this.state.fiscalYearId();
       const kpis = this.kpis();
-      if (scorecardId && fiscalYearId && kpis.length) this.loadGrid();
+      if (scorecardId && fiscalYearId && kpis.length && !this.state.usesEntryScope()) {
+        this.loadGrid();
+      }
+    });
+
+    // An entry account gets its values inside the board read, so the grid follows the board
+    // instead of issuing one actuals request per KPI.
+    effect(() => {
+      if (!this.state.usesEntryScope()) return;
+      const valuesByKpi = this.state.entryActuals();
+      const grid = new Map<string, DataCell[]>();
+      for (const kpi of this.kpis()) {
+        const byMonth = new Map<number, KpiActualValue>();
+        for (const actual of valuesByKpi.get(kpi.id) ?? []) byMonth.set(actual.fiscalMonth, actual);
+        grid.set(
+          kpi.id,
+          Array.from({ length: 12 }, (_unused, index) => {
+            const actual = byMonth.get(index + 1);
+            return {
+              value: actual?.value ?? null,
+              note: actual?.note,
+              dataSource: actual?.dataSource,
+              dirty: false,
+            };
+          })
+        );
+      }
+      this.grid.set(grid);
+      this.loadingCells.set(false);
     });
   }
 
@@ -303,6 +333,12 @@ export class DataEntryPage implements OnInit {
   }
 
   loadGrid(): void {
+    if (this.state.usesEntryScope()) {
+      this.loadingCells.set(true);
+      this.state.reloadEntryBoard();
+      return;
+    }
+
     const request = ++this.gridRequest;
     const kpis = this.kpis();
     if (!kpis.length) {

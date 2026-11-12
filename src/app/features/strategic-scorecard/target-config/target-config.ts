@@ -207,6 +207,9 @@ export class TargetConfigPage implements OnInit {
         this.annualTarget.set(annual?.targetValue ?? null);
         this.quarterly.set(quarterly);
         this.monthly.set(monthly);
+        // The annual target is the only editable value for a non-cumulative KPI, so the
+        // read-only quarter and month rows always restate it, even for older divergent rows.
+        if (!this.isCumulative() && annual) this.applyAnnualToPeriods(annual.targetValue);
         // The monthly and quarterly rows obey the same reconciliation rule either way, so the
         // flag on the quarter rows is the only record of the mode they were entered in.
         this.autoCalc.set(this.deriveAutoCalc(values));
@@ -272,12 +275,22 @@ export class TargetConfigPage implements OnInit {
   setAnnual(event: Event): void {
     const input = (event.target as HTMLInputElement).value.trim();
     const n = input === '' ? null : Number(input);
-    this.annualTarget.set(n !== null && Number.isNaN(n) ? null : n);
+    const annual = n === null || Number.isNaN(n) ? null : n;
+    this.annualTarget.set(annual);
+    // A non-cumulative KPI has one target: every quarter and fiscal month mirrors the annual value.
+    if (!this.isCumulative()) this.applyAnnualToPeriods(annual);
     this.saved.set(false);
   }
 
+  /** Non-cumulative KPIs keep all four quarters and all twelve fiscal months equal to the annual target. */
+  private applyAnnualToPeriods(annual: number | null): void {
+    const value = annual ?? 0;
+    this.quarterly.set([value, value, value, value]);
+    this.monthly.set(Array.from({ length: 12 }, () => value));
+  }
+
   setQuarterly(q: number, event: Event): void {
-    if (this.autoCalc()) return;
+    if (!this.isCumulative() || this.autoCalc()) return;
     const v = this.parseValue((event.target as HTMLInputElement).value);
     const next = this.quarterly().slice();
     next[q] = v;
@@ -286,6 +299,7 @@ export class TargetConfigPage implements OnInit {
   }
 
   setMonthly(mi: number, event: Event): void {
+    if (!this.isCumulative()) return;
     const v = this.parseValue((event.target as HTMLInputElement).value);
     const next = this.monthly().slice();
     next[mi] = v;

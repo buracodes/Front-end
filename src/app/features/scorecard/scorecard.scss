@@ -296,10 +296,32 @@
   border-radius: var(--radius);
   box-shadow: var(--shadow-lg);
   min-width: 170px;
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
   z-index: 1000;
   padding: var(--sp-2);
   margin-top: var(--sp-1);
   animation: sc-menu-in 0.12s ease;
+
+  /* Cards near the bottom of the viewport flip the menu above their trigger. */
+  &.open-up {
+    top: auto;
+    bottom: calc(100% + 4px);
+    margin-top: 0;
+    margin-bottom: var(--sp-1);
+    animation-name: sc-menu-up-in;
+  }
+}
+
+@keyframes sc-menu-up-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes sc-menu-in {

@@ -102,7 +102,7 @@
                 <svg lucideIcon="ellipsis-vertical" size="16"></svg>
               </button>
               @if (isCardMenuOpen(scorecard.id)) {
-              <div class="actions-dropdown-menu">
+              <div class="actions-dropdown-menu" [class.open-up]="openUpMenuIds().has(scorecard.id)">
                 <button type="button" class="dropdown-item" (click)="openScorecard(scorecard)">
                   <svg lucideIcon="square-pen" size="14"></svg>
                   Manage

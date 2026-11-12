@@ -157,6 +157,13 @@ describe('KpiPage owner assignment', () => {
     expect(page.ownerSearching()).toBe(false);
   });
 
+  it('defaults a new KPI to cumulative like the planning forms', () => {
+    settle();
+    page.openAddModal();
+
+    expect(page.form.controls.isCumulative.value).toBe(true);
+  });
+
   it('submits the selected individual as ownerId and never sends a division owner', () => {
     settle();
     chooseIndividual();

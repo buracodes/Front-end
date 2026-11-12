@@ -18,6 +18,8 @@ export interface DashboardFilterOption {
   label: string;
   isSelected: boolean;
   detail: string | null;
+  /** Fiscal-year only: first day of the year, so period labels follow its start month. */
+  startDate?: string | null;
 }
 
 export interface DashboardPeriodOption {

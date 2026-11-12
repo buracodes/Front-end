@@ -231,6 +231,104 @@ describe('TargetConfigPage', () => {
     expect(page.quarterLabel(3)).toBe('Q4 · Jun–Aug 2027');
   });
 
+  describe('non-cumulative target entry', () => {
+    const load = (rows: unknown[] = []): void => {
+      create();
+      kpiRequest().flush(ok(KPI));
+      scorecardRequest().flush(ok(SCORECARDS));
+      fiscalYearRequest().flush(ok(FISCAL_YEARS));
+      targetRequest().flush(ok({ targets: rows }));
+    };
+
+    const input = (value: string) => ({ target: { value } }) as unknown as Event;
+
+    it('fills all four quarters and all twelve months from the annual target', () => {
+      load();
+
+      page.setAnnual(input('250'));
+
+      expect(page.quarterly()).toEqual([250, 250, 250, 250]);
+      expect(page.monthly()).toEqual(Array(12).fill(250));
+      expect(page.summaryError()).toBeNull();
+      expect(page.canSave()).toBe(true);
+    });
+
+    it('updates every quarter and month when the annual target changes', () => {
+      load();
+      page.setAnnual(input('100'));
+      page.setAnnual(input('400'));
+
+      expect(page.quarterly()).toEqual([400, 400, 400, 400]);
+      expect(page.monthly()).toEqual(Array(12).fill(400));
+    });
+
+    it('clears the derived rows when the annual target is cleared', () => {
+      load();
+      page.setAnnual(input('100'));
+      page.setAnnual(input(''));
+
+      expect(page.annualTarget()).toBeNull();
+      expect(page.quarterly()).toEqual([0, 0, 0, 0]);
+      expect(page.monthly()).toEqual(Array(12).fill(0));
+    });
+
+    it('restates the annual target in the read-only rows even when the stored rows diverge', () => {
+      load([
+        { fiscalMonth: 12, quarter: 4, granularity: 'Annual', targetValue: 90 },
+        { fiscalMonth: 3, quarter: 1, granularity: 'Quarterly', targetValue: 40 },
+        { fiscalMonth: 5, quarter: 2, granularity: 'Monthly', targetValue: 7 },
+      ]);
+
+      expect(page.quarterly()).toEqual([90, 90, 90, 90]);
+      expect(page.monthly()).toEqual(Array(12).fill(90));
+    });
+
+    it('ignores direct edits to the read-only quarter and month rows', () => {
+      load();
+      page.setAnnual(input('200'));
+
+      page.setQuarterly(1, input('5'));
+      page.setMonthly(4, input('5'));
+
+      expect(page.quarterly()).toEqual([200, 200, 200, 200]);
+      expect(page.monthly()).toEqual(Array(12).fill(200));
+    });
+
+    it('saves the annual value into every quarter and month without auto-calculate', () => {
+      load();
+      page.setAnnual(input('120'));
+
+      page.save();
+
+      const post = http.expectOne((r) => r.method === 'POST' && r.url.includes('/api/kpitarget'));
+      expect(post.request.body).toMatchObject({
+        annualTarget: 120,
+        quarterlyTargets: [120, 120, 120, 120],
+        monthlyTargets: Array(12).fill(120),
+        autoCalculateQuarterly: false,
+      });
+      post.flush(ok(true));
+    });
+
+    it('generates a full fiscal year of months for a September start', () => {
+      load();
+      page.fiscalYear.set({
+        id: 'fy-sep',
+        label: '2026/27',
+        startDate: '2026-09-01',
+        endDate: '2027-08-31',
+        status: 'Open',
+      });
+      page.setAnnual(input('60'));
+
+      expect(page.monthly()).toHaveLength(12);
+      expect(page.monthLabel(0)).toBe('Sep');
+      expect(page.monthLabel(11)).toBe('Aug');
+      expect(page.quarterLabel(3)).toBe('Q4 · Jun–Aug 2027');
+      expect(page.quarterly()).toEqual([60, 60, 60, 60]);
+    });
+  });
+
   describe('auto-calculate mode', () => {
     const cumulativeKpi = { ...KPI, isCumulative: true };
 

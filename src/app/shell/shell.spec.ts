@@ -213,4 +213,23 @@ describe('ShellComponent navigation permissions', () => {
   it('opens Data Locking to the account that overrides locked periods', () => {
     expect(labelsFor(['actuals:view', 'kpi:override'])).toContain('Data Locking');
   });
+
+  it('hides Division Scorecard from principals without divisions:plan', () => {
+    const labels = labelsFor([
+      'dashboard:view',
+      'organization:view',
+      'division:scorecard.view',
+      'division:performance.view',
+      'division:initiative.view',
+      'actuals:view',
+    ]);
+
+    expect(labels).not.toContain('Division Scorecard');
+  });
+
+  it('shows Division Scorecard to the plan authors', () => {
+    expect(labelsFor(['dashboard:view', 'division:scorecard.view', 'divisions:plan'])).toContain(
+      'Division Scorecard'
+    );
+  });
 });

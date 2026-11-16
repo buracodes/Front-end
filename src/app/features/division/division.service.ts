@@ -51,16 +51,30 @@ export class DivisionService {
   }
 
   getPlanContextByScorecard(scorecardId: string, query?: DivisionPlanQuery, divisionId?: string): Observable<DivisionPlanDto> {
-    const parts: string[] = [];
-    if (divisionId) parts.push(`divisionId=${divisionId}`);
-    const q = this.toQueryString(query)?.replace(/^\?/, '');
-    if (q) parts.push(q);
-    const params = parts.length ? `?${parts.join('&')}` : '';
+    const params = this.planContextParams(scorecardId, query, divisionId);
     return this.api
       .get<IResponse<DivisionPlanDto>>(
         `${ApiEndpoint.Division}/plans/by-scorecard/${scorecardId}${params}`
       )
       .pipe(map((r) => r.data!));
+  }
+
+  /** Planning-workspace read; requires divisions:plan on the server, unlike the shared read above. */
+  getPlanningContext(scorecardId: string, query?: DivisionPlanQuery, divisionId?: string): Observable<DivisionPlanDto> {
+    const params = this.planContextParams(scorecardId, query, divisionId);
+    return this.api
+      .get<IResponse<DivisionPlanDto>>(
+        `${ApiEndpoint.Division}/planning/context${params}`
+      )
+      .pipe(map((r) => r.data!));
+  }
+
+  private planContextParams(scorecardId: string, query?: DivisionPlanQuery, divisionId?: string): string {
+    const parts: string[] = [`scorecardId=${scorecardId}`];
+    if (divisionId) parts.push(`divisionId=${divisionId}`);
+    const q = this.toQueryString(query)?.replace(/^\?/, '');
+    if (q) parts.push(q);
+    return `?${parts.join('&')}`;
   }
 
   setContributions(model: SetDivisionContributionsRequest): Observable<DivisionPlanDto> {

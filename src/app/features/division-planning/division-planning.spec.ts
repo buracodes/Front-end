@@ -95,8 +95,7 @@ const DIVISION_SCORECARD: Scorecard = {
 describe('DivisionPlanningPage', () => {
   let divisionService: {
     getAll: ReturnType<typeof vi.fn>;
-    getPlans: ReturnType<typeof vi.fn>;
-    getPlanContextByScorecard: ReturnType<typeof vi.fn>;
+    getPlanningContext: ReturnType<typeof vi.fn>;
     setContributions: ReturnType<typeof vi.fn>;
     updateGoal: ReturnType<typeof vi.fn>;
     createGoal: ReturnType<typeof vi.fn>;
@@ -171,8 +170,7 @@ describe('DivisionPlanningPage', () => {
     permissions = DEFAULT_PERMISSIONS;
     divisionService = {
       getAll: vi.fn(() => of([])),
-      getPlans: vi.fn(() => of([])),
-      getPlanContextByScorecard: vi.fn(() => of(PLAN)),
+      getPlanningContext: vi.fn(() => of(PLAN)),
       setContributions: vi.fn(() => of(PLAN)),
       updateGoal: vi.fn(() => of({})),
       createGoal: vi.fn(() => of({})),
@@ -201,34 +199,35 @@ describe('DivisionPlanningPage', () => {
     const page = start();
 
     expect(page.plan()?.divisionName).toBe('Retail Operations');
-    expect(divisionService.getPlanContextByScorecard).toHaveBeenCalledTimes(1);
+    expect(divisionService.getPlanningContext).toHaveBeenCalledTimes(1);
   });
 
-  it('resolves the own-division plan when the route has no scorecard id', () => {
-    divisionService.getPlans.mockReturnValue(
-      of([
-        {
-          id: 'plan-1',
-          divisionId: 'div-9',
-          scorecardId: 'sc-9',
-          fiscalYearId: 'fy-1',
-          planStatus: 'draft',
-        },
-      ])
-    );
+  it('opens the first corporate scorecard when the route has no scorecard id', () => {
+    start([CORPORATE_SCORECARD], DEFAULT_PERMISSIONS, '', null);
 
-    start([], ['division:scorecard.view', 'division:performance.view'], '', null, 'div-9');
-
-    expect(divisionService.getPlans).toHaveBeenCalledWith('div-9');
     expect(router.navigate).toHaveBeenCalledWith(
-      ['/division-planning', 'sc-9'],
-      { queryParams: { divisionId: 'div-9' }, replaceUrl: true }
+      ['/division-planning', 'sc-1'],
+      expect.objectContaining({ replaceUrl: true })
     );
   });
 
-  it('never requests the corporate scorecard catalog for a baseline employee', () => {
-    start([CORPORATE_SCORECARD], ['division:scorecard.view'], '', 'sc-1', 'div-9');
+  it('reports when no corporate scorecard exists to plan', () => {
+    const page = start([], DEFAULT_PERMISSIONS, '', null);
 
+    expect(page.loadError()).toContain('No corporate scorecard is available');
+  });
+
+  it('keeps the planning surface closed to principals without divisions:plan', () => {
+    const page = start(
+      [CORPORATE_SCORECARD],
+      ['division:scorecard.view', 'division:performance.view'],
+      '',
+      'sc-1'
+    );
+
+    expect(page.canPlan()).toBe(false);
+    expect(page.canEdit()).toBe(false);
+    // The corporate scorecard catalog is not even requested for a non-planner.
     expect(scorecardGetAll).not.toHaveBeenCalled();
   });
 
@@ -236,7 +235,7 @@ describe('DivisionPlanningPage', () => {
     const page = start([DIVISION_SCORECARD, CORPORATE_SCORECARD]);
 
     expect(page.scorecards().map((s) => s.id)).toEqual(['sc-1']);
-    expect(divisionService.getPlanContextByScorecard).toHaveBeenCalledTimes(1);
+    expect(divisionService.getPlanningContext).toHaveBeenCalledTimes(1);
   });
 
   it('redirects a division-scope route scorecard to the corporate scorecard of the same fiscal year', () => {
@@ -247,7 +246,7 @@ describe('DivisionPlanningPage', () => {
     ]);
 
     expect(router.navigate).toHaveBeenCalledWith(['/division-planning', 'sc-8'], { replaceUrl: true });
-    expect(divisionService.getPlanContextByScorecard).not.toHaveBeenCalled();
+    expect(divisionService.getPlanningContext).not.toHaveBeenCalled();
   });
 
   it('falls back to the first corporate scorecard when none shares the fiscal year', () => {
@@ -257,7 +256,7 @@ describe('DivisionPlanningPage', () => {
     ]);
 
     expect(router.navigate).toHaveBeenCalledWith(['/division-planning', 'sc-9'], { replaceUrl: true });
-    expect(divisionService.getPlanContextByScorecard).not.toHaveBeenCalled();
+    expect(divisionService.getPlanningContext).not.toHaveBeenCalled();
   });
 
   it('treats the API camelCase status "draft" as editable', () => {
@@ -268,17 +267,60 @@ describe('DivisionPlanningPage', () => {
     expect(page.canEdit()).toBe(true);
   });
 
-  it('normalizes finalized and locked statuses and blocks editing', () => {
+  it('normalizes finalized and locked statuses; only the FR-308 lock blocks editing', () => {
     const page = start();
     const planSignal = (page as unknown as { plan: { set: (p: DivisionPlanDto | null) => void } }).plan;
 
+    // The FRD does not require reopening a finalized plan to edit its structure.
     planSignal.set({ ...PLAN, planStatus: 'finalized' });
     expect(page.planStatus()).toBe('Finalized');
-    expect(page.canEdit()).toBe(false);
+    expect(page.canEdit()).toBe(true);
 
     planSignal.set({ ...PLAN, planStatus: 'locked' });
     expect(page.planStatus()).toBe('Locked');
     expect(page.canEdit()).toBe(false);
+  });
+
+  it('keeps contribution edits available on a finalized plan but not on a locked one', () => {
+    const page = start();
+    const planSignal = (page as unknown as { plan: { set: (p: DivisionPlanDto | null) => void } }).plan;
+
+    planSignal.set({ ...PLAN, planStatus: 'finalized' });
+    // FR-907 only asks for the selection to be changeable with a warning; the plan
+    // stays finalized so Data Input Users do not lose entry access.
+    expect(page.canEditContributions()).toBe(true);
+
+    planSignal.set({ ...PLAN, planStatus: 'locked' });
+    expect(page.canEditContributions()).toBe(false);
+  });
+
+  it('sends a finalized plan contribution change instead of silently ignoring the tick', async () => {
+    const page = start();
+    (page as unknown as { plan: { set: (p: DivisionPlanDto | null) => void } }).plan.set({
+      ...PLAN,
+      planStatus: 'finalized',
+    });
+
+    await page.toggleContribution('g2', true);
+
+    expect(divisionService.setContributions).toHaveBeenCalledWith({
+      divisionId: 'div-1',
+      scorecardId: 'sc-1',
+      goalIds: ['g1', 'g3', 'g2'],
+      cascadeRemoveDependents: false,
+    });
+  });
+
+  it('ignores contribution ticks on a locked plan', async () => {
+    const page = start();
+    (page as unknown as { plan: { set: (p: DivisionPlanDto | null) => void } }).plan.set({
+      ...PLAN,
+      planStatus: 'locked',
+    });
+
+    await page.toggleContribution('g2', true);
+
+    expect(divisionService.setContributions).not.toHaveBeenCalled();
   });
 
   it('seeds the linked-goal selection from persisted contributions on load', () => {
@@ -309,9 +351,10 @@ describe('DivisionPlanningPage', () => {
       cascadeRemoveDependents: false,
     });
     expect([...sent.goalIds].sort()).toEqual(['g1', 'g2', 'g3']);
-    expect(notifications.success).toHaveBeenCalled();
+    // The checkbox itself reflects the save; a contribution tick shows no toast.
+    expect(notifications.success).not.toHaveBeenCalled();
     // The page reloads the plan so the checklist reflects what the backend stored.
-    expect(divisionService.getPlanContextByScorecard).toHaveBeenCalledTimes(2);
+    expect(divisionService.getPlanningContext).toHaveBeenCalledTimes(2);
   });
 
   it('unticks a corporate goal that owns no division goals without asking', async () => {
@@ -366,11 +409,179 @@ describe('DivisionPlanningPage', () => {
 
     expect(page.divisions().map((d) => d.id)).toEqual(['div-1', 'div-2']);
     expect(page.divisionFilter()).toBe('div-1');
-    expect(divisionService.getPlanContextByScorecard).toHaveBeenCalledWith(
+    expect(divisionService.getPlanningContext).toHaveBeenCalledWith(
       'sc-1',
       expect.anything(),
       'div-1'
     );
+  });
+
+  // ── Select All ─────────────────────────────────────────────────────────
+
+  it('links every corporate goal in one update when Select All is ticked', async () => {
+    const page = start();
+
+    await page.toggleAllContributions(true);
+
+    expect(divisionService.setContributions).toHaveBeenCalledTimes(1);
+    expect(divisionService.setContributions).toHaveBeenCalledWith({
+      divisionId: 'div-1',
+      scorecardId: 'sc-1',
+      goalIds: ['g1', 'g3', 'g2'],
+      cascadeRemoveDependents: false,
+    });
+    // The saved plan is reloaded so the checklist and Select All reflect the backend.
+    expect(divisionService.getPlanningContext).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports Select All as indeterminate while only some goals are linked', () => {
+    const page = start();
+    const selectedIds = (page as unknown as {
+      selectedIds: { set: (s: Set<string>) => void };
+    }).selectedIds;
+
+    expect(page.allCorporateGoalsSelected()).toBe(false);
+    expect(page.corporateSelectionIndeterminate()).toBe(true);
+
+    selectedIds.set(new Set(['g1', 'g3', 'g2']));
+    expect(page.allCorporateGoalsSelected()).toBe(true);
+    expect(page.corporateSelectionIndeterminate()).toBe(false);
+  });
+
+  it('asks before clearing all goals when one of them owns division goals', async () => {
+    const page = start();
+    dialog.confirmChoice.mockResolvedValue('cancel');
+
+    await page.toggleAllContributions(false);
+
+    expect(dialog.confirmChoice).toHaveBeenCalled();
+    expect(divisionService.setContributions).not.toHaveBeenCalled();
+    expect([...page.selectedIds()].sort()).toEqual(['g1', 'g3']);
+  });
+
+  it('unlinks every goal with a cascade once the user confirms', async () => {
+    const page = start();
+    dialog.confirmChoice.mockResolvedValue('confirm');
+
+    await page.toggleAllContributions(false);
+
+    expect(divisionService.setContributions).toHaveBeenCalledWith({
+      divisionId: 'div-1',
+      scorecardId: 'sc-1',
+      goalIds: [],
+      cascadeRemoveDependents: true,
+    });
+  });
+
+  it('does not call the API when every goal is already selected and Select All is ticked', async () => {
+    const page = start();
+    (page as unknown as { plan: { set: (p: DivisionPlanDto | null) => void } }).plan.set({
+      ...PLAN,
+      contributions: [
+        { goalId: 'g1', name: 'Grow revenue', weight: 100 },
+        { goalId: 'g2', name: 'Expand ops', weight: 100 },
+        { goalId: 'g3', name: 'Improve efficiency', weight: 100 },
+        { goalId: 'g4', name: 'Extra goal', weight: 100 },
+      ],
+      availableGoals: [],
+    });
+
+    await page.toggleAllContributions(true);
+
+    expect(divisionService.setContributions).not.toHaveBeenCalled();
+  });
+
+  // ── Collapsible division goal cards ────────────────────────────────────
+
+  it('collapses and re-expands each division goal independently', () => {
+    const page = start();
+    (page as unknown as { plan: { set: (p: DivisionPlanDto | null) => void } }).plan.set({
+      ...PLAN,
+      goals: [
+        PLAN.goals[0],
+        { ...PLAN.goals[0], id: 'dg2', name: 'Trade finance' } as DivisionGoalDto,
+      ],
+    });
+
+    expect(page.isGoalExpanded('dg1')).toBe(true);
+    expect(page.isGoalExpanded('dg2')).toBe(true);
+
+    page.toggleGoal('dg1');
+    expect(page.isGoalExpanded('dg1')).toBe(false);
+    expect(page.isGoalExpanded('dg2')).toBe(true);
+
+    page.toggleGoal('dg1');
+    expect(page.isGoalExpanded('dg1')).toBe(true);
+  });
+
+  // ── Division picker ────────────────────────────────────────────────────
+
+  it('filters the division picker by name and shows the selected division', () => {
+    divisionService.getAll.mockReturnValue(
+      of([
+        { id: 'div-2', name: 'Beta Division' },
+        { id: 'div-1', name: 'Alpha Division' },
+      ])
+    );
+
+    const page = start();
+
+    expect(page.selectedDivisionName()).toBe('Alpha Division');
+
+    page.divisionSearch.set('beta');
+    expect(page.filteredDivisions().map((d) => d.id)).toEqual(['div-2']);
+
+    page.divisionSearch.set('   ');
+    expect(page.filteredDivisions()).toHaveLength(2);
+  });
+
+  it('clears the previous division plan and goal selection when the division changes', () => {
+    divisionService.getAll.mockReturnValue(
+      of([
+        { id: 'div-1', name: 'Alpha Division' },
+        { id: 'div-2', name: 'Beta Division' },
+      ])
+    );
+    divisionService.getPlanningContext.mockImplementation(
+      (_scorecardId: string, _query: unknown, divisionId?: string) =>
+        of(
+          divisionId === 'div-2'
+            ? {
+                ...PLAN,
+                divisionId: 'div-2',
+                divisionName: 'Beta Division',
+                contributions: [],
+                availableGoals: [],
+                goals: [],
+              }
+            : PLAN
+        )
+    );
+
+    const page = start();
+    page.toggleGoal('dg1');
+
+    page.selectDivision('div-2');
+
+    expect(divisionService.getPlanningContext).toHaveBeenLastCalledWith(
+      'sc-1',
+      expect.anything(),
+      'div-2'
+    );
+    expect(page.plan()?.divisionId).toBe('div-2');
+    expect(page.selectedIds().size).toBe(0);
+    // Collapse state does not leak between divisions.
+    expect(page.isGoalExpanded('dg1')).toBe(true);
+    expect(page.divisionPickerOpen()).toBe(false);
+  });
+
+  it('ignores a division re-selection of the division already loaded', () => {
+    divisionService.getAll.mockReturnValue(of([{ id: 'div-1', name: 'Alpha Division' }]));
+    const page = start();
+
+    page.selectDivision('div-1');
+
+    expect(divisionService.getPlanningContext).toHaveBeenCalledTimes(1);
   });
 
   it('surfaces the currently linked corporate goals for the goal-modal picker', () => {
@@ -476,6 +687,21 @@ describe('DivisionPlanningPage', () => {
     });
   });
 
+  it('sums division goal weights so below-100 totals can be normalized', () => {
+    const page = start();
+    (page as unknown as { plan: { set: (p: DivisionPlanDto | null) => void } }).plan.set({
+      ...PLAN,
+      goals: [
+        { ...PLAN.goals[0], weight: 40 },
+        { ...PLAN.goals[0], id: 'dg2', name: 'Service quality', weight: 30 },
+      ],
+    });
+
+    expect(page.divisionGoalWeightTotal()).toBe(70);
+    // Below-100 totals are legal while planning; scores normalize proportionally.
+    expect(page.canEdit()).toBe(true);
+  });
+
   it('clamps report progress bars to the 0-100 range', () => {
     const page = start();
     (page as unknown as { plan: { set: (p: DivisionPlanDto | null) => void } }).plan.set({
@@ -532,66 +758,48 @@ describe('DivisionPlanningPage', () => {
     expect(page.donutSegments()[0].dash).toBeCloseTo(0.392, 3);
   });
 
-  it('publishes ytd, full year, quarters, months and month range as period options', () => {
+  it('defaults to the YTD period filter', () => {
     const page = start();
 
-    const values = page.periodOptions().map((o) => o.value);
-    expect(values).toContain('Ytd');
-    expect(values).toContain('Year');
-    expect(values).toContain('Q1');
-    expect(values).toContain('M1');
-    expect(values).toContain('Range');
+    expect(page.periodFilter()).toEqual({ type: 'Ytd' });
+    expect((page as unknown as { periodQuery: () => unknown }).periodQuery()).toEqual({
+      periodType: 'Ytd',
+    });
   });
 
-  it('maps the selected period to the backend filter', () => {
+  it('maps the selected period filter to the backend query', () => {
     const page = start();
-    const query = (page as unknown as { periodQuery: () => unknown }).periodQuery();
 
-    page.reportPeriod.set('Q2');
+    page.onPeriodFilterChange({ type: 'Quarter', quarter: 2 });
     expect((page as unknown as { periodQuery: () => unknown }).periodQuery()).toEqual({
       periodType: 'Quarter',
       quarter: 2,
     });
 
-    page.reportPeriod.set('M3');
-    expect((page as unknown as { periodQuery: () => unknown }).periodQuery()).toEqual({
-      periodType: 'Month',
-      fromMonth: 3,
-      toMonth: 3,
-      year: 2026,
-    });
-
-    page.reportPeriod.set('Year');
-    expect((page as unknown as { periodQuery: () => unknown }).periodQuery()).toEqual({
-      periodType: 'Year',
-      year: 2026,
-    });
-
-    page.reportPeriod.set('Ytd');
-    expect(query).toEqual({ periodType: 'Ytd' });
-  });
-
-  it('maps the month-range filter to from/to months on the backend filter', () => {
-    const page = start();
-
-    page.reportPeriod.set('Range');
-    page.onRangeChange(3, 6);
-
-    expect(page.rangeFromMonth()).toBe(3);
-    expect(page.rangeToMonth()).toBe(6);
+    page.onPeriodFilterChange({ type: 'Month', fromMonth: 3, toMonth: 6 });
     expect((page as unknown as { periodQuery: () => unknown }).periodQuery()).toEqual({
       periodType: 'Month',
       fromMonth: 3,
       toMonth: 6,
       year: 2026,
     });
+
+    page.onPeriodFilterChange({ type: 'Year', fiscalYearId: 'fy-1' });
+    expect((page as unknown as { periodQuery: () => unknown }).periodQuery()).toEqual({
+      periodType: 'Year',
+      year: 2026,
+    });
+
+    page.onPeriodFilterChange({ type: 'Ytd' });
+    expect((page as unknown as { periodQuery: () => unknown }).periodQuery()).toEqual({
+      periodType: 'Ytd',
+    });
   });
 
   it('normalizes an inverted month range before querying', () => {
     const page = start();
 
-    page.reportPeriod.set('Range');
-    page.onRangeChange(11, 2);
+    page.onPeriodFilterChange({ type: 'Month', fromMonth: 11, toMonth: 2 });
 
     expect((page as unknown as { periodQuery: () => unknown }).periodQuery()).toEqual({
       periodType: 'Month',
@@ -599,6 +807,30 @@ describe('DivisionPlanningPage', () => {
       toMonth: 11,
       year: 2026,
     });
+  });
+
+  it('treats a month filter without a To month as a single month', () => {
+    const page = start();
+
+    page.onPeriodFilterChange({ type: 'Month', fromMonth: 3 });
+
+    expect((page as unknown as { periodQuery: () => unknown }).periodQuery()).toEqual({
+      periodType: 'Month',
+      fromMonth: 3,
+      toMonth: 3,
+      year: 2026,
+    });
+  });
+
+  it('labels period columns with the selected month, quarter or YTD', () => {
+    const page = start();
+    const label = () => (page as unknown as { periodColumnLabel: () => string }).periodColumnLabel();
+
+    expect(label()).toBe('YTD');
+    page.onPeriodFilterChange({ type: 'Month', fromMonth: 3 });
+    expect(label()).toBe('September');
+    page.onPeriodFilterChange({ type: 'Quarter', quarter: 2 });
+    expect(label()).toBe('Q2');
   });
 
   it('builds the report from the division goals and their KPIs with normalized rag', () => {
@@ -664,7 +896,7 @@ describe('DivisionPlanningPage', () => {
   it('exports the current period on the division-performance template', () => {
     const page = start();
 
-    page.reportPeriod.set('Q4');
+    page.onPeriodFilterChange({ type: 'Quarter', quarter: 4 });
     page.exportPlan('xlsx', { stopPropagation: () => {} } as Event);
 
     expect(reportService.export).toHaveBeenCalledWith(
@@ -853,14 +1085,14 @@ describe('DivisionPlanningPage', () => {
   });
 
   it('retries the plan load after a failure', () => {
-    divisionService.getPlanContextByScorecard.mockReturnValueOnce(throwError(() => new Error('down')));
+    divisionService.getPlanningContext.mockReturnValueOnce(throwError(() => new Error('down')));
 
     const page = start();
     expect(page.loadError()).toBeTruthy();
 
     page.retryLoad();
 
-    expect(divisionService.getPlanContextByScorecard).toHaveBeenCalledTimes(2);
+    expect(divisionService.getPlanningContext).toHaveBeenCalledTimes(2);
     expect(page.loadError()).toBeNull();
   });
 
@@ -897,29 +1129,31 @@ describe('DivisionPlanningPage', () => {
         { id: 'div-2', name: 'Beta Division' },
       ])
     );
-    divisionService.getPlanContextByScorecard.mockReturnValue(
+    divisionService.getPlanningContext.mockReturnValue(
       of({ ...PLAN, divisionId: 'div-2', divisionName: 'Beta Division' })
     );
 
     const page = start([], DEFAULT_PERMISSIONS, 'div-2');
 
     expect(page.divisionFilter()).toBe('div-2');
-    expect(divisionService.getPlanContextByScorecard).toHaveBeenCalledWith(
+    expect(divisionService.getPlanningContext).toHaveBeenCalledWith(
       'sc-1',
       expect.anything(),
       'div-2'
     );
   });
 
-  it('does not open target configuration after the plan is finalized', () => {
+  it('keeps target configuration available on a finalized plan but not on a locked one', () => {
     const page = start([], [...DEFAULT_PERMISSIONS, 'targets:edit']);
-    (page as unknown as { plan: { set: (p: DivisionPlanDto | null) => void } }).plan.set({
-      ...PLAN,
-      planStatus: 'finalized',
-    });
+    const planSignal = (page as unknown as { plan: { set: (p: DivisionPlanDto | null) => void } }).plan;
 
+    planSignal.set({ ...PLAN, planStatus: 'finalized' });
     page.openKpiTargets(page.divisionGoals()[0].kpis[0]);
+    expect(router.navigate).toHaveBeenCalled();
 
+    router.navigate.mockClear();
+    planSignal.set({ ...PLAN, planStatus: 'locked' });
+    page.openKpiTargets(page.divisionGoals()[0].kpis[0]);
     expect(router.navigate).not.toHaveBeenCalled();
   });
 });

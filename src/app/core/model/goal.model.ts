@@ -75,8 +75,12 @@ export interface KpiOwnerOption {
 export interface KPI {
   id: string;
   scorecardId: string;
+  /** Resolved display names; carried by the catalog and entry-board reads for grouping. */
+  scorecardName?: string;
   kraId?: string;
+  kraName?: string;
   goalId?: string;
+  goalName?: string;
   /** Set for KPIs owned by a division goal; these never belong to the corporate workspace. */
   divisionGoalId?: string;
   name: string;

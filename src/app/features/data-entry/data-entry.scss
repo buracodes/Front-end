@@ -236,6 +236,109 @@
   }
 }
 
+/* Collapsible Goal › KRA hierarchy */
+.entry-goal-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5);
+}
+
+.entry-goal-card {
+  border: 1px solid var(--entry-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.entry-goal-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: 10px var(--sp-3);
+  border: 0;
+  background: var(--color-surface-muted);
+  color: var(--entry-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--color-primary-lighter);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: -2px;
+  }
+}
+
+.entry-goal-chevron {
+  flex: none;
+  color: var(--entry-muted-strong);
+  transition: transform 0.15s ease;
+
+  &.open {
+    transform: rotate(90deg);
+  }
+}
+
+.entry-goal-text {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.entry-goal-name {
+  font-size: var(--entry-fs-title);
+  font-weight: 700;
+  color: var(--entry-text);
+}
+
+.entry-goal-meta {
+  font-size: var(--entry-fs-label);
+  color: var(--entry-muted);
+}
+
+.entry-goal-body {
+  border-top: 1px solid var(--entry-border);
+}
+
+.entry-kra-block {
+  & + & {
+    border-top: 1px solid #f1f3ef;
+  }
+}
+
+.entry-kra-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: 8px var(--sp-3) 6px;
+}
+
+.entry-kra-name {
+  font-size: var(--entry-fs-sub);
+  font-weight: 700;
+  color: var(--entry-text);
+}
+
+.entry-kra-meta {
+  font-size: var(--entry-fs-label);
+  color: var(--entry-muted);
+}
+
+.entry-scope-value {
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  color: var(--entry-text);
+  white-space: nowrap;
+}
+
 .entry-input {
   box-sizing: border-box;
   height: 26px;
@@ -374,6 +477,10 @@
   }
 
   .entry-panel-head {
+    padding: var(--sp-3) var(--sp-4);
+  }
+
+  .entry-goal-list {
     padding: var(--sp-3) var(--sp-4);
   }
 }

@@ -4,10 +4,9 @@ import { guestGuard } from './core/guard/guest.guard';
 import { permissionGuard } from './core/guard/permission.guard';
 
 /**
- * Legacy planning/administration rights and the baseline division views both reach these
- * read-only pages. The server still applies the employee's HR division scope to every read.
+ * Division Planning is the Admin/Power User authoring surface; the backend gates the same
+ * mutations and the planning read on `divisions:plan`.
  */
-const DIVISION_SCORECARD_ACCESS = ['divisions:view', 'division:scorecard.view', 'division:performance.view'];
 const INITIATIVE_ACCESS = ['initiatives:view', 'division:initiative.view'];
 const PERFORMANCE_ACCESS = ['dashboard:view', 'division:performance.view'];
 
@@ -48,16 +47,16 @@ export const routes: Routes = [
         loadComponent: () => import('./features/score-plann/score').then((m) => m.score),
       },
       {
-        // Baseline employees land here without a scorecard id; the page resolves their own
-        // division's plan. The backend still decides which division and scorecard that is.
+        // Admin/Power User only. The page resolves the corporate scorecard and division;
+        // the backend independently enforces divisions:plan on every planning operation.
         path: 'division-planning',
-        canActivate: [permissionGuard(DIVISION_SCORECARD_ACCESS)],
+        canActivate: [permissionGuard('divisions:plan')],
         loadComponent: () =>
           import('./features/division-planning/division-planning').then((m) => m.DivisionPlanningPage),
       },
       {
         path: 'division-planning/:scorecardId',
-        canActivate: [permissionGuard(DIVISION_SCORECARD_ACCESS)],
+        canActivate: [permissionGuard('divisions:plan')],
         loadComponent: () =>
           import('./features/division-planning/division-planning').then((m) => m.DivisionPlanningPage),
       },

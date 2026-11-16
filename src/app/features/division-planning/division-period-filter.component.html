@@ -1,0 +1,142 @@
+<div #container class="relative">
+  <button
+    type="button"
+    class="period-trigger btn btn-secondary inline-flex items-center gap-2"
+    [class.is-active]="open() || active()"
+    [disabled]="disabled()"
+    aria-haspopup="dialog"
+    [attr.aria-expanded]="open()"
+    (click)="toggle()"
+  >
+    <span>Filter by Period:</span>
+    <span
+      class="max-w-[12rem] truncate font-semibold"
+      [attr.title]="summary()"
+      data-testid="period-badge"
+    >{{ summary() }}</span>
+    @if (active()) {
+      <span class="h-[7px] w-[7px] shrink-0 rounded-full bg-[var(--color-primary)]" aria-label="Period filter active"></span>
+    }
+    <svg
+      aria-hidden="true"
+      lucideIcon="chevron-down"
+      size="12"
+      class="shrink-0 transition-transform"
+      [class.rotate-180]="open()"
+    ></svg>
+  </button>
+
+  @if (open()) {
+    <div
+      class="period-panel absolute right-0 top-full z-[1200] mt-1.5 w-[320px] max-w-[calc(100vw-2rem)] rounded-[var(--radius)] border border-[var(--color-border)] bg-white p-3 shadow-[var(--shadow-lg)]"
+      role="dialog"
+      aria-label="Filter by period"
+    >
+      <div class="grid grid-cols-4 gap-1 rounded-[var(--radius-sm)] bg-[var(--color-surface-muted)] p-[3px]" role="tablist">
+        @for (item of tabs; track item.value) {
+          <button
+            type="button"
+            role="tab"
+            class="period-tab rounded-[var(--radius-sm)] px-2 py-1 text-[13px] font-semibold transition"
+            [attr.aria-selected]="tab() === item.value"
+            [ngClass]="
+              tab() === item.value
+                ? 'bg-[var(--color-surface)] text-[var(--color-text)] shadow-[var(--shadow-sm)]'
+                : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
+            "
+            (click)="selectTab(item.value)"
+          >
+            {{ item.label }}
+          </button>
+        }
+      </div>
+
+      <div class="mt-3 min-h-[96px]">
+        @if (tab() === 'Ytd') {
+          <p class="period-hint rounded-[var(--radius-sm)] bg-[var(--color-primary-light)] px-3 py-2 text-xs leading-relaxed text-[var(--color-primary-dark)]">
+            Shows Year-to-Date (fiscal year start to current period).
+          </p>
+        } @else if (tab() === 'Month') {
+          <div class="space-y-2.5">
+            <label class="block">
+              <span class="form-label">From Month</span>
+              <select
+                class="month-from form-control"
+                aria-label="From month"
+                [disabled]="disabled()"
+                (change)="onMonthFrom($any($event.target).value)"
+              >
+                <option value="">Select month</option>
+                @for (month of monthOptions(); track month.value) {
+                  <option [value]="month.value" [selected]="month.value === monthFrom()">{{ month.label }}</option>
+                }
+              </select>
+            </label>
+            <label class="block">
+              <span class="form-label">
+                To Month <span class="font-normal text-[var(--color-text-muted)]">(optional)</span>
+              </span>
+              <select
+                class="month-to form-control"
+                aria-label="To month"
+                [disabled]="disabled()"
+                (change)="onMonthTo($any($event.target).value)"
+              >
+                <option value="">Same as From</option>
+                @for (month of monthOptions(); track month.value) {
+                  <option [value]="month.value" [selected]="month.value === monthTo()">{{ month.label }}</option>
+                }
+              </select>
+            </label>
+            @if (monthRangeInvalid()) {
+              <p class="text-xs font-medium text-[var(--color-danger)]">From month must be before or equal to To month.</p>
+            } @else {
+              <p class="text-xs leading-relaxed text-[var(--color-text-muted)]">
+                Leave “To Month” empty to report a single month.
+              </p>
+            }
+          </div>
+        } @else if (tab() === 'Quarter') {
+          <label class="block">
+            <span class="form-label">Quarter</span>
+            <select
+              class="quarter-select form-control"
+              aria-label="Quarter"
+              [disabled]="disabled()"
+              (change)="onQuarter($any($event.target).value)"
+            >
+              <option value="">Select a quarter</option>
+              @for (option of quarterOptions(); track option.value) {
+                <option [value]="option.value" [selected]="option.value === quarter()">{{ option.label }}</option>
+              }
+            </select>
+          </label>
+        } @else {
+          <label class="block">
+            <span class="form-label">Fiscal Year</span>
+            <select
+              class="year-select form-control"
+              aria-label="Fiscal year"
+              [disabled]="disabled()"
+              (change)="onYear($any($event.target).value)"
+            >
+              @for (year of yearOptions(); track year.id) {
+                <option [value]="year.id" [selected]="year.id === selectedYearId()">{{ year.label }}</option>
+              }
+            </select>
+          </label>
+        }
+      </div>
+
+      <div class="mt-3 border-t border-[var(--color-border)] pt-3">
+        <button
+          type="button"
+          class="period-clear btn btn-secondary w-full"
+          (click)="clear()"
+        >
+          Clear Period Filter
+        </button>
+      </div>
+    </div>
+  }
+</div>

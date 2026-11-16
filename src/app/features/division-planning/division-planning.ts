@@ -22,6 +22,10 @@ import { DivisionActualValueDto, EnterDivisionActualValueRequest } from '../divi
 import { fiscalMonthForDate, fiscalMonthLabel } from '../strategic-scorecard/workspace-state.service';
 import { ReportExportFormat, ReportFilter, ReportService, downloadBlob } from '../reports/report.service';
 import { toApiError } from '../../core/model/api-error';
+import {
+  DivisionPeriodFilter,
+  DivisionPeriodFilterComponent,
+} from './division-period-filter.component';
 
 import { LucideDynamicIcon } from '@lucide/angular';
 
@@ -46,7 +50,7 @@ interface ReportGoalRow {
   progress: number;
 }
 
-type ReportPeriod = 'Ytd' | 'Year' | 'Q1' | 'Q2' | 'Q3' | 'Q4' | 'M1' | 'M2' | 'M3' | 'M4' | 'M5' | 'M6' | 'M7' | 'M8' | 'M9' | 'M10' | 'M11' | 'M12' | 'Range';
+type CanonicalPlanStatus = 'Draft' | 'Finalized' | 'Locked';
 
 const round1 = (n: number): number => Math.round(n * 10) / 10;
 
@@ -55,8 +59,6 @@ const normalizeStatus = (value?: string | null): RagStatus | undefined => {
   const lower = value?.toLowerCase();
   return lower === 'green' || lower === 'amber' || lower === 'red' ? lower : undefined;
 };
-
-type CanonicalPlanStatus = 'Draft' | 'Finalized' | 'Locked';
 
 /** The API serializes the enum as camelCase ("draft"); the UI compares TitleCase. */
 const normalizePlanStatus = (value?: string | null): CanonicalPlanStatus => {
@@ -68,7 +70,7 @@ const normalizePlanStatus = (value?: string | null): CanonicalPlanStatus => {
 
 @Component({
   selector: 'app-division-planning',
-  imports: [ReactiveFormsModule, FormsModule, LucideDynamicIcon],
+  imports: [ReactiveFormsModule, FormsModule, LucideDynamicIcon, DivisionPeriodFilterComponent],
   templateUrl: './division-planning.html',
   styleUrl: './division-planning.scss',
 })
@@ -103,8 +105,15 @@ private readonly notifications = inject(NotificationService);
   readonly planStatus = computed<CanonicalPlanStatus>(() => normalizePlanStatus(this.plan()?.planStatus));
 
   readonly canPlan = computed(() => this.userStore.hasPermission('divisions:plan'));
-  /** Editing is only allowed while the plan is still a draft and the user may plan divisions. */
-  readonly canEdit = computed(() => this.canPlan() && this.planStatus() === 'Draft');
+  /**
+   * The FRD does not require reopening a finalized plan to edit its structure; only the
+   * FR-308 lock closes the plan. Finalization stays a validation checkpoint for entry.
+   */
+  readonly canEdit = computed(
+    () => this.canPlan() && this.planStatus() !== 'Locked' && !this.loading()
+  );
+  /** FR-907: contribution selections stay changeable while the plan is not locked. */
+  readonly canEditContributions = computed(() => this.canEdit());
   /** Target configuration is its own capability, matching the corporate scorecard. */
   readonly canConfigureTargets = computed(() => this.userStore.hasPermission('targets:edit'));
   /** FR-908: the division performance report is a separately granted capability. */
@@ -122,7 +131,13 @@ private readonly notifications = inject(NotificationService);
   readonly hasDivision = computed(() => !!this.plan()?.divisionId);
   readonly hasDivisionGoals = computed(() => this.divisionGoals().length > 0);
   readonly hasDivisionKpis = computed(() => this.divisionGoals().some((g) => g.kpis.length > 0));
-  readonly canFinalize = computed(() => this.canEdit() && this.hasDivisionGoals() && this.hasDivisionKpis());
+  readonly canFinalize = computed(
+    () =>
+      this.planStatus() === 'Draft' &&
+      this.canEdit() &&
+      this.hasDivisionGoals() &&
+      this.hasDivisionKpis()
+  );
 
   stepState(stepId: number): 'done' | 'active' | 'idle' {
     const status = this.planStatus();
@@ -157,7 +172,7 @@ private readonly notifications = inject(NotificationService);
   });
   readonly scorecardName = computed(() => this.plan()?.scorecardName ?? '');
 
-  private readonly selectedFiscalYear = computed(() => {
+  readonly selectedFiscalYear = computed(() => {
     const fyId = this.plan()?.fiscalYearId;
     return this.fiscalYears().find((fy) => fy.id === fyId) ?? null;
   });
@@ -197,6 +212,15 @@ private readonly notifications = inject(NotificationService);
   readonly selectedCorporateGoalCount = computed(() => this.selectedIds().size);
   readonly selectionSaving = signal(false);
 
+  readonly allCorporateGoalsSelected = computed(
+    () => this.corporateGoals().length > 0 && this.selectedIds().size === this.corporateGoals().length
+  );
+
+  /** Some but not all corporate goals are linked — drives the Select All indeterminate state. */
+  readonly corporateSelectionIndeterminate = computed(
+    () => this.selectedIds().size > 0 && !this.allCorporateGoalsSelected()
+  );
+
   /**
    * Ticking a corporate goal links or unlinks the division immediately — there is no
    * separate Save/Revert step. The checkbox is updated optimistically and rolled back if
@@ -204,19 +228,37 @@ private readonly notifications = inject(NotificationService);
    * whether those goals and their KPIs should be deleted with it.
    */
   async toggleContribution(id: string, checked: boolean): Promise<void> {
-    if (!this.canEdit() || this.selectionSaving()) return;
-    const p = this.plan();
-    if (!p) return;
-    if (!p.divisionId) {
+    if (!this.canEditContributions() || this.selectionSaving()) return;
+    if (!this.plan()?.divisionId) {
       this.notifications.error('Select a division before linking corporate goals.');
       return;
     }
 
-    const persisted = new Set(p.contributions.map((c) => c.goalId));
     const next = new Set(this.selectedIds());
     if (checked) next.add(id);
     else next.delete(id);
+    await this.persistSelection(next);
+  }
 
+  /** Select All ticks every corporate goal; clearing it unlinks every goal in one update. */
+  async toggleAllContributions(checked: boolean): Promise<void> {
+    if (!this.canEditContributions() || this.selectionSaving()) return;
+    if (!this.plan()?.divisionId) {
+      this.notifications.error('Select a division before linking corporate goals.');
+      return;
+    }
+
+    const next = checked
+      ? new Set(this.corporateGoals().map((goal) => goal.id))
+      : new Set<string>();
+    await this.persistSelection(next);
+  }
+
+  private async persistSelection(next: Set<string>): Promise<void> {
+    const p = this.plan();
+    if (!p?.divisionId) return;
+
+    const persisted = new Set(p.contributions.map((c) => c.goalId));
     const unchanged =
       next.size === persisted.size && [...next].every((goalId) => persisted.has(goalId));
     if (unchanged) return;
@@ -236,7 +278,7 @@ private readonly notifications = inject(NotificationService);
           .filter((n): n is string => !!n);
         const choice = await this.dialog.confirmChoice(
           'Remove corporate goal?',
-          `“${removedNames.join('”, “')}” still has division goal${dependents.length > 1 ? 's' : ''}: ${dependents.map((g) => `“${g.name}”`).join(', ')}. Keep ${dependents.length > 1 ? 'them' : 'it'} and ${dependents.length > 1 ? 'their' : 'its'} KPIs in the plan, or delete ${dependents.length > 1 ? 'them' : 'it'} together with the corporate goal?`,
+          `This will also remove all division goals and KPIs under “${removedNames.join('”, “')}” if you choose delete. “${removedNames.join('”, “')}” still has division goal${dependents.length > 1 ? 's' : ''}: ${dependents.map((g) => `“${g.name}”`).join(', ')}. Keep ${dependents.length > 1 ? 'them' : 'it'} and ${dependents.length > 1 ? 'their' : 'its'} KPIs in the plan, or delete ${dependents.length > 1 ? 'them' : 'it'} together with the corporate goal?`,
           {
             confirmText: 'Delete goals & KPIs',
             extraText: 'Keep goals & KPIs',
@@ -264,7 +306,7 @@ private readonly notifications = inject(NotificationService);
       .subscribe({
         next: () => {
           this.selectionSaving.set(false);
-          this.notifications.success('Corporate goals updated.');
+          // The checklist itself reflects the save; no toast is shown for a contribution tick.
           this.reloadPlan();
         },
         error: (error) => {
@@ -284,6 +326,29 @@ readonly divisionGoals = computed<DivisionGoalDto[]>(() =>
       kpis: (g.kpis ?? []).map((k) => ({ ...k, status: normalizeStatus(k.status) })),
     }))
   );
+
+  /** FR-905/FR-903: below-100 totals stay valid for scoring (normalized proportionally);
+   *  only finalization requires exactly 100%. */
+  readonly divisionGoalWeightTotal = computed(() =>
+    round1(this.divisionGoals().reduce((sum, g) => sum + (g.weight ?? 0), 0))
+  );
+
+  /** Division goal cards start expanded; each card collapses independently. */
+  private readonly collapsedGoals = signal<ReadonlySet<string>>(new Set<string>());
+
+  isGoalExpanded(goalId: string): boolean {
+    return !this.collapsedGoals().has(goalId);
+  }
+
+  toggleGoal(goalId: string): void {
+    const next = new Set(this.collapsedGoals());
+    if (next.has(goalId)) {
+      next.delete(goalId);
+    } else {
+      next.add(goalId);
+    }
+    this.collapsedGoals.set(next);
+  }
 
   /** FR-908: the report lists every goal followed by its KPIs, so targets, actuals and
    *  per-KPI scores are visible — not just the rolled-up goal score. */
@@ -378,81 +443,78 @@ readonly overallScore = computed(() => {
 
   // ── Period filter ───────────────────────────────────────────────────────
 
-  readonly reportPeriod = signal<ReportPeriod>('Ytd');
-  readonly rangeFromMonth = signal(1);
-  readonly rangeToMonth = signal(12);
+  /** FR-908: the tabbed YTD / Month / Quarter / Year filter applied to the plan. */
+  readonly periodFilter = signal<DivisionPeriodFilter>({ type: 'Ytd' });
 
-  /** FR-908: a start/end fiscal-month pair for the Month Range filter. */
-  onRangeChange(from: number, to: number): void {
-    this.rangeFromMonth.set(from);
-    this.rangeToMonth.set(to);
-    this.reloadPlan();
-  }
-
-readonly periodOptions = computed(() => {
-    const fy = this.selectedFiscalYear();
-    const short = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-    ];
-    if (!fy?.startDate) {
-      return [
-        { value: 'Ytd' as ReportPeriod, label: 'Year to date' },
-        { value: 'Range' as ReportPeriod, label: 'Month range' },
-        { value: 'Year' as ReportPeriod, label: 'Full fiscal year' },
-        { value: 'Q1', label: 'Q1' },
-        { value: 'Q2', label: 'Q2' },
-        { value: 'Q3', label: 'Q3' },
-        { value: 'Q4', label: 'Q4' },
-      ];
+  /**
+   * The Year tab selects a full fiscal year, which can point at a different scorecard.
+   * Switch to that year's corporate scorecard when one exists; otherwise keep the old
+   * filter and say why. Every other mode stays inside the open plan's fiscal year.
+   */
+  onPeriodFilterChange(filter: DivisionPeriodFilter): void {
+    if (filter.type === 'Year' && filter.fiscalYearId && filter.fiscalYearId !== this.selectedFiscalYear()?.id) {
+      const target = this.scorecards().find((s) => s.fiscalYearId === filter.fiscalYearId);
+      if (!target) {
+        this.notifications.error('No corporate scorecard exists for that fiscal year.');
+        return;
+      }
+      this.periodFilter.set(filter);
+      this.scorecardFilter.set(target.id);
+      const queryParams = this.divisionFilter() ? { divisionId: this.divisionFilter() } : undefined;
+      void this.router.navigate(['/division-planning', target.id], { queryParams, replaceUrl: true });
+      return;
     }
-    const startMonth = Number(fy.startDate.slice(5, 7)) - 1;
-    const startYear = Number(fy.startDate.slice(0, 4));
-    const quarters: Array<{ value: ReportPeriod; label: string }> = [0, 1, 2, 3].map((q) => {
-      const from = (startMonth + q * 3) % 12;
-      const to = (startMonth + q * 3 + 2) % 12;
-      const toYear = to < from ? startYear + 1 : startYear;
-      return {
-        value: `Q${q + 1}` as ReportPeriod,
-        label: `Q${q + 1} · ${short[from]}–${short[to]} ${toYear}`,
-      };
-    });
-    const months: Array<{ value: ReportPeriod; label: string }> = Array.from({ length: 12 }, (_unused, i) => {
-      const fiscalMonth = i + 1;
-      return {
-        value: `M${fiscalMonth}` as ReportPeriod,
-        label: fiscalMonthLabel(fy.startDate, fiscalMonth),
-      };
-    });
-    return [
-      { value: 'Ytd', label: 'Year to date' },
-      { value: 'Range' as ReportPeriod, label: 'Month range' },
-      { value: 'Year', label: 'Full fiscal year' },
-      ...quarters,
-      ...months,
-    ];
-  });
-
-  onPeriodChange(): void {
+    this.periodFilter.set(filter);
     this.reloadPlan();
   }
 
   private readonly periodQuery = computed(() => {
-    const period = this.reportPeriod();
+    const filter = this.periodFilter();
     const fy = this.selectedFiscalYear();
     const startYear = fy?.startDate ? Number(fy.startDate.slice(0, 4)) : undefined;
-    if (period === 'Ytd') return { periodType: 'Ytd' as const };
-    if (period === 'Range') {
-      return {
-        periodType: 'Month' as const,
-        fromMonth: Math.min(this.rangeFromMonth(), this.rangeToMonth()),
-        toMonth: Math.max(this.rangeFromMonth(), this.rangeToMonth()),
-        year: startYear,
-      };
+    switch (filter.type) {
+      case 'Month': {
+        if (!filter.fromMonth) return { periodType: 'Ytd' as const };
+        const from = filter.fromMonth;
+        const to = filter.toMonth ?? from;
+        return {
+          periodType: 'Month' as const,
+          fromMonth: Math.min(from, to),
+          toMonth: Math.max(from, to),
+          year: startYear,
+        };
+      }
+      case 'Quarter':
+        return filter.quarter
+          ? { periodType: 'Quarter' as const, quarter: filter.quarter }
+          : { periodType: 'Ytd' as const };
+      case 'Year':
+        return { periodType: 'Year' as const, year: startYear };
+      default:
+        return { periodType: 'Ytd' as const };
     }
-    if (period === 'Year') return { periodType: 'Year' as const, year: startYear };
-    if (period.startsWith('Q')) return { periodType: 'Quarter' as const, quarter: Number(period.slice(1)) };
-    return { periodType: 'Month' as const, fromMonth: Number(period.slice(1)), toMonth: Number(period.slice(1)), year: startYear };
+  });
+
+  /** Period phrase used in KPI/report column headers: "July", "July – September", "Q1", "Annual" or "YTD". */
+  protected readonly periodColumnLabel = computed(() => {
+    const filter = this.periodFilter();
+    const fy = this.selectedFiscalYear();
+    switch (filter.type) {
+      case 'Month': {
+        if (!filter.fromMonth) return 'Period';
+        const from = filter.fromMonth;
+        const to = filter.toMonth ?? from;
+        if (!fy?.startDate) return to === from ? `Month ${from}` : `Months ${from}–${to}`;
+        const fromLabel = fiscalMonthLabel(fy.startDate, from, true);
+        return to === from ? fromLabel : `${fromLabel} – ${fiscalMonthLabel(fy.startDate, to, true)}`;
+      }
+      case 'Quarter':
+        return filter.quarter ? `Q${filter.quarter}` : 'Quarter';
+      case 'Year':
+        return 'Annual';
+      default:
+        return 'YTD';
+    }
   });
 
   // ── Goal CRUD ───────────────────────────────────────────────────────────
@@ -476,7 +538,7 @@ readonly goalForm = new FormGroup({
     parentGoalId: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
     weight: new FormControl(0, {
       nonNullable: true,
-      validators: [Validators.min(0), Validators.max(100)],
+      validators: [Validators.min(0.01), Validators.max(100)],
     }),
   });
 
@@ -734,7 +796,7 @@ submitGoal(): void {
   }
 
   submitKpi(): void {
-    if (this.kpiForm.invalid || this.crudSubmitting()) return;
+    if (!this.canEdit() || this.kpiForm.invalid || this.crudSubmitting()) return;
     // FR-905: KPI weights under a goal cannot exceed 100%.
     if (this.kpiWeightRemaining() < 0) {
       this.notifications.error('KPI weights for this goal cannot exceed 100%.');
@@ -861,6 +923,12 @@ submitGoal(): void {
       month,
       label: fy ? fiscalMonthLabel(fy.startDate, month) : `Month ${month}`,
     }));
+  });
+
+  /** Month currently loaded in the entry grid, used in its Target/Actual headers. */
+  readonly entryMonthLabel = computed(() => {
+    const month = this.entryMonth();
+    return this.entryMonths().find((entry) => entry.month === month)?.label ?? 'Month';
   });
 
   readonly actualRows = computed(() =>
@@ -1037,6 +1105,9 @@ submitGoal(): void {
 
   readonly divisions = signal<Division[]>([]);
   readonly divisionFilter = signal<string>('');
+  /** Division picker: search text and open state for the searchable control. */
+  readonly divisionSearch = signal('');
+  readonly divisionPickerOpen = signal(false);
   /** Every scorecard, kept private: the picker only offers corporate scorecards. */
   private readonly allScorecards = signal<Scorecard[]>([]);
   /** Division plans always align to the corporate scorecard, so the picker is Corporate-only. */
@@ -1047,8 +1118,43 @@ submitGoal(): void {
   );
   readonly scorecardFilter = signal<string>('');
 
+  readonly filteredDivisions = computed(() => {
+    const term = this.divisionSearch().trim().toLowerCase();
+    if (!term) return this.divisions();
+    return this.divisions().filter((division) => division.name.toLowerCase().includes(term));
+  });
+
+  readonly selectedDivisionName = computed(
+    () => this.divisions().find((division) => division.id === this.divisionFilter())?.name ?? ''
+  );
+
+  toggleDivisionPicker(): void {
+    if (this.loading()) return;
+    this.divisionSearch.set('');
+    this.divisionPickerOpen.update((open) => !open);
+  }
+
+  closeDivisionPicker(): void {
+    this.divisionPickerOpen.set(false);
+  }
+
+  selectDivision(divisionId: string): void {
+    this.divisionPickerOpen.set(false);
+    this.divisionSearch.set('');
+    if (this.divisionFilter() === divisionId) return;
+    this.divisionFilter.set(divisionId);
+    this.onDivisionChange();
+  }
+
   onDivisionChange(): void {
     if (!this.scorecardId()) return;
+    // Drop the previous division's plan immediately so no goal, KPI or selection from it
+    // can be displayed or submitted while the new division loads.
+    this.plan.set(null);
+    this.selectedIds.set(new Set());
+    this.collapsedGoals.set(new Set());
+    this.closeGoalModal();
+    this.closeKpiModal();
     this.reloadPlan();
   }
 
@@ -1094,9 +1200,16 @@ submitGoal(): void {
     if (this.scorecardFilter() !== plan.scorecardId) {
       this.scorecardFilter.set(plan.scorecardId);
     }
+    // The Year tab follows the plan that actually loaded (e.g. after a year switch).
+    const filter = this.periodFilter();
+    if (filter.type === 'Year' && plan.fiscalYearId && filter.fiscalYearId !== plan.fiscalYearId) {
+      this.periodFilter.set({ ...filter, fiscalYearId: plan.fiscalYearId });
+    }
   }
 
   // ── Load / render helpers ───────────────────────────────────────────────
+
+  private scorecardsLoaded = false;
 
   constructor() {
     // Returning from target configuration carries the division that was selected so the
@@ -1109,83 +1222,100 @@ submitGoal(): void {
     });
     this.divisionService.getAll().subscribe({
       next: (divisions) => {
-        const ownId = this.userStore.divisionId();
-        const scoped = ownId
-          ? divisions.filter((d) => d.id === ownId)
-          : [...divisions].sort((a, b) => a.name.localeCompare(b.name));
-        this.divisions.set(scoped);
+        const sorted = [...divisions].sort((a, b) => a.name.localeCompare(b.name));
+        this.divisions.set(sorted);
 
-        // A plan always belongs to a division. Default to the account's own division, or to
-        // the first division for corporate users, so linking goals never posts an empty
-        // DivisionId (the API rejects that with "Division is required."). A division restored
-        // from the return URL is kept only while it is still in the visible list.
+        // A plan always belongs to a division. A division restored from the return URL wins,
+        // then the account's own division, then the first division in the table, so linking
+        // goals never posts an empty DivisionId (the API rejects that).
         const requested = this.divisionFilter();
-        const restored = scoped.some((d) => d.id === requested) ? requested : '';
-        const preferred = ownId || restored || scoped[0]?.id || '';
+        const ownId = this.userStore.divisionId();
+        const restored = sorted.some((d) => d.id === requested) ? requested : '';
+        const preferred =
+          restored || (ownId && sorted.some((d) => d.id === ownId) ? ownId : '') || sorted[0]?.id || '';
         if (preferred && preferred !== this.divisionFilter()) {
           this.divisionFilter.set(preferred);
           if (this.scorecardId()) this.reloadPlan();
         }
       },
     });
-    // The corporate scorecard picker is a corporate capability; a baseline employee is
-    // pinned to the scorecard their own division plan references and must not probe others.
-    if (this.userStore.hasPermission('scorecard:view')) {
-      this.scorecardService.getAll().subscribe({
-        next: (scorecards) => {
-          this.allScorecards.set(scorecards);
-          const current = this.scorecardId();
-          if (current) this.ensureCorporateScorecard(current);
-        },
-      });
-    }
+    // Subscribe to the route before the catalog so an explicit scorecard id is known when
+    // the scorecard list arrives and can be validated against it.
     this.route.paramMap.subscribe((params) => {
       const id = params.get('scorecardId') ?? '';
       if (!id) {
-        this.openOwnDivisionPlan();
+        this.scorecardId.set('');
+        if (!this.userStore.hasPermission('scorecard:view')) {
+          this.loading.set(false);
+          this.loadError.set('You do not have access to the corporate scorecard catalog.');
+          return;
+        }
+        if (this.scorecardsLoaded) {
+          this.openDefaultCorporateScorecard();
+        } else {
+          // Catalog still loading; its subscription opens the default scorecard.
+          this.loading.set(true);
+          this.loadError.set(null);
+        }
         return;
       }
       this.scorecardId.set(id);
+      // Never keep the previous scorecard's goals or selections while the new one loads.
+      this.plan.set(null);
+      this.selectedIds.set(new Set());
+      this.collapsedGoals.set(new Set());
+      // A Division-scope route has to be redirected, so wait for the catalog before
+      // requesting a plan we may be about to abandon.
+      if (!this.scorecardsLoaded && this.userStore.hasPermission('scorecard:view')) {
+        this.loading.set(true);
+        return;
+      }
       if (!this.ensureCorporateScorecard(id)) return;
       this.reloadPlan();
     });
+    // The planning page is a corporate authoring surface, so the scorecard picker requires
+    // the corporate catalog read. The route guard already limits the page to planners.
+    if (this.userStore.hasPermission('scorecard:view')) {
+      this.scorecardService.getAll().subscribe({
+        next: (scorecards) => {
+          this.scorecardsLoaded = true;
+          this.allScorecards.set(scorecards);
+          const current = this.scorecardId();
+          if (current) {
+            if (this.ensureCorporateScorecard(current)) this.reloadPlan();
+          } else {
+            this.openDefaultCorporateScorecard();
+          }
+        },
+        error: (error) => {
+          if (this.scorecardId()) return;
+          this.loading.set(false);
+          this.loadError.set(toApiError(error).message);
+        },
+      });
+    }
   }
 
   /**
-   * Baseline employees have no corporate scorecard list, so the navigation entry lands here
-   * without an id. Their own division is known from the authenticated scope; the plan summaries
-   * are already scoped by the backend, so any id returned here belongs to that division.
+   * Admin and Power User land here without an id. Open the restored corporate scorecard,
+   * or the first corporate scorecard, instead of requiring a hand-built deep link.
    */
-  private openOwnDivisionPlan(): void {
-    const ownDivisionId = this.userStore.divisionId();
-    if (!ownDivisionId) {
+  private openDefaultCorporateScorecard(): void {
+    if (this.scorecardId()) return;
+    const corporate = this.scorecards();
+    const target =
+      corporate.find((scorecard) => scorecard.id === this.scorecardFilter()) ?? corporate[0];
+    if (!target) {
       this.loading.set(false);
-      this.loadError.set('No corporate scorecard was selected.');
+      this.loadError.set(
+        'No corporate scorecard is available. Create a corporate scorecard before planning divisions.'
+      );
       return;
     }
-
-    this.loading.set(true);
-    this.loadError.set(null);
-    this.divisionService.getPlans(ownDivisionId).subscribe({
-      next: (plans) => {
-        const plan = plans[0];
-        if (!plan) {
-          this.loading.set(false);
-          this.loadError.set('No scorecard has been assigned to your division yet.');
-          return;
-        }
-
-        this.divisionFilter.set(ownDivisionId);
-        this.scorecardFilter.set(plan.scorecardId);
-        void this.router.navigate(['/division-planning', plan.scorecardId], {
-          queryParams: { divisionId: ownDivisionId },
-          replaceUrl: true,
-        });
-      },
-      error: (error) => {
-        this.loading.set(false);
-        this.loadError.set(toApiError(error).message);
-      },
+    const queryParams = this.divisionFilter() ? { divisionId: this.divisionFilter() } : undefined;
+    void this.router.navigate(['/division-planning', target.id], {
+      queryParams,
+      replaceUrl: true,
     });
   }
 
@@ -1204,7 +1334,7 @@ submitGoal(): void {
     const ownDivision = this.userStore.isDivisionAccount() ? this.userStore.divisionId() : null;
     const divisionId = this.divisionFilter() || ownDivision || undefined;
     this.divisionService
-      .getPlanContextByScorecard(this.scorecardId(), this.periodQuery(), divisionId)
+      .getPlanningContext(this.scorecardId(), this.periodQuery(), divisionId)
 .subscribe({
         next: (plan) => {
           if (sequence !== this.reloadSequence) return;
@@ -1270,22 +1400,20 @@ readonly exporting = signal(false);
   }
 
   private periodExportGranularity(): Pick<ReportFilter, 'granularity' | 'quarter' | 'fromMonth' | 'toMonth'> {
-    const period = this.reportPeriod();
-    if (period === 'Q1' || period === 'Q2' || period === 'Q3' || period === 'Q4') {
-      return { granularity: 'quarter', quarter: Number(period.slice(1)) };
+    const filter = this.periodFilter();
+    if (filter.type === 'Quarter' && filter.quarter) {
+      return { granularity: 'quarter', quarter: filter.quarter };
     }
-    if (period === 'Range') {
+    if (filter.type === 'Month' && filter.fromMonth) {
+      const from = filter.fromMonth;
+      const to = filter.toMonth ?? from;
       return {
         granularity: 'month',
-        fromMonth: Math.min(this.rangeFromMonth(), this.rangeToMonth()),
-        toMonth: Math.max(this.rangeFromMonth(), this.rangeToMonth()),
+        fromMonth: Math.min(from, to),
+        toMonth: Math.max(from, to),
       };
     }
-    if (period.startsWith('M')) {
-      const month = Number(period.slice(1));
-      return { granularity: 'month', fromMonth: month, toMonth: month };
-    }
-    return { granularity: period === 'Year' ? 'year' : 'ytd' };
+    return { granularity: filter.type === 'Year' ? 'year' : 'ytd' };
   }
 
   exportPlan(format: ReportExportFormat, event?: Event): void {

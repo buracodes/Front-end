@@ -2,11 +2,11 @@
   <header class="page-header">
     <div>
       <h1>Access Control Management</h1>
-      <p class="subtitle">
+      <!-- <p class="subtitle">
         Rights are granted to groups, then people are placed in groups. Employees come straight
         from HR and are identified by their Active Directory object id, so access can be prepared
         before a first sign-in.
-      </p>
+      </p> -->
     </div>
     @if (loading()) {
       <span class="loading-chip">Loading…</span>
@@ -109,7 +109,7 @@
     }
 
     <!-- ── Group rights ─────────────────────────────────────────────────── -->
-    @case ('group-rights') {
+    <!-- @case ('group-rights') {
       <div class="split">
         <aside class="card list-card">
           <h2 class="card-title">Groups</h2>
@@ -270,7 +270,7 @@
           }
         </section>
       </div>
-    }
+    } -->
 
     <!-- ── Group members ────────────────────────────────────────────────── -->
     @case ('group-members') {
@@ -417,7 +417,7 @@
     }
 
     <!-- ── User rights ──────────────────────────────────────────────────── -->
-    @case ('user-rights') {
+    <!-- @case ('user-rights') {
       <div class="split">
         <aside class="card list-card">
           <h2 class="card-title">Employees</h2>
@@ -584,7 +584,7 @@
           }
         </section>
       </div>
-    }
+    } -->
   }
 
   <!-- ── Group create / edit dialog ─────────────────────────────────────── -->

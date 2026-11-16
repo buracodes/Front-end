@@ -60,9 +60,9 @@ export class AdminAccessControlPage {
 
   readonly tabs: { key: TabKey; label: string }[] = [
     { key: 'groups', label: 'Groups' },
-    { key: 'group-rights', label: 'Group Rights' },
+    // { key: 'group-rights', label: 'Group Rights' },
     { key: 'group-members', label: 'Group Members' },
-    { key: 'user-rights', label: 'User Rights' },
+    // { key: 'user-rights', label: 'User Rights' },
   ];
 
   readonly activeTab = signal<TabKey>('groups');

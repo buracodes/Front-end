@@ -78,7 +78,12 @@
   <div class="dp-filters">
     <label class="dp-filter">
       <span class="dp-filter-label">Corporate scorecard</span>
-      <select class="form-control dp-filter-control" [ngModel]="scorecardFilter()" (ngModelChange)="scorecardFilter.set($event); onScorecardChange()">
+      <select
+        class="form-control dp-filter-control"
+        [disabled]="loading()"
+        [ngModel]="scorecardFilter()"
+        (ngModelChange)="scorecardFilter.set($event); onScorecardChange()"
+      >
         @if (scorecards().length === 0) {
           <option [value]="plan()?.scorecardId ?? ''">{{ plan()?.scorecardName || 'No corporate scorecards' }}</option>
         }
@@ -87,15 +92,75 @@
         }
       </select>
     </label>
-    <label class="dp-filter">
-      <span class="dp-filter-label">Division</span>
-      <select class="form-control dp-filter-control" [ngModel]="divisionFilter()" (ngModelChange)="divisionFilter.set($event); onDivisionChange()">
-        <option value="">Select a division</option>
-        @for (d of divisions(); track d.id) {
-          <option [value]="d.id">{{ d.name }}</option>
+    <div class="dp-filter">
+      <span class="dp-filter-label" id="dp-division-label">Division</span>
+      <div class="dp-picker">
+        <button
+          type="button"
+          class="form-control dp-picker-trigger"
+          [disabled]="loading()"
+          (click)="toggleDivisionPicker()"
+          aria-haspopup="listbox"
+          aria-labelledby="dp-division-label"
+          [attr.aria-expanded]="divisionPickerOpen()"
+        >
+          <span class="dp-picker-value" [class.is-placeholder]="!selectedDivisionName()">
+            {{ selectedDivisionName() || 'Select a division' }}
+          </span>
+          <svg aria-hidden="true" lucideIcon="chevron-down" size="14" strokeWidth="3"></svg>
+        </button>
+        @if (divisionPickerOpen()) {
+          <div class="dp-picker-backdrop" (click)="closeDivisionPicker()"></div>
+          <div class="dp-picker-panel">
+            <div class="dp-picker-search">
+              <svg aria-hidden="true" lucideIcon="search" size="14"></svg>
+              <input
+                class="form-control dp-picker-search-input"
+                type="text"
+                placeholder="Search divisions…"
+                aria-label="Search divisions"
+                [value]="divisionSearch()"
+                (input)="divisionSearch.set($any($event.target).value)"
+                (keydown.escape)="closeDivisionPicker()"
+              />
+            </div>
+            <ul class="dp-picker-list" role="listbox" aria-labelledby="dp-division-label">
+              @if (filteredDivisions().length === 0) {
+                <li class="dp-picker-empty">No divisions match “{{ divisionSearch() }}”.</li>
+              } @else {
+                @for (division of filteredDivisions(); track division.id) {
+                  <li>
+                    <button
+                      type="button"
+                      class="dp-picker-option"
+                      role="option"
+                      [attr.aria-selected]="divisionFilter() === division.id"
+                      [class.is-selected]="divisionFilter() === division.id"
+                      (click)="selectDivision(division.id)"
+                    >
+                      <span>{{ division.name }}</span>
+                      @if (divisionFilter() === division.id) {
+                        <svg aria-hidden="true" lucideIcon="check" size="14" strokeWidth="3"></svg>
+                      }
+                    </button>
+                  </li>
+                }
+              }
+            </ul>
+          </div>
         }
-      </select>
-    </label>
+      </div>
+    </div>
+    <div class="dp-filter">
+      <span class="dp-filter-label">Period</span>
+      <app-division-period-filter
+        [filter]="periodFilter()"
+        [fiscalYears]="fiscalYears()"
+        [currentFiscalYearId]="selectedFiscalYear()?.id ?? null"
+        [disabled]="loading()"
+        (filterChange)="onPeriodFilterChange($event)"
+      />
+    </div>
   </div>
 
   @if (loadError(); as error) {
@@ -105,11 +170,10 @@
     </div>
   }
 
-  <!-- Two-column plan area -->
-  <div class="dp-columns">
+  <!-- Corporate goal contributions — full width, matching the plan card below -->
+  <section class="card dp-panel w-full min-w-0">
     <!-- Corporate goals checklist -->
-    <section class="card dp-panel dp-col">
-      <div class="dp-panel-head">
+    <div class="dp-panel-head">
         <h2 class="dp-panel-title">
           <svg class="dp-panel-icon" aria-hidden="true" lucideIcon="target" size="18"></svg>
           Corporate goals this division contributes to
@@ -124,13 +188,28 @@
       } @else if (corporateGoals().length === 0) {
         <p class="dp-empty">No corporate goals in this scorecard yet.</p>
       } @else {
+        <label class="dp-goal-row dp-select-all-row">
+          <input
+            type="checkbox"
+            [checked]="allCorporateGoalsSelected()"
+            [indeterminate]="corporateSelectionIndeterminate()"
+            [disabled]="!canEditContributions() || selectionSaving() || !hasDivision()"
+            (change)="toggleAllContributions($any($event.target).checked)"
+            aria-label="Select all corporate goals"
+          />
+          <span class="dp-goal-row-meta">
+            <span class="dp-goal-row-name">Select all corporate goals</span>
+            <span class="dp-goal-row-desc">Link or unlink every goal in this scorecard at once</span>
+          </span>
+        </label>
+
         <div class="dp-goal-list">
           @for (goal of corporateGoals(); track goal.id) {
-            <label class="dp-goal-row" [class.is-locked]="!canEdit()">
+            <label class="dp-goal-row" [class.is-locked]="!canEditContributions()">
               <input
                 type="checkbox"
                 [checked]="selectedIds().has(goal.id)"
-                [disabled]="!canEdit() || selectionSaving() || !hasDivision()"
+                [disabled]="!canEditContributions() || selectionSaving() || !hasDivision()"
                 (change)="toggleContribution(goal.id, $any($event.target).checked)"
               />
               <span class="dp-goal-row-meta">
@@ -143,7 +222,7 @@
           }
         </div>
 
-        @if (canEdit()) {
+        @if (canEditContributions()) {
           <div class="dp-cg-actions">
             @if (!hasDivision()) {
               <span class="dp-cg-dirty-hint">Select a division above to link corporate goals.</span>
@@ -158,17 +237,45 @@
           </div>
         }
       }
-    </section>
+  </section>
 
-    <!-- Division goals & KPIs -->
-    <section class="card dp-panel dp-col">
-      <div class="dp-panel-head">
-        <h2 class="dp-panel-title">
-          <svg class="dp-panel-icon" aria-hidden="true" lucideIcon="git-fork" size="18"></svg>
-          Division goals &amp; KPIs
-        </h2>
-        <p class="dp-cg-summary">Weighted goals across this division’s plan, each with its own KPIs.</p>
+  <!-- Division goals & KPIs -->
+  <section class="card dp-panel w-full min-w-0">
+    <div class="dp-panel-head">
+        <div>
+          <h2 class="dp-panel-title">
+            <svg class="dp-panel-icon" aria-hidden="true" lucideIcon="git-fork" size="18"></svg>
+            Division goals &amp; KPIs
+          </h2>
+          <p class="dp-cg-summary">Weighted goals across this division’s plan, each with its own KPIs.</p>
+          @if (divisionGoals().length > 0) {
+            @if (divisionGoalWeightTotal() > 100.01) {
+              <p class="dp-weight-note is-over">Division goal weights total {{ divisionGoalWeightTotal() }}% — reduce them to stay within 100%.</p>
+            } @else if (divisionGoalWeightTotal() < 99.99) {
+              <p class="dp-weight-note">Division goal weights total {{ divisionGoalWeightTotal() }}% of 100% — totals below 100% are allowed and are normalized proportionally during score calculation.</p>
+            }
+          }
+        </div>
+        @if (canEdit()) {
+          <button
+            type="button"
+            class="btn btn-primary dp-add-goal-btn"
+            [disabled]="loading() || crudSubmitting() || !hasDivision() || selectedCorporateGoalCount() === 0 || selectionSaving()"
+            (click)="openCreateGoal()"
+          >
+            <svg aria-hidden="true" lucideIcon="plus" size="14" strokeWidth="3"></svg>
+            Add goal
+          </button>
+        }
       </div>
+
+      @if (canEdit()) {
+        @if (!hasDivision()) {
+          <p class="dp-cg-dirty-hint">Select a division to build its plan.</p>
+        } @else if (selectedCorporateGoalCount() === 0) {
+          <p class="dp-cg-dirty-hint">Tick at least one corporate goal above before adding a division goal.</p>
+        }
+      }
 
       @if (loading()) {
         <div class="dp-loading">Loading division goals…</div>
@@ -182,18 +289,33 @@
         </p>
       } @else {
         <div class="dp-goal-panels">
-          @for (goal of divisionGoals(); track goal.id) {
+          @for (goal of divisionGoals(); track goal.id; let i = $index) {
             <div class="dp-goal-card" [class.is-locked]="!canEdit()">
               <div class="dp-goal-head">
-                <div class="dp-goal-panel-meta">
-                  <p class="dp-goal-name">{{ goal.name }}</p>
-                  <p class="dp-goal-sub">
-                    Weight {{ goal.weight }}%
-                    @if (goal.score != null) { · Score {{ goal.score }}% }
-                    @if (goal.parentGoalName) { · {{ goal.parentGoalName }} }
-                  </p>
-                </div>
+                <button
+                  type="button"
+                  class="dp-goal-toggle"
+                  [attr.aria-expanded]="isGoalExpanded(goal.id)"
+                  (click)="toggleGoal(goal.id)"
+                >
+                  <svg class="dp-goal-chevron" [class.open]="isGoalExpanded(goal.id)" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+                    <path d="M6 3.5 10.5 8 6 12.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                  <span class="dp-goal-panel-meta">
+                    <span class="dp-goal-name">Goal {{ i + 1 }} &middot; {{ goal.name }}</span>
+                    <span class="dp-goal-sub">
+                      @if (goal.description) {
+                        {{ goal.description }} &middot;
+                      }
+                      Weight {{ goal.weight }}%
+                      @if (goal.parentGoalName) { · {{ goal.parentGoalName }} }
+                    </span>
+                  </span>
+                </button>
                 <div class="dp-goal-actions">
+                  <span class="dp-score-badge" [class.is-red]="goal.status === 'red'" [class.is-amber]="goal.status === 'amber'">
+                    {{ reportScore(goal.score) }}
+                  </span>
                   @if (goal.status) {
                     <span class="dp-status-pill" [class.is-red]="goal.status === 'red'" [class.is-amber]="goal.status === 'amber'">
                       <span class="dp-status-dot" aria-hidden="true"></span>
@@ -201,111 +323,96 @@
                     </span>
                   }
                   @if (canEdit()) {
-                    <button type="button" class="dp-icon-btn" title="Edit goal" (click)="openEditGoal(goal)"><svg aria-hidden="true" lucideIcon="square-pen" size="14"></svg>
+                    <button type="button" class="dp-add-kpi dp-add-kpi-compact" (click)="openCreateKpi(goal)">
+                      <svg aria-hidden="true" lucideIcon="plus" size="13" strokeWidth="3"></svg>
+                      Add KPI
                     </button>
-                    <button type="button" class="dp-icon-btn dp-icon-btn-danger" title="Delete goal" (click)="deleteGoal(goal)"><svg aria-hidden="true" lucideIcon="trash" size="14"></svg>
+                    <button type="button" class="dp-icon-btn" title="Edit goal" aria-label="Edit goal" (click)="openEditGoal(goal)">
+                      <svg aria-hidden="true" lucideIcon="square-pen" size="14"></svg>
+                    </button>
+                    <button type="button" class="dp-icon-btn dp-icon-btn-danger" title="Delete goal" aria-label="Delete goal" (click)="deleteGoal(goal)">
+                      <svg aria-hidden="true" lucideIcon="trash" size="14"></svg>
                     </button>
                   }
                 </div>
               </div>
 
-              <div class="dp-kpi-table-wrap">
-                <table class="dp-table dp-kpi-table">
-                  <thead>
-                    <tr>
-                      <th>KPI</th>
-                      <th>Unit</th>
-                      <th>Type</th>
-                      <th>Method</th>
-                      <th class="dp-align-right">Weight</th>
-                      <th class="dp-align-right">Target</th>
-                      <th class="dp-align-right">Actual</th>
-                      <th class="dp-align-right">Score</th>
-                      @if (canEdit()) {
-                        <th class="dp-align-right">Actions</th>
-                      }
-                    </tr>
-                  </thead>
-                  <tbody>
-                    @if (goal.kpis.length === 0) {
-                      <tr>
-                        <td class="dp-empty-cell" [attr.colspan]="canEdit() ? 9 : 8">No KPIs yet for this goal.</td>
-                      </tr>
-                    } @else {
-                      @for (kpi of goal.kpis; track kpi.id) {
+              @if (isGoalExpanded(goal.id)) {
+                <div class="dp-goal-body">
+                  <div class="dp-kpi-table-wrap">
+                    <table class="dp-table dp-kpi-table">
+                      <thead>
                         <tr>
-                          <td class="dp-cell-goal">{{ kpi.name }}</td>
-                          <td>{{ kpi.unit || '—' }}</td>
-                          <td>
-                            <span class="dp-type-badge" [class.is-leading]="kpi.kpiType === 'Leading'">{{ kpi.kpiType || '—' }}</span>
-                          </td>
-                          <td>{{ kpi.optimizationType || '—' }}</td>
-                          <td class="dp-align-right">{{ kpi.weight }}%</td>
-                          <td class="dp-align-right">{{ reportValue(kpi.target, kpi.unit) }}</td>
-                          <td class="dp-align-right">{{ reportValue(kpi.actual, kpi.unit) }}</td>
-                          <td class="dp-align-right dp-cell-score" [class.is-positive]="kpi.status === 'green'" [class.is-negative]="kpi.status === 'red'">
-                            {{ reportScore(kpi.score) }}
-                          </td>
+                          <th>KPI</th>
+                          <th>Unit</th>
+                          <th>Type</th>
+                          <th>Method</th>
+                          <th class="dp-align-right">Weight</th>
+                          <th class="dp-align-center">Target ({{ periodColumnLabel() }} )</th>
+                          <th class="dp-align-center">Actual ({{ periodColumnLabel() }} )</th>
+                          <th class="dp-align-center">Score</th>
                           @if (canEdit()) {
-                            <td class="dp-align-right">
-                              <div class="dp-kpi-actions">
-                                @if (canConfigureTargets()) {
-                                  <button type="button" class="dp-icon-btn" title="Set target" aria-label="Set target" (click)="openKpiTargets(kpi)">
-                                    <svg aria-hidden="true" lucideIcon="target" size="14"></svg>
-                                  </button>
-                                }
-                                <button type="button" class="dp-icon-btn" title="Edit KPI" aria-label="Edit KPI" (click)="openEditKpi(kpi, goal)">
-                                  <svg aria-hidden="true" lucideIcon="square-pen" size="14"></svg>
-                                </button>
-                                <button type="button" class="dp-icon-btn dp-icon-btn-danger" title="Delete KPI" aria-label="Delete KPI" (click)="deleteKpi(kpi)">
-                                  <svg aria-hidden="true" lucideIcon="trash" size="14"></svg>
-                                </button>
-                              </div>
-                            </td>
+                            <th class="dp-align-right">Actions</th>
                           }
                         </tr>
-                      }
-                    }
-                  </tbody>
-                </table>
-              </div>
+                      </thead>
+                      <tbody>
+                        @if (goal.kpis.length === 0) {
+                          <tr>
+                            <td class="dp-empty-cell" [attr.colspan]="canEdit() ? 9 : 8">No KPIs yet for this goal.</td>
+                          </tr>
+                        } @else {
+                          @for (kpi of goal.kpis; track kpi.id) {
+                            <tr>
+                              <td class="dp-cell-goal">{{ kpi.name }}</td>
+                              <td>{{ kpi.unit || '' }}</td>
+                              <td>
+                                <span class="dp-type-badge" [class.is-leading]="kpi.kpiType === 'Leading'">{{ kpi.kpiType || '' }}</span>
+                              </td>
+                              <td>{{ kpi.optimizationType || '' }}</td>
+                              <td class="dp-align-right">{{ kpi.weight }}%</td>
+                              <td class="dp-align-center">{{ reportValue(kpi.target, kpi.unit) }}</td>
+                              <td class="dp-align-center">{{ reportValue(kpi.actual, kpi.unit) }}</td>
+                              <td class="dp-align-center dp-cell-score" [class.is-positive]="kpi.status === 'green'" [class.is-negative]="kpi.status === 'red'">
+                                {{ reportScore(kpi.score) }}
+                              </td>
+                              @if (canEdit()) {
+                                <td class="dp-align-right">
+                                  <div class="dp-kpi-actions">
+                                    @if (canConfigureTargets()) {
+                                      <button type="button" class="dp-icon-btn" title="Set target" aria-label="Set target" (click)="openKpiTargets(kpi)">
+                                        <svg aria-hidden="true" lucideIcon="target" size="14"></svg>
+                                      </button>
+                                    }
+                                    <button type="button" class="dp-icon-btn" title="Edit KPI" aria-label="Edit KPI" (click)="openEditKpi(kpi, goal)">
+                                      <svg aria-hidden="true" lucideIcon="square-pen" size="14"></svg>
+                                    </button>
+                                    <button type="button" class="dp-icon-btn dp-icon-btn-danger" title="Delete KPI" aria-label="Delete KPI" (click)="deleteKpi(kpi)">
+                                      <svg aria-hidden="true" lucideIcon="trash" size="14"></svg>
+                                    </button>
+                                  </div>
+                                </td>
+                              }
+                            </tr>
+                          }
+                        }
+                      </tbody>
+                    </table>
+                  </div>
 
-              @if (canEdit()) {
-                <button type="button" class="dp-add-kpi" (click)="openCreateKpi(goal)">
-                  <svg aria-hidden="true" lucideIcon="plus" size="14" strokeWidth="3"></svg>
-                  Add KPI
-                </button>
-              }
-
-              @if (goal.contributionDescription) {
-                <p class="dp-goal-contribution">{{ goal.contributionDescription }}</p>
+                  @if (goal.contributionDescription) {
+                    <p class="dp-goal-contribution">{{ goal.contributionDescription }}</p>
+                  }
+                </div>
               }
             </div>
           }
         </div>
       }
-
-      @if (canEdit()) {
-        <button
-          type="button"
-          class="dp-add-goal"
-          [disabled]="!hasDivision() || selectedCorporateGoalCount() === 0 || selectionSaving()"
-          (click)="openCreateGoal()"
-        >
-          <svg aria-hidden="true" lucideIcon="plus" size="14" strokeWidth="3"></svg>
-          Add division goal
-        </button>
-        @if (!hasDivision()) {
-          <p class="dp-cg-dirty-hint">Select a division to build its plan.</p>
-        } @else if (selectedCorporateGoalCount() === 0) {
-          <p class="dp-cg-dirty-hint">Tick at least one corporate goal above before adding a division goal.</p>
-        }
-      }
     </section>
-  </div>
 
   <!-- Division performance report -->
-  @if (canViewReport()) {
+  <!-- @if (canViewReport()) {
     <section class="card dp-report">
       <div class="dp-report-header">
         <div class="dp-report-title">
@@ -319,31 +426,6 @@
             <span class="dp-status-dot" aria-hidden="true"></span>
             {{ statusLabel(overallStatus()) }}
           </span>
-        </div>
-        <div class="dp-report-filters">
-          <select class="form-control dp-report-period" aria-label="Report period" [ngModel]="reportPeriod()" (ngModelChange)="reportPeriod.set($event); onPeriodChange()">
-            @for (option of periodOptions(); track option.value) {
-              <option [value]="option.value">{{ option.label }}</option>
-            }
-          </select>
-          @if (reportPeriod() === 'Range') {
-            <label class="dp-range-filter">
-              <span>From</span>
-              <select class="form-control" aria-label="Range from month" [ngModel]="rangeFromMonth()" (ngModelChange)="onRangeChange($event, rangeToMonth())">
-                @for (m of entryMonths(); track m.month) {
-                  <option [ngValue]="m.month">{{ m.label }}</option>
-                }
-              </select>
-            </label>
-            <label class="dp-range-filter">
-              <span>To</span>
-              <select class="form-control" aria-label="Range to month" [ngModel]="rangeToMonth()" (ngModelChange)="onRangeChange(rangeFromMonth(), $event)">
-                @for (m of entryMonths(); track m.month) {
-                  <option [ngValue]="m.month">{{ m.label }}</option>
-                }
-              </select>
-            </label>
-          }
         </div>
       </div>
 
@@ -378,9 +460,9 @@
               <tr>
                 <th>Division goal / KPI</th>
                 <th>Weight</th>
-                <th class="dp-align-right">Target</th>
-                <th class="dp-align-right">Actual</th>
-                <th class="dp-align-right">Score</th>
+                <th class="dp-align-center">{{ periodColumnLabel() }} Target</th>
+                <th class="dp-align-center">{{ periodColumnLabel() }} Actual</th>
+                <th class="dp-align-center">Score</th>
                 <th>Status</th>
                 <th>Progress</th>
               </tr>
@@ -401,9 +483,9 @@
                       }
                     </td>
                     <td>{{ row.weight }}%</td>
-                    <td class="dp-align-right">{{ reportValue(row.target, row.unit) }}</td>
-                    <td class="dp-align-right">{{ reportValue(row.actual, row.unit) }}</td>
-                    <td class="dp-align-right dp-cell-score" [class.is-positive]="row.status === 'green'" [class.is-negative]="row.status === 'red'">
+                    <td class="dp-align-center">{{ reportValue(row.target, row.unit) }}</td>
+                    <td class="dp-align-center">{{ reportValue(row.actual, row.unit) }}</td>
+                    <td class="dp-align-center dp-cell-score" [class.is-positive]="row.status === 'green'" [class.is-negative]="row.status === 'red'">
                       {{ reportScore(row.score) }}
                     </td>
                     <td>
@@ -440,7 +522,7 @@
         </div>
       </div>
     </section>
-  }
+  } -->
 
   <!-- Division performance entry (available once the plan is finalized) -->
   @if (canEnterActuals()) {
@@ -467,8 +549,8 @@
         <div class="dp-entry-table">
           <div class="dp-entry-grid dp-entry-grid-head">
             <span>Division KPI</span>
-            <span class="dp-align-right">Target</span>
-            <span>Actual value</span>
+            <span class="dp-align-right">{{ entryMonthLabel() }} Target</span>
+            <span>{{ entryMonthLabel() }} Actual</span>
             <span>Comment / evidence</span>
             <span class="dp-align-right"></span>
           </div>
@@ -524,7 +606,7 @@
 
   <!-- Goal modal -->
   @if (goalModalOpen()) {
-    <div class="modal-backdrop">
+    <div class="modal-backdrop" (click)="closeGoalModal()">
       <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="dp-goal-modal-title" (click)="$event.stopPropagation()">
         <div class="modal-header">
           <h3 id="dp-goal-modal-title">{{ goalEditingId() ? 'Edit division goal' : 'Add division goal' }}</h3>
@@ -553,7 +635,7 @@
             </div>
             <div class="form-group">
               <label class="form-label" for="dp-goal-weight">Weight (%)</label>
-              <input id="dp-goal-weight" class="form-control" type="number" min="0" max="100" formControlName="weight" />
+              <input id="dp-goal-weight" class="form-control" type="number" min="0.01" max="100" formControlName="weight" />
               <p class="weight-remaining" [class.weight-over]="goalWeightRemaining() < 0">
                 {{ goalWeightRemaining() }}% remaining across division goals
               </p>
@@ -580,7 +662,7 @@
 
   <!-- KPI modal -->
   @if (kpiModalOpen()) {
-    <div class="modal-backdrop">
+    <div class="modal-backdrop" (click)="closeKpiModal()">
       <div class="modal-dialog modal-lg" role="dialog" aria-modal="true" aria-labelledby="dp-kpi-modal-title" (click)="$event.stopPropagation()">
         <div class="modal-header">
           <h3 id="dp-kpi-modal-title">{{ kpiEditingId() ? 'Edit division KPI' : 'Add division KPI' }}</h3>

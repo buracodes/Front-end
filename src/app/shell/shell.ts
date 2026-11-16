@@ -65,12 +65,12 @@ export class ShellComponent {
       permission: 'scorecard:view',
     },
     {
-      // Read-only view of the employee's own division scorecard and KPIs. Baseline
-      // employees reach it without a scorecard id; the page resolves their own plan.
-      label: 'Division Scorecard',
+      // Admin/Power User authoring surface. Baseline division employees read their own
+      // division from the dashboard and performance monitoring instead.
+      label: 'Division Planning',
       route: '/division-planning',
       icon: 'chart-pie',
-      permission: ['divisions:view', 'division:scorecard.view', 'division:performance.view'],
+      permission: 'divisions:plan',
     },
     {
       label: 'Strategic Scorecard',

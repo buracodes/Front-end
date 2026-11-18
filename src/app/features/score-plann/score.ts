@@ -3,6 +3,7 @@ import { DecimalPipe, LowerCasePipe } from '@angular/common';
 import { FormControl, FormGroup, ReactiveFormsModule, FormsModule, Validators } from '@angular/forms';
 import { KpiDetailsDrawer } from '../strategic-scorecard/kpi-details/kpi-details';
 import {
+  fiscalMonthLabel,
   ragFromScore,
   scoreColor,
   ScorecardWorkspaceState,
@@ -62,6 +63,12 @@ export class score implements OnInit, OnDestroy {
   private readonly notifications = inject(NotificationService);
   private readonly dialog = inject(ConfirmDialogService);
   private readonly thresholds = inject(RagThresholdStore);
+
+  constructor() {
+    // The page opens on YTD: the shared workspace state may still hold a period chosen on
+    // another page, which would leave the headers and the fetched snapshot on that period.
+    this.clearPeriodFilter();
+  }
 
   readonly siblingScorecards = signal<Scorecard[]>([]);
   readonly siblingLoading = signal(false);
@@ -149,8 +156,9 @@ export class score implements OnInit, OnDestroy {
   readonly yearFilter = this.state.yearFilter;
   readonly hasPeriodFilter = this.state.hasPeriodFilter;
 
-  // NEW: Filter type (YTD, Month, Quarter, Year)
-  readonly filterType = signal<'ytd' | 'month' | 'quarter' | 'year'>('ytd');
+  // The filter panel, the column headers and the fetched snapshot all read this one signal,
+  // so the selected period can never drift from the data on screen. Defaults to YTD.
+  readonly filterType = this.state.periodType;
 
   /** Quarter options labelled with month ranges from the selected fiscal year start, e.g. "Q1 · Jul–Sep 2026". */
   readonly periodOptions = computed(() => {
@@ -196,19 +204,46 @@ export class score implements OnInit, OnDestroy {
 
   /** Month options for From/To dropdowns (1-12). */
   readonly monthOptions = [
-    { value: '1', label: 'January' },
-    { value: '2', label: 'February' },
-    { value: '3', label: 'March' },
-    { value: '4', label: 'April' },
-    { value: '5', label: 'May' },
-    { value: '6', label: 'June' },
     { value: '7', label: 'July' },
     { value: '8', label: 'August' },
     { value: '9', label: 'September' },
     { value: '10', label: 'October' },
     { value: '11', label: 'November' },
     { value: '12', label: 'December' },
+    { value: '1', label: 'January' },
+    { value: '2', label: 'February' },
+    { value: '3', label: 'March' },
+    { value: '4', label: 'April' },
+    { value: '5', label: 'May' },
+    { value: '6', label: 'June' },
   ];
+
+  /**
+   * Label for the active period, shown on the filter trigger and in the KPI Target/Actual
+   * headers. Empty while a Month/Quarter tab has no value chosen yet.
+   */
+  readonly periodLabel = computed(() => {
+    const periodType = this.state.periodType();
+    const startDate = this.state.selectedFiscalYear()?.startDate;
+
+    if (periodType === 'month') {
+      const from = this.state.fiscalMonthFrom();
+      const to = this.state.fiscalMonthTo();
+      const first = from ?? to;
+      if (first === null) return '';
+      const last = to ?? from ?? first;
+      const low = Math.min(first, last);
+      const high = Math.max(first, last);
+      const fromLabel = fiscalMonthLabel(startDate, low, true);
+      return low === high ? fromLabel : `${fromLabel} – ${fiscalMonthLabel(startDate, high, true)}`;
+    }
+    if (periodType === 'quarter') {
+      const quarter = this.state.quarterFilter().replace(/^Q/i, '');
+      return quarter ? `Q${quarter}` : '';
+    }
+    if (periodType === 'year') return 'Annual';
+    return 'YTD';
+  });
 
   readonly userInitials = signal('AD');
 
@@ -622,12 +657,9 @@ export class score implements OnInit, OnDestroy {
   }
 
   onFilter(): void {
-    // Set the period type - this will trigger re-computation of
-    // periodMonthRange, hasPeriodFilter, and subsequently kpiSnapshots,
-    // goalScores, and overallScore through the signal dependency chain.
-    this.state.periodType.set(this.filterType());
-    
-    // Reset other filter values when switching types
+    // The type itself is the shared period signal, so setting it already re-computes
+    // periodMonthRange, hasPeriodFilter, kpiSnapshots, goalScores and overallScore.
+    // Reset the other types' values so a stale value can't leak into the request.
     if (this.filterType() !== 'quarter') {
       this.state.quarterFilter.set('');
     }
@@ -638,15 +670,6 @@ export class score implements OnInit, OnDestroy {
     if (this.filterType() !== 'year') {
       this.state.yearFilter.set(null);
     }
-    
-    // Log filter state for debugging
-    console.log('Filter applied:', {
-      type: this.filterType(),
-      quarter: this.state.quarterFilter(),
-      monthFrom: this.state.monthFrom(),
-      monthTo: this.state.monthTo(),
-      year: this.state.yearFilter(),
-    });
   }
 
   onExport(): void {
@@ -979,19 +1002,19 @@ export class score implements OnInit, OnDestroy {
     return count + this.unassignedKpis().length;
   });
 
-  readonly scorecardScore = computed(() => {
-    const goals = this.goals();
-    const scores = this.goalScores();
-    let weightedSum = 0;
-    let weightTotal = 0;
-    for (const goal of goals) {
-      const score = this.scoreOf(goal.id, scores);
-      if (score === null) continue;
-      weightedSum += score * goal.weight;
-      weightTotal += goal.weight;
-    }
-    return weightTotal > 0 ? weightedSum / weightTotal : 0;
+  /** FR-604 overall score exactly as the backend rolled it up; null when no goal has a valid score. */
+  readonly scorecardScore = computed(() => this.state.overallScore());
+
+  readonly scorecardScoreLabel = computed(() => {
+    const score = this.scorecardScore();
+    return score === null ? 'N/A' : `${score.toFixed(1)}%`;
   });
+
+  /** A missing score means no valid data for the period, never zero (FR-604); a real 0 stays 0%. */
+  scoreLabel(score: number | null | undefined): string {
+    if (score === null || score === undefined) return 'N/A';
+    return `${Math.round(score * 10) / 10}%`;
+  }
 
   readonly ragSpread = computed(() => {
     let green = 0,

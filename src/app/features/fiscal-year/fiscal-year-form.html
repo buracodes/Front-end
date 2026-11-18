@@ -16,7 +16,7 @@
         <div class="form-row">
           <div class="form-group">
             <label class="form-label" for="fy-start">Start Month</label>
-            <input id="fy-start" class="form-control" type="month" formControlName="startMonth" />
+            <input id="fy-start" class="form-control" placeholder="e.g. july" type="month"  formControlName="startMonth" />
             @if (locked()) {
               <p class="form-hint">Dates are read-only because this fiscal year already has scorecards.</p>
             } @if (form().controls.startMonth.invalid && form().controls.startMonth.touched) {

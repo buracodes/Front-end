@@ -276,6 +276,8 @@ describe('DataEntryPage scope and division visibility', () => {
   let catalogPayload: KPI[];
   let divisionPlanPayload: typeof DIVISION_PLAN;
   let seenUrls: string[];
+  /** Number of upcoming entry-board reads answered with a server error. */
+  let boardFailures: number;
 
   const respond = (req: TestRequest): void => {
     seenUrls.push(req.request.urlWithParams);
@@ -298,6 +300,11 @@ describe('DataEntryPage scope and division visibility', () => {
       return;
     }
     if (path.includes('/entry-board')) {
+      if (boardFailures > 0) {
+        boardFailures--;
+        req.flush(ok(null), { status: 500, statusText: 'Server Error' });
+        return;
+      }
       req.flush(ok(boardPayload));
       return;
     }
@@ -364,6 +371,7 @@ describe('DataEntryPage scope and division visibility', () => {
     catalogPayload = [boardKpi('kpi-1', 'Application uptime')];
     divisionPlanPayload = DIVISION_PLAN;
     seenUrls = [];
+    boardFailures = 0;
     await TestBed.configureTestingModule({
       imports: [DataEntryPage],
       providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
@@ -683,6 +691,45 @@ describe('DataEntryPage scope and division visibility', () => {
     expect(
       Array.from(host.querySelectorAll('.entry-kra-name')).map((name) => name.textContent?.trim())
     ).toEqual(['Service Delivery']);
+  });
+
+  it('loads the corporate rows when the page opens on a selection another page left behind', () => {
+    // Only the shared selection is set: no goals, KRAs or KPIs have been read yet.
+    state.fiscalYearId.set('fy-1');
+    state.scorecardId.set('sc-1');
+
+    const page = start(CORPORATE_WRITE_RIGHTS, []);
+
+    expect(page.scope()).toBe('Corporate');
+    expect(page.kpis().map((kpi) => kpi.id)).toEqual(['kpi-1']);
+    expect(goalCards()).toHaveLength(1);
+    expect(host.querySelector('.entry-goal-name')?.textContent?.trim()).toBe('Operational Excellence');
+    expect(host.querySelector('.entry-kra-name')?.textContent?.trim()).toBe('Service Delivery');
+    expect(page.loadingCells()).toBe(false);
+  });
+
+  it('stops spinning and shows the empty board when the scorecard has no KPIs', () => {
+    catalogPayload = [];
+
+    const page = start(CORPORATE_WRITE_RIGHTS, []);
+
+    expect(page.scope()).toBe('Corporate');
+    expect(page.kpis()).toEqual([]);
+    expect(page.loadingCells()).toBe(false);
+    expect(goalCards()).toHaveLength(0);
+    expect(host.textContent).toContain('No KPIs configured for this scorecard yet.');
+  });
+
+  it('re-reads the entry board when the first board read fails', () => {
+    boardFailures = 1;
+
+    const page = start(BOARD_RIGHTS);
+
+    expect(page.scope()).toBe('Corporate');
+    expect(seenUrls.filter((url) => url.includes('entry-board'))).toHaveLength(2);
+    expect(page.kpis().map((kpi) => kpi.id)).toEqual(['kpi-1', 'kpi-2']);
+    expect(page.cellValue('kpi-1', 5)?.value).toBe(98.5);
+    expect(page.loadingCells()).toBe(false);
   });
 
   it('renders each goal as a card that expands its own KRA table independently', () => {

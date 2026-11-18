@@ -69,7 +69,7 @@
   <div class="stat-row">
     <div class="stat-card">
       <p class="stat-label">Scorecard score</p>
-      <p class="stat-value">{{ scorecardScore() | number:'1.1-1' }}%</p>
+      <p class="stat-value">{{ scorecardScoreLabel() }}</p>
     </div>
     <div class="stat-card">
       <p class="stat-label">Goals</p>
@@ -104,7 +104,7 @@
           [class.active]="periodFilterOpen()"
           (click)="togglePeriodFilter()"
         >
-          Filter by Period
+          Filter by Period 
           @if (hasPeriodFilter()) {
             <span class="hp-period-dot" title="Period filter active"></span>
           }
@@ -234,7 +234,7 @@
         </div>
         <div class="goal-header-actions" (click)="$event.stopPropagation()">
           <span class="score-badge" [class]="ragBadgeClass(scoreOf(goal.id, goalScores()))">
-            {{ (scoreOf(goal.id, goalScores()) ?? 0) | number:'1.0-1' }}%
+            {{ scoreLabel(scoreOf(goal.id, goalScores())) }}
           </span>
           @if (!isReadOnly()) {
           <button type="button" class="btn btn-secondary btn-sm" (click)="openAddKra(goal.id)">
@@ -263,7 +263,7 @@
             <div class="kra-header-actions">
               <span class="kra-weight-text">Weight {{ kra.weight }}%</span>
               <span class="score-badge" [class]="ragBadgeClass(scoreOf(kra.id, kraSnapshots()))">
-                {{ (scoreOf(kra.id, kraSnapshots()) ?? 0) | number:'1.0-1' }}%
+                {{ scoreLabel(scoreOf(kra.id, kraSnapshots())) }}
               </span>
               @if (!isReadOnly()) {
               <button type="button" class="btn btn-secondary btn-sm" (click)="openAddKpi(kra.id, goal.id)"><svg lucideIcon="plus" size="16"></svg> Add
@@ -288,8 +288,8 @@
                 <th class="col-type">Type</th>
                 <th class="col-method">Method</th>
                 <th class="col-weight">Weight</th>
-                <th class="col-target">Target</th>
-                <th class="col-actual">Actual</th>
+                <th class="col-target">{{ periodLabel() ? ' Target (' + periodLabel() + ')' : 'Target' }}</th>
+                <th class="col-actual">{{ periodLabel() ? ' Actual (' + periodLabel() + ')' : 'Actual' }}</th>
                 <th class="col-score">Score</th>
                 <th class="col-row-actions"></th>
               </tr>
@@ -298,7 +298,7 @@
               @for (kpi of kpisForKra(kra.id); track kpi.id) {
               <tr class="kpi-row" (click)="openDetails(kpi)">
                 <td class="col-kpi">{{ kpi.name }}</td>
-                <td class="col-unit">{{ kpi.unit ?? '—' }}</td>
+                <td class="col-unit">{{ kpi.unit ?? '' }}</td>
                 <td class="col-type">
                   <span class="type-badge" [class]="kpi.kpiType === 'Lagging' ? 'type-lagging' : 'type-leading'">{{
                     kpi.kpiType }}</span>
@@ -309,7 +309,7 @@
                 <td class="col-actual">{{ getKpiActual(kpi) !== null ? (getKpiActual(kpi)! | number:'1.0-1') : '' }}</td>
                 <td class="col-score">
                   <span class="score-badge" [class]="ragBadgeClass(kpiSnapshots().get(kpi.id)?.score ?? null)">
-                    {{ ((kpiSnapshots().get(kpi.id)?.score ?? 0) | number:'1.0-1') + '%' }}
+                    {{ scoreLabel(kpiSnapshots().get(kpi.id)?.score) }}
                   </span>
                 </td>
                 <td class="col-row-actions" (click)="$event.stopPropagation()">
@@ -372,7 +372,7 @@
                 <td class="col-actual">{{ getKpiActual(kpi) !== null ? (getKpiActual(kpi)! | number:'1.0-1') : '—' }}</td>
                 <td class="col-score">
                   <span class="score-badge" [class]="ragBadgeClass(kpiSnapshots().get(kpi.id)?.score ?? null)">
-                    {{ ((kpiSnapshots().get(kpi.id)?.score ?? 0) | number:'1.0-1') + '%' }}
+                    {{ scoreLabel(kpiSnapshots().get(kpi.id)?.score) }}
                   </span>
                 </td>
                 <td class="col-row-actions"></td>

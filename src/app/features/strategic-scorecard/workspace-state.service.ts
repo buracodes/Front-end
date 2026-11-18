@@ -541,6 +541,10 @@ export class ScorecardWorkspaceState {
               this.scorecardId.set(preferred.id);
               this.loadWorkspace(preferred.id);
             }
+          } else if (this.scorecardId() && !this.loading() && this.workspaceIsEmpty()) {
+            // The selection is shared between pages but the rows are not: a page opened after
+            // another one left only a selection behind still has to read its own catalog.
+            this.loadWorkspace(this.scorecardId()!);
           }
         }
       },
@@ -553,6 +557,11 @@ export class ScorecardWorkspaceState {
     const start = new Date(fy.startDate);
     const end = new Date(fy.endDate);
     return now >= start && now <= end;
+  }
+
+  private workspaceIsEmpty(): boolean {
+    const workspace = this.workspace();
+    return !workspace.goals.length && !workspace.kpis.length;
   }
 
   /** Entry boot: only the fiscal-year dimension, because the scorecard catalog needs a corporate read. */

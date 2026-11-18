@@ -297,3 +297,222 @@ describe('score (score-plann) KPI owner assignment', () => {
     expect(page.divisionResults()).toEqual([]);
   });
 });
+
+describe('score (score-plann) period filter labels', () => {
+  let page: score;
+  let http: HttpTestingController;
+
+  const isoDay = (date: Date): string =>
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+    });
+    page = TestBed.runInInjectionContext(() => new score());
+    http = TestBed.inject(HttpTestingController);
+    // Keep the workspace score effect idle: these tests only cover the period filter itself.
+    page.state.scorecardId.set(null);
+    http.expectOne((r) => isUrl(r.url, 'ragthreshold')).flush(ok(null));
+  });
+
+  afterEach(() => {
+    try {
+      http.verify();
+    } finally {
+      TestBed.resetTestingModule();
+    }
+  });
+
+  /** A fiscal year that contains today (July–June). */
+  function setCurrentFiscalYear(): void {
+    const today = new Date();
+    const start = new Date(today.getMonth() >= 6 ? today.getFullYear() : today.getFullYear() - 1, 6, 1);
+    const end = new Date(start.getFullYear() + 1, 5, 30);
+    page.state.fiscalYears.set([
+      { id: 'fy-1', label: 'FY 2026/27', startDate: isoDay(start), endDate: isoDay(end), status: 'Active' },
+    ]);
+    page.state.fiscalYearId.set('fy-1');
+    TestBed.tick();
+  }
+
+  it('defaults the filter to YTD and fetches the year-to-date scope', () => {
+    setCurrentFiscalYear();
+
+    expect(page.filterType()).toBe('ytd');
+    expect(page.state.periodType()).toBe('ytd');
+    expect(page.state.monthFrom()).toBe('');
+    expect(page.state.monthTo()).toBe('');
+    expect(page.periodLabel()).toBe('YTD');
+    expect(page.state.periodFilterParams()).toEqual({ periodType: 'ytd' });
+  });
+
+  it('keeps the YTD selection when the fiscal year does not contain today', () => {
+    page.state.fiscalYears.set([
+      { id: 'fy-past', label: 'FY 2000/01', startDate: '2000-07-01', endDate: '2001-06-30', status: 'Closed' },
+    ]);
+    page.state.fiscalYearId.set('fy-past');
+    TestBed.tick();
+
+    expect(page.filterType()).toBe('ytd');
+    expect(page.state.periodType()).toBe('ytd');
+    expect(page.periodLabel()).toBe('YTD');
+  });
+
+  it('labels the target and actual columns from the active filter', () => {
+    page.state.periodType.set('month');
+    page.state.monthFrom.set('7');
+    page.state.monthTo.set('');
+    expect(page.periodLabel()).toBe('July');
+
+    page.state.monthTo.set('9');
+    expect(page.periodLabel()).toBe('July – September');
+
+    page.state.periodType.set('quarter');
+    page.state.quarterFilter.set('Q3');
+    expect(page.periodLabel()).toBe('Q3');
+
+    page.state.periodType.set('year');
+    expect(page.periodLabel()).toBe('Annual');
+
+    page.state.periodType.set('ytd');
+    expect(page.periodLabel()).toBe('YTD');
+  });
+
+  it('updates the label immediately when the filter changes', () => {
+    setCurrentFiscalYear();
+    expect(page.periodLabel()).toBe('YTD');
+
+    page.onFilterTypeChange('month');
+    page.onMonthFromChange({ target: { value: '7' } } as unknown as Event);
+    expect(page.periodLabel()).toBe('July');
+
+    page.onFilterTypeChange('quarter');
+    page.onQuarterFilterChange({ target: { value: 'Q3' } } as unknown as Event);
+    expect(page.periodLabel()).toBe('Q3');
+
+    page.onFilterTypeChange('year');
+    expect(page.periodLabel()).toBe('Annual');
+  });
+
+  it('shows the YTD target, actual and score instead of the current month on load', () => {
+    const target = kpi();
+    page.state.workspace.set({
+      goals: [],
+      kras: [],
+      kpis: [target],
+      locks: null,
+      kpiTargets: new Map(),
+      snapshot: {
+        scorecardId: 'sc-1',
+        fiscalYearId: 'fy-1',
+        kpiSnapshots: [
+          {
+            entityId: target.id,
+            fiscalPeriodId: 'fp-5',
+            fiscalMonth: 5,
+            quarter: 2,
+            granularity: 'Ytd',
+            isPeriodAggregate: true,
+            score: 62.5,
+            actualValue: 450,
+            targetValue: 500,
+            calculatedAt: '2026-11-01T00:00:00Z',
+          },
+          {
+            entityId: target.id,
+            fiscalPeriodId: 'fp-11',
+            fiscalMonth: 11,
+            quarter: 4,
+            granularity: 'Month',
+            isPeriodAggregate: false,
+            score: 90,
+            actualValue: 45,
+            targetValue: 50,
+            calculatedAt: '2026-11-01T00:00:00Z',
+          },
+        ],
+      },
+    });
+
+    expect(page.periodLabel()).toBe('YTD');
+    expect(page.getKpiTarget(target)).toBe(500);
+    expect(page.getKpiActual(target)).toBe(450);
+    expect(page.scoreOf(target.id, page.kpiSnapshots())).toBe(62.5);
+  });
+});
+
+describe('score (score-plann) scorecard score display', () => {
+  let page: score;
+  let http: HttpTestingController;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+    });
+    page = TestBed.runInInjectionContext(() => new score());
+    http = TestBed.inject(HttpTestingController);
+    // No scorecard/fiscal year keeps the workspace reload effect idle; these tests only seed
+    // the snapshot the backend would have answered with.
+    page.state.scorecardId.set(null);
+    http.expectOne((r) => isUrl(r.url, 'ragthreshold')).flush(ok(null));
+  });
+
+  afterEach(() => {
+    try {
+      http.verify();
+    } finally {
+      TestBed.resetTestingModule();
+    }
+  });
+
+  /** Seeds the period-aggregate scorecard entry exactly as the score-snapshot read returns it. */
+  function seedScorecardScore(score: number | null): void {
+    page.state.workspace.set({
+      goals: [],
+      kras: [],
+      kpis: [],
+      locks: null,
+      kpiTargets: new Map(),
+      snapshot: {
+        scorecardId: 'sc-1',
+        fiscalYearId: 'fy-1',
+        scorecardSnapshots: [
+          {
+            entityId: 'sc-1',
+            fiscalPeriodId: 'fp-5',
+            fiscalMonth: 5,
+            quarter: 2,
+            granularity: 'Month',
+            isPeriodAggregate: true,
+            score: score ?? undefined,
+            calculatedAt: '2026-11-01T00:00:00Z',
+          },
+        ],
+      },
+    });
+  }
+
+  it('shows the scorecard score calculated by the backend', () => {
+    seedScorecardScore(50);
+
+    expect(page.scorecardScore()).toBe(50);
+    expect(page.scorecardScoreLabel()).toBe('50.0%');
+  });
+
+  it('shows no data instead of zero when no goal has a valid score', () => {
+    seedScorecardScore(null);
+
+    expect(page.scorecardScore()).toBeNull();
+    expect(page.scorecardScoreLabel()).toBe('N/A');
+  });
+
+  it('renders a genuine zero as 0% and a missing score as N/A', () => {
+    expect(page.scoreLabel(0)).toBe('0%');
+    expect(page.scoreLabel(100)).toBe('100%');
+    expect(page.scoreLabel(71.428)).toBe('71.4%');
+    expect(page.scoreLabel(null)).toBe('N/A');
+    expect(page.scoreLabel(undefined)).toBe('N/A');
+  });
+});
+

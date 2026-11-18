@@ -193,6 +193,8 @@ export class DataEntryPage implements OnInit {
   readonly divisionActuals = signal<Map<string, DivisionActualValueDto[]>>(new Map());
   private divisionRequest = 0;
   private divisionBootstrapped = false;
+  /** Fiscal year (and scorecard) whose Corporate rows have already been requested. */
+  private corporateLoadKey = '';
 
   /**
    * Divisions the page may show. An assigned account sees exactly its HR primary and
@@ -310,11 +312,11 @@ export class DataEntryPage implements OnInit {
 
   readonly lockText = computed(() => {
     const p = this.reportingPeriod();
-    if (!p) return '—';
+    if (!p) return '';
     if (p.state === 'locked') return 'Locked';
     if (p.state === 'pending') return 'Not yet open';
     const days = this.daysUntilLock();
-    if (days === null) return '—';
+    if (days === null) return ' ';
     if (days === 0) return 'Last day';
     return days === 1 ? '1 day remaining' : `${days} days remaining`;
   });
@@ -527,14 +529,30 @@ export class DataEntryPage implements OnInit {
       this.ensureDivisions();
     });
 
+    // Corporate is the default scope for a corporate account, so its rows must load on their
+    // own: the shared selection may carry over from another page without its catalog rows, and
+    // a scorecard with no KPIs still has to settle the board instead of spinning indefinitely.
     effect(() => {
       if (this.scope() !== 'Corporate') return;
-      const scorecardId = this.state.scorecardId();
       const fiscalYearId = this.state.fiscalYearId();
-      const kpis = this.kpis();
-      if (scorecardId && fiscalYearId && kpis.length && !this.state.usesEntryScope()) {
-        this.loadGrid();
+      const scorecardId = this.state.scorecardId();
+      if (!fiscalYearId || this.state.loading()) return;
+      const usesBoard = this.state.usesEntryScope();
+      if (!usesBoard && !scorecardId) return;
+      const key = usesBoard ? `board:${fiscalYearId}` : `catalog:${fiscalYearId}:${scorecardId}`;
+      if (this.corporateLoadKey === key) return;
+      this.corporateLoadKey = key;
+      if (usesBoard) {
+        // The board read is the entry account's only source; recover once when it delivered
+        // no rows, which is also what a manual scope change used to do.
+        if (!this.kpis().length) {
+          this.loadingCells.set(true);
+          this.state.reloadEntryBoard();
+        }
+        return;
       }
+      this.loadingCells.set(true);
+      this.loadGrid();
     });
 
     // An entry account gets its values inside the board read, so the grid follows the board

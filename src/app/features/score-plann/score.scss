@@ -229,6 +229,14 @@
   background-color: var(--color-primary);
 }
 
+.hp-period-current {
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
 .hp-period-panel {
   position: absolute;
   left: 0;
@@ -566,7 +574,7 @@
 
   tbody tr:last-child td { border-bottom: none; }
 
-  .col-unit, .col-type, .col-method, .col-weight, .col-target, .col-actual, .col-score {  white-space: nowrap; }
+  .col-unit, .col-type, .col-method, .col-weight, .col-target, .col-actual, .col-score {  white-space: nowrap; text-align: center;}
   .col-type { text-align: left; }
 }
 

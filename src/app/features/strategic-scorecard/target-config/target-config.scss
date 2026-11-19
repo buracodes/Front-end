@@ -1,15 +1,20 @@
 .target-config {
+  // Local tints: the quarter cards sit on the white panel, so they use a softer
+  // tint than the global muted surface to stay legible as grouped sub-cards.
+  --tc-quarter-surface: #f8fafc;
+  --tc-focus-ring: 0 0 0 3px rgba(24, 85, 44, 0.14);
+
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
-  max-width: 1080px;
-  // margin: 0 auto;
-  // padding: 0 var(--sp-4) var(--sp-6);
+  // The shell's .content supplies `flex: 1; padding: var(--sp-8)` for every routed
+  // page, the same outer spacing Fiscal Years uses, so the page only adds its own
+  // vertical rhythm and never a second set of gutters.
+  width: 100%;
 }
 
 .tc-toolbar {
-  padding: var(--sp-4) 0 var(--sp-2);
-  border-bottom: 1px solid var(--color-border);
+  padding: var(--sp-2) 0 var(--sp-4);
 }
 
 .tc-toolbar-row {
@@ -20,8 +25,15 @@
 
   h2 {
     margin: 0;
-    font-size: var(--font-size-lg);
+    font-size: var(--font-size-xl);
+    font-weight: 700;
+    letter-spacing: -0.01em;
     color: var(--color-text);
+  }
+
+  .btn {
+    padding: 9px 16px;
+    font-weight: 600;
   }
 }
 
@@ -48,8 +60,7 @@
 .tc-body {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-4);
-  padding-top: var(--sp-4);
+  gap: var(--sp-6);
 }
 
 .tc-loading,
@@ -66,39 +77,47 @@
   color: var(--color-warning);
 }
 
-.meta-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px var(--sp-2);
-  border-radius: 9999px;
-  background-color: var(--color-surface-muted);
-  border: 1px solid var(--color-border);
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-  white-space: nowrap;
+/* ==========================================================================
+   Main panel
+   ========================================================================== */
 
-  &.chip-tone {
-    background: var(--color-primary-light, var(--color-surface-muted));
-    color: var(--color-primary, var(--color-text));
+.tc-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+  padding: var(--sp-6);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+
+  @media (min-width: 900px) {
+    gap: var(--sp-8);
+    padding: var(--sp-8);
   }
 }
 
+/* ==========================================================================
+   KPI banner
+   ========================================================================== */
+
 .kpi-card {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: var(--sp-4);
+  gap: var(--sp-5);
   flex-wrap: wrap;
-  padding: var(--sp-4) var(--sp-5);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
+  padding-bottom: var(--sp-6);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .kpi-main {
   h3 {
-    margin: 0 0 var(--sp-1);
-    font-size: var(--font-size-lg);
+    margin: 0 0 var(--sp-2);
+    font-size: var(--font-size-2xl);
+    font-weight: 700;
+    line-height: 1.25;
+    letter-spacing: -0.01em;
     color: var(--color-text);
   }
 
@@ -113,30 +132,89 @@
   display: flex;
   gap: var(--sp-2);
   flex-wrap: wrap;
+  padding-top: var(--sp-1);
 }
 
-.rules-card {
-  padding: var(--sp-3) var(--sp-4);
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-muted);
+.meta-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  background-color: var(--color-surface-muted);
+  border: 1px solid var(--color-border);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  color: var(--color-text-muted);
+  white-space: nowrap;
 
-  h4 {
-    margin: 0 0 var(--sp-2);
-    font-size: var(--font-size-sm);
-    color: var(--color-text);
+  &.chip-tone {
+    background: var(--color-primary-light, var(--color-surface-muted));
+    border-color: transparent;
+    color: var(--color-primary, var(--color-text));
+  }
+}
+
+/* ==========================================================================
+   Rules callout
+   ========================================================================== */
+
+.rules-card {
+  padding: var(--sp-5);
+  border: 1px solid #bfdbfe;
+  border-radius: var(--radius);
+  background: var(--color-info-light);
+
+  .rules-head {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    margin-bottom: var(--sp-3);
+
+    h4 {
+      margin: 0;
+      font-size: var(--font-size-sm);
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      color: #1e3a8a;
+    }
+  }
+
+  .rules-icon {
+    display: inline-flex;
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    color: var(--color-info);
+
+    svg {
+      width: 100%;
+      height: 100%;
+    }
   }
 
   ul {
     margin: 0;
-    padding-left: var(--sp-4);
+    padding-left: var(--sp-5);
     display: flex;
     flex-direction: column;
-    gap: var(--sp-1);
-    font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
+    gap: var(--sp-2);
+    font-size: var(--font-size-sm);
+    line-height: 1.55;
+    color: #1e40af;
+
+    li::marker {
+      color: var(--color-info);
+    }
+
+    strong {
+      color: #1e3a8a;
+    }
   }
 }
+
+/* ==========================================================================
+   Sections
+   ========================================================================== */
 
 .tc-section {
   display: flex;
@@ -146,46 +224,22 @@
 
 .tc-section-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--sp-3);
 
   h4 {
     margin: 0;
-    font-size: var(--font-size-md);
+    font-size: var(--font-size-lg);
+    font-weight: 700;
     color: var(--color-text);
   }
 
   .hint {
-    font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
-  }
-}
-
-.annual-row {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-
-  .annual-input {
-    width: 180px;
-  }
-
-  .unit {
-    font-size: var(--font-size-sm);
-    color: var(--color-text-muted);
-  }
-}
-
-.check-row {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
-  font-size: var(--font-size-sm);
-  color: var(--color-text);
-  cursor: pointer;
-
-  input[type='checkbox'] {
-    accent-color: var(--color-primary, #2563eb);
+    padding: 2px 10px;
+    border-radius: 9999px;
+    background: var(--color-surface-muted);
+    border: 1px solid var(--color-border);
+    white-space: nowrap;
   }
 }
 
@@ -195,47 +249,211 @@
   color: var(--color-text-muted);
 }
 
+/* ==========================================================================
+   Annual target
+   ========================================================================== */
+
+.annual-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.annual-field {
+  display: inline-flex;
+  align-items: stretch;
+  overflow: hidden;
+  max-width: 340px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+
+  &:focus-within {
+    border-color: var(--color-primary);
+    box-shadow: var(--tc-focus-ring);
+  }
+
+  &.is-invalid {
+    border-color: var(--color-danger);
+  }
+
+  .annual-input {
+    width: 220px;
+    min-width: 0;
+    padding: 11px var(--sp-3);
+    border: 0;
+    outline: none;
+    background: transparent;
+    font-family: inherit;
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+    color: var(--color-text);
+
+    &::placeholder {
+      color: var(--color-text-subtle);
+      font-weight: 400;
+    }
+
+    &:disabled {
+      background: var(--color-surface-muted);
+      color: var(--color-text-muted);
+      cursor: not-allowed;
+    }
+  }
+
+  .annual-unit {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 64px;
+    padding: 0 var(--sp-4);
+    border-left: 1px solid var(--color-border);
+    background: var(--color-surface-muted);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--color-text-muted);
+  }
+}
+
+/* ==========================================================================
+   Auto-calculate block
+   ========================================================================== */
+
+.tc-auto-block {
+  gap: var(--sp-2);
+  padding: var(--sp-4) var(--sp-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--tc-quarter-surface);
+
+  .hint {
+    padding-left: calc(16px + var(--sp-2));
+  }
+}
+
+.check-row {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text);
+  cursor: pointer;
+
+  input[type='checkbox'] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--color-primary, #2563eb);
+    cursor: pointer;
+  }
+}
+
+/* ==========================================================================
+   Target inputs (quarter + month share one control style)
+   ========================================================================== */
+
+%tc-input {
+  width: 100%;
+  padding: 9px var(--sp-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  font-family: inherit;
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  color: var(--color-text);
+  text-align: right;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+
+  &::placeholder {
+    color: var(--color-text-subtle);
+    font-weight: 400;
+  }
+
+  &:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: var(--tc-focus-ring);
+  }
+
+  &:read-only,
+  &:disabled {
+    background: var(--color-surface-muted);
+    color: var(--color-text-muted);
+    cursor: not-allowed;
+  }
+}
+
+/* ==========================================================================
+   Quarterly & monthly grid
+   ========================================================================== */
+
 .quarter-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--sp-3);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sp-4);
+
+  @media (max-width: 1100px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  @media (max-width: 640px) {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .quarter-box {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-2);
-  padding: var(--sp-3);
+  gap: var(--sp-3);
+  padding: var(--sp-4);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-muted);
+  border-radius: 12px;
+  background: var(--tc-quarter-surface);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
 
   &.invalid {
-    border-color: var(--color-warning);
-    background: var(--color-warning-light);
+    border-color: #fca5a5;
+    background: #fff7f7;
   }
 
   .quarter-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: var(--sp-2);
+    padding-bottom: var(--sp-2);
+    border-bottom: 1px dashed var(--color-border-strong);
 
     .quarter-name {
-      font-size: var(--font-size-sm);
+      font-size: var(--font-size-md);
       font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
       color: var(--color-text);
     }
 
     .quarter-status {
-      font-size: var(--font-size-sm);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 22px;
+      height: 22px;
+      padding: 0 6px;
+      border-radius: 9999px;
+      font-size: 11px;
       font-weight: 700;
+      line-height: 1;
 
       &.ok {
-        color: #16a34a;
+        color: var(--color-success);
+        background: var(--color-success-light);
       }
 
       &.bad {
-        color: var(--color-warning);
+        color: var(--color-danger);
+        background: var(--color-danger-light);
       }
     }
   }
@@ -243,11 +461,14 @@
   .auto-note {
     margin: 0;
     font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
+    font-weight: 600;
+    color: var(--color-info);
   }
 
   .quarter-sum {
     margin: 0;
+    padding-top: var(--sp-1);
+    border-top: 1px dashed var(--color-border);
     font-size: var(--font-size-xs);
     color: var(--color-text-muted);
   }
@@ -259,19 +480,19 @@
   gap: var(--sp-1);
 
   .field-label {
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.06em;
     color: var(--color-text-muted);
   }
 
   input {
-    width: 100%;
+    @extend %tc-input;
   }
 
   &.field-readonly input {
-    background: var(--color-surface);
+    background: var(--color-surface-muted);
     color: var(--color-text-muted);
     cursor: not-allowed;
   }
@@ -280,34 +501,46 @@
 .month-row {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-2);
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
 }
 
 .month-box {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-1) var(--sp-1) var(--sp-3);
+  cursor: text;
+
+  & + .month-box {
+    border-top: 1px solid var(--color-border);
+  }
 
   .month-name {
     font-size: var(--font-size-xs);
+    font-weight: 600;
     color: var(--color-text-muted);
   }
 
   input {
-    width: 100%;
-  }
-
-  input[readonly] {
-    background: var(--color-surface);
-    color: var(--color-text-muted);
-    cursor: not-allowed;
+    @extend %tc-input;
+    width: 96px;
+    padding: 7px var(--sp-2);
   }
 }
+
+/* ==========================================================================
+   Messages & footer
+   ========================================================================== */
 
 .tc-error {
   margin: 0;
   font-size: var(--font-size-xs);
-  color: var(--color-warning);
+  font-weight: 600;
+  color: var(--color-danger);
 }
 
 .tc-footer {
@@ -316,8 +549,18 @@
   justify-content: space-between;
   gap: var(--sp-4);
   flex-wrap: wrap;
-  padding-top: var(--sp-4);
+  padding-top: var(--sp-6);
   border-top: 1px solid var(--color-border);
+
+  .btn {
+    padding: 11px 22px;
+    font-weight: 600;
+  }
+
+  .btn-primary {
+    min-width: 160px;
+    box-shadow: var(--shadow-sm);
+  }
 }
 
 .tc-messages {
@@ -329,22 +572,12 @@
 
 .saved-flag {
   font-size: var(--font-size-sm);
-  color: #16a34a;
+  font-weight: 600;
+  color: var(--color-success);
 }
 
 .summary-error {
   font-size: var(--font-size-sm);
-  color: var(--color-warning);
-}
-
-@media (max-width: 960px) {
-  .quarter-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 560px) {
-  .quarter-grid {
-    grid-template-columns: 1fr;
-  }
+  font-weight: 600;
+  color: var(--color-danger);
 }

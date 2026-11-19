@@ -1,29 +1,18 @@
 <div class="targets">
-  <app-plan-filter-bar [requireFiscalYear]="true" />
-
-  @if (!hasFiscalYear()) {
-    <div class="card targets-empty">
-      <strong>Choose a fiscal year to start creating targets.</strong>
-      <p class="mb-0">
-        KPI targets are set per fiscal year, so the grid opens once you pick the year you are
-        planning.
-      </p>
-    </div>
-  } @else {
-    @if (isReadOnly()) {
-    <div class="alert alert-warning read-only-banner" role="alert">
-      This fiscal year has <strong>ended or is closed</strong> and is read-only. Targets remain visible but can no longer be edited.
-    </div>
-    }
-    <div class="card targets-toolbar">
-      <div class="targets-summary">
-        <h2 class="targets-title">Create Targets</h2>
-        <p class="targets-count">
+  <header class="targets-header">
+    <div>
+      <h1 class="targets-title">Create Targets</h1>
+      @if (hasFiscalYear()) {
+        <p class="targets-subtitle">
           {{ rows().length }} KPI{{ rows().length === 1 ? '' : 's' }} in scope ·
           {{ savedCount() }} with targets · {{ dirtyRows().length }} changed
         </p>
-      </div>
+      } @else {
+        <p class="targets-subtitle">Set KPI targets for the selected fiscal year.</p>
+      }
+    </div>
 
+    @if (hasFiscalYear()) {
       <div class="targets-actions">
         <button
           type="button"
@@ -42,7 +31,25 @@
           {{ saving() ? 'Saving…' : 'Save Targets' }}
         </button>
       </div>
+    }
+  </header>
+
+  <app-plan-filter-bar [requireFiscalYear]="true" />
+
+  @if (!hasFiscalYear()) {
+    <div class="card targets-empty">
+      <strong class="targets-empty-title">Choose a fiscal year to start creating targets.</strong>
+      <p class="mb-0">
+        KPI targets are set per fiscal year, so the grid opens once you pick the year you are
+        planning.
+      </p>
     </div>
+  } @else {
+    @if (isReadOnly()) {
+    <div class="alert alert-warning read-only-banner" role="alert">
+      This fiscal year has <strong>ended or is closed</strong> and is read-only. Targets remain visible but can no longer be edited.
+    </div>
+    }
 
     @if (invalidRows().length) {
       <div class="alert alert-warning targets-blocker">

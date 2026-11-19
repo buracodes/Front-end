@@ -1,35 +1,52 @@
 .targets {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-4);
+  gap: var(--sp-5);
 }
 
-.targets-toolbar {
+/* The shared filter bar ships its own 16px bottom margin; cancel it so the page
+   gap alone sets the vertical rhythm, like the other planning pages. */
+.targets > app-plan-filter-bar {
+  display: block;
+  margin-bottom: calc(var(--sp-4) * -1);
+}
+
+/* ==========================================================================
+   Page header
+   ========================================================================== */
+
+.targets-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: var(--sp-4);
   flex-wrap: wrap;
-  padding: var(--sp-4) var(--sp-5);
 }
 
 .targets-title {
   margin: 0;
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+  line-height: 1.25;
   color: var(--color-text);
 }
 
-.targets-count {
-  margin: 2px 0 0;
+.targets-subtitle {
+  margin: var(--sp-1) 0 0;
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
 }
 
 .targets-actions {
   display: flex;
-  gap: var(--sp-2);
   align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
 }
+
+/* ==========================================================================
+   Messages & states
+   ========================================================================== */
 
 .targets-blocker {
   margin: 0;
@@ -45,7 +62,7 @@
   display: flex;
   align-items: center;
   gap: var(--sp-2);
-  padding: var(--sp-5);
+  padding: var(--sp-6);
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);
 }
@@ -54,10 +71,19 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
-  padding: var(--sp-8);
+  padding: var(--sp-8) var(--sp-6);
   text-align: center;
   color: var(--color-text-muted);
 }
+
+.targets-empty-title {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+/* ==========================================================================
+   Editable grid
+   ========================================================================== */
 
 .targets-grid-card {
   padding: 0;
@@ -73,12 +99,12 @@
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-md);
   white-space: nowrap;
 
   th,
   td {
-    padding: var(--sp-2) var(--sp-2);
+    padding: var(--sp-2) var(--sp-3);
     border-bottom: 1px solid var(--color-border);
     text-align: left;
     vertical-align: middle;
@@ -124,13 +150,14 @@ thead .sticky-col {
 .kpi-unit {
   display: block;
   font-size: var(--font-size-xs);
+  font-weight: 400;
   color: var(--color-text-muted);
 }
 
 .kpi-division {
   display: block;
   font-size: var(--font-size-xs);
-  font-weight: 600;
+  font-weight: 500;
   color: var(--color-primary);
 }
 
@@ -149,15 +176,17 @@ thead .sticky-col {
 }
 
 .cell-input {
-  padding: 4px 6px;
+  padding: 6px var(--sp-2);
   font-size: var(--font-size-sm);
+  font-weight: 400;
   text-align: right;
   min-width: 72px;
 }
 
 .cell-note {
   display: block;
-  font-size: 10px;
+  font-size: var(--font-size-xs);
+  font-weight: 400;
   color: var(--color-text-muted);
   text-align: right;
 

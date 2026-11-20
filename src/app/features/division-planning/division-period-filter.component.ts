@@ -127,9 +127,9 @@ export class DivisionPeriodFilterComponent {
     });
   });
 
-  /** Full four-digit fiscal-year labels, e.g. "2026/2027". */
+  /** The configured fiscal-year name, e.g. "FY2019", exactly as Fiscal Years stores it. */
   protected readonly yearOptions = computed(() =>
-    this.fiscalYears().map((year) => ({ id: year.id, label: this.yearLabel(year) }))
+    this.fiscalYears().map((year) => ({ id: year.id, label: year.label }))
   );
 
   protected readonly monthFrom = computed(() => this.fromDraft() ?? this.applied('fromMonth'));
@@ -164,7 +164,7 @@ export class DivisionPeriodFilterComponent {
         return filter.quarter ? `Q${filter.quarter} · ${this.quarterSpan(filter.quarter)}` : 'Quarter';
       case 'Year': {
         const year = this.fiscalYears().find((candidate) => candidate.id === filter.fiscalYearId);
-        return year ? this.yearLabel(year) : 'Fiscal year';
+        return year ? year.label : 'Fiscal year';
       }
       default:
         return 'YTD';
@@ -272,11 +272,6 @@ export class DivisionPeriodFilterComponent {
     const from = start.monthIndex + (quarter - 1) * 3;
     const to = from + 2;
     return `${LONG_MONTHS[from % 12]} – ${LONG_MONTHS[to % 12]} ${start.year + Math.floor(to / 12)}`;
-  }
-
-  private yearLabel(year: FiscalYear): string {
-    const start = this.parseStart(year.startDate);
-    return start ? `${start.year}/${start.year + 1}` : year.label;
   }
 
   private monthValue(raw: string): number | null {

@@ -21,7 +21,7 @@
           (change)="onSourceChange($event)"
         >
           @for (sc of scorecards(); track sc.id) {
-            <option [value]="sc.id">{{ sc.name }} — {{ sc.scope }} ({{ sc.scorecardStatus }})</option>
+            <option [value]="sc.id">{{ sc.name }} ({{ sc.scorecardStatus }})</option>
           }
         </select>
       </div>
@@ -34,7 +34,7 @@
           </div>
           <div class="source-row">
             <span class="source-label">Scope</span>
-            <span class="source-value">{{ source()!.scope }}</span>
+            <!-- <span class="source-value">{{ source()!.scope }}</span> -->
           </div>
           <div class="source-row">
             <span class="source-label">Status</span>

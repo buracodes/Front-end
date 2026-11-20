@@ -31,6 +31,211 @@
   white-space: nowrap;
 }
 
+.owner-filter-picker {
+  position: relative;
+}
+
+.owner-filter-trigger.form-control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  cursor: pointer;
+}
+
+/* Read-only owner shown to roles whose portfolio the backend already scopes. */
+.toolbar-owner-scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 38px;
+  padding: 0 0.85rem;
+  border: 1px solid #dbe3df;
+  border-radius: 999px;
+  background: #f3f7f5;
+  color: #35624a;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ── Searchable owner pickers (Division Planning division-picker pattern) ── */
+.owner-picker {
+  position: relative;
+  width: 100%;
+}
+
+.owner-picker-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  text-align: left;
+  cursor: pointer;
+}
+
+.owner-picker-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  &.is-placeholder {
+    color: var(--color-text-muted);
+  }
+
+  // Leave room for the clear button so a long selected name never sits underneath it.
+  &.has-clear {
+    padding-right: 1.75rem;
+  }
+}
+
+.owner-picker-clear {
+  position: absolute;
+  top: 50%;
+  right: 2.4rem;
+  transform: translateY(-50%);
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--color-primary-light);
+    color: var(--color-text);
+  }
+}
+
+/* Only the toolbar filter uses a viewport-fixed panel; it is not inside the scrolling modal. */
+.owner-picker-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+}
+
+/* Modal pickers are absolute children of .owner-picker: they stay aligned with the control,
+   inherit its width and scroll with the modal instead of floating free of the dialog. */
+.owner-picker-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  z-index: 5;
+  padding: var(--sp-2);
+  background: #ffffff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 20px rgba(25, 54, 44, 0.12);
+
+  &.drop-up {
+    top: auto;
+    bottom: calc(100% + 4px);
+  }
+
+  /* The toolbar panel keeps its measured viewport anchor (inline top/left/width). */
+  &.owner-filter-panel {
+    position: fixed;
+    z-index: 1101;
+  }
+}
+
+.owner-picker-search {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-1) var(--sp-2);
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+
+  svg {
+    flex-shrink: 0;
+  }
+}
+
+.owner-picker-search-input.form-control {
+  width: 100%;
+  padding: 4px 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+
+  &:focus {
+    box-shadow: none;
+  }
+}
+
+.owner-picker-list {
+  list-style: none;
+  margin: var(--sp-1) 0 0;
+  padding: 0;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.owner-picker-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: var(--sp-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+
+  &:hover {
+    background: var(--color-primary-light);
+  }
+
+  &.is-selected {
+    font-weight: 700;
+    color: var(--color-primary);
+  }
+}
+
+.owner-picker-option-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.owner-picker-option-name {
+  // Show the complete first + father + grandfather name; wrap naturally at word boundaries
+  // instead of clipping it, so no part of the name is lost.
+  line-height: 1.3;
+  overflow-wrap: break-word;
+}
+
+.owner-picker-option-meta {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+
+.owner-picker-empty {
+  padding: var(--sp-3) var(--sp-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
 .stats-row {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

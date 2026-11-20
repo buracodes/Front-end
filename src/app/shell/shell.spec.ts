@@ -214,7 +214,7 @@ describe('ShellComponent navigation permissions', () => {
     expect(labelsFor(['actuals:view', 'kpi:override'])).toContain('Data Locking');
   });
 
-  it('hides Division Scorecard from principals without divisions:plan', () => {
+  it('hides Division Planning from principals without divisions:plan', () => {
     const labels = labelsFor([
       'dashboard:view',
       'organization:view',
@@ -224,12 +224,12 @@ describe('ShellComponent navigation permissions', () => {
       'actuals:view',
     ]);
 
-    expect(labels).not.toContain('Division Scorecard');
+    expect(labels).not.toContain('Division Planning');
   });
 
-  it('shows Division Scorecard to the plan authors', () => {
+  it('shows Division Planning to the plan authors', () => {
     expect(labelsFor(['dashboard:view', 'division:scorecard.view', 'divisions:plan'])).toContain(
-      'Division Scorecard'
+      'Division Planning'
     );
   });
 });

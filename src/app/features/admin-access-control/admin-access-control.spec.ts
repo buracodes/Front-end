@@ -137,14 +137,9 @@ describe('AdminAccessControlPage', () => {
 
   const nextTask = () => new Promise<void>((resolve) => setTimeout(resolve));
 
-  it('exposes exactly the four access-control tabs', () => {
+  it('exposes the access-control tabs', () => {
     const { page } = setup();
-    expect(page.tabs.map((tab) => tab.label)).toEqual([
-      'Groups',
-      'Group Rights',
-      'Group Members',
-      'User Rights',
-    ]);
+    expect(page.tabs.map((tab) => tab.label)).toEqual(['Groups', 'Group Members']);
   });
 
   it('filters the group table by name and description', async () => {

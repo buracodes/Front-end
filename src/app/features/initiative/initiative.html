@@ -25,13 +25,21 @@
     <option value="Cancelled">Cancelled</option>
   </select>
 
-  <select class="form-control toolbar-select" [value]="ownerFilter()"
-    (change)="onOwnerFilterChange($any($event.target).value)">
-    <option value="all">All owners</option>
-    @for (owner of ownerFilterOptions(); track owner.value) {
-    <option [value]="owner.value">{{ owner.label }}</option>
-    }
-  </select>
+  @if (hasScopedOwner()) {
+  <div class="toolbar-owner-scope" [attr.title]="'Owner scope: ' + scopedOwnerLabel()">
+    <svg lucideIcon="user" size="14"></svg>
+    <span>{{ scopedOwnerLabel() }}</span>
+  </div>
+  } @else {
+  <div class="owner-filter-picker">
+    <button type="button" class="form-control toolbar-select owner-filter-trigger"
+      aria-haspopup="listbox" [attr.aria-expanded]="ownerFilterPickerOpen()"
+      (click)="toggleOwnerFilterPicker($event)">
+      <span class="owner-picker-value">{{ selectedOwnerFilterLabel() }}</span>
+      <svg aria-hidden="true" lucideIcon="chevron-down" size="14" strokeWidth="3"></svg>
+    </button>
+  </div>
+  }
 
   <label class="toolbar-checkbox">
     <input type="checkbox" [checked]="includeClosed()" (change)="onIncludeClosedChange($any($event.target).checked)" />
@@ -39,9 +47,52 @@
   </label>
 </div>
 
+<!-- Elevated roles get a searchable All-owners filter; scoped roles see only the badge above. -->
+@if (ownerFilterPickerOpen()) {
+<div class="owner-picker-backdrop" (click)="onOwnerPickerBackdropClick($event)"></div>
+<div class="owner-picker-panel owner-filter-panel" role="dialog" aria-label="Filter by owner"
+  (click)="$event.stopPropagation()" [style.top.px]="ownerPickerPosition().top"
+  [style.left.px]="ownerPickerPosition().left" [style.width.px]="ownerPickerPosition().width">
+  <div class="owner-picker-search">
+    <svg aria-hidden="true" lucideIcon="search" size="14"></svg>
+    <input class="form-control owner-picker-search-input" type="text" placeholder="Search owners…"
+      aria-label="Search owners" [value]="ownerFilterSearch()"
+      (input)="ownerFilterSearch.set($any($event.target).value)" (keydown.escape)="closeOwnerPickers()" />
+  </div>
+  <ul class="owner-picker-list" role="listbox" aria-label="Owners">
+    <li>
+      <button type="button" class="owner-picker-option" role="option"
+        [attr.aria-selected]="ownerFilter() === 'all'" [class.is-selected]="ownerFilter() === 'all'"
+        (click)="selectOwnerFilter('all')">
+        <span>All owners</span>
+        @if (ownerFilter() === 'all') {
+        <svg aria-hidden="true" lucideIcon="check" size="14" strokeWidth="3"></svg>
+        }
+      </button>
+    </li>
+    @if (filteredOwnerFilterOptions().length === 0) {
+    <li class="owner-picker-empty">No owners match “{{ ownerFilterSearch() }}”.</li>
+    } @else {
+    @for (owner of filteredOwnerFilterOptions(); track owner.value) {
+    <li>
+      <button type="button" class="owner-picker-option" role="option"
+        [attr.aria-selected]="ownerFilter() === owner.value" [class.is-selected]="ownerFilter() === owner.value"
+        (click)="selectOwnerFilter(owner.value)">
+        <span>{{ owner.label }}</span>
+        @if (ownerFilter() === owner.value) {
+        <svg aria-hidden="true" lucideIcon="check" size="14" strokeWidth="3"></svg>
+        }
+      </button>
+    </li>
+    }
+    }
+  </ul>
+</div>
+}
+
 @if (showForm()) {
-<div class="modal-backdrop" (click)="onCancelEdit()">
-  <div class="modal-dialog modal-lg" (click)="$event.stopPropagation()">
+<div class="modal-backdrop" (click)="onModalBackdropClick($event)">
+  <div class="modal-dialog modal-lg" (click)="onModalDialogClick($event)">
     <div class="modal-header">
       <h3>{{ editingId() ? 'Edit Initiative' : 'New Initiative' }}</h3>
       <button type="button" class="close-btn" aria-label="Close" (click)="onCancelEdit()"><svg lucideIcon="x"
@@ -121,28 +172,122 @@
 
           <div class="form-group">
             @if (form.controls.ownerType.value === 'Division') {
-            <label class="form-label" for="initiative-division-owner">Division owner</label>
-            <select id="initiative-division-owner" class="form-control" formControlName="divisionOwnerId">
-              <option value="">Select division</option>
-              @for (division of divisionOptions(); track division.id) {
-              <option [value]="division.id">{{ division.label }}</option>
+            <label class="form-label" id="initiative-division-owner-label">Division owner</label>
+            <div class="owner-picker">
+              <button type="button" class="form-control owner-picker-trigger"
+                aria-haspopup="listbox" aria-labelledby="initiative-division-owner-label"
+                [attr.aria-expanded]="divisionOwnerPickerOpen()" (click)="toggleDivisionOwnerPicker($event)">
+                <span class="owner-picker-value" [class.is-placeholder]="!selectedDivisionOwnerLabel()"
+                  [class.has-clear]="!!selectedDivisionOwnerLabel()" [attr.title]="selectedDivisionOwnerLabel() || null">
+                  {{ selectedDivisionOwnerLabel() || 'Select division' }}
+                </span>
+                <svg aria-hidden="true" lucideIcon="chevron-down" size="14" strokeWidth="3"></svg>
+              </button>
+              @if (selectedDivisionOwnerLabel()) {
+              <button type="button" class="owner-picker-clear" aria-label="Clear selected division"
+                (click)="clearDivisionOwner($event)">
+                <svg aria-hidden="true" lucideIcon="x" size="14"></svg>
+              </button>
               }
-            </select>
+              @if (divisionOwnerPickerOpen()) {
+              <div class="owner-picker-panel" [class.drop-up]="ownerPickerPlacement().dropUp" role="dialog"
+                aria-label="Select division owner" (click)="$event.stopPropagation()">
+                <div class="owner-picker-search">
+                  <svg aria-hidden="true" lucideIcon="search" size="14"></svg>
+                  <input class="form-control owner-picker-search-input" type="text" placeholder="Search divisions…"
+                    aria-label="Search divisions" [value]="divisionOwnerSearch()"
+                    (input)="divisionOwnerSearch.set($any($event.target).value)"
+                    (keydown.escape)="closeOwnerPickers()" />
+                </div>
+                <ul class="owner-picker-list" role="listbox" aria-label="Divisions"
+                  [style.max-height.px]="ownerPickerPlacement().maxHeight">
+                  @if (filteredDivisionOwnerOptions().length === 0) {
+                  <li class="owner-picker-empty">No divisions match “{{ divisionOwnerSearch() }}”.</li>
+                  } @else {
+                  @for (division of filteredDivisionOwnerOptions(); track division.id) {
+                  <li>
+                    <button type="button" class="owner-picker-option" role="option"
+                      [attr.aria-selected]="form.controls.divisionOwnerId.value === division.id"
+                      [class.is-selected]="form.controls.divisionOwnerId.value === division.id"
+                      (click)="selectDivisionOwner(division.id)">
+                      <span class="owner-picker-option-name">{{ division.label }}</span>
+                      @if (form.controls.divisionOwnerId.value === division.id) {
+                      <svg aria-hidden="true" lucideIcon="check" size="14" strokeWidth="3"></svg>
+                      }
+                    </button>
+                  </li>
+                  }
+                  }
+                </ul>
+              </div>
+              }
+            </div>
             @if (loadingDivisions()) {
             <p class="form-hint">Loading divisions…</p>
             }
             } @else {
-            <label class="form-label" for="initiative-owner">Owner</label>
-            <select id="initiative-owner" class="form-control" formControlName="ownerId">
-              <option value="">Select owner</option>
-              @for (owner of ownerFormOptions(); track owner.id) {
-              <option [value]="owner.id">{{ owner.label }}</option>
+            <label class="form-label" id="initiative-owner-label">Owner</label>
+            <div class="owner-picker">
+              <button type="button" class="form-control owner-picker-trigger"
+                aria-haspopup="listbox" aria-labelledby="initiative-owner-label"
+                [attr.aria-expanded]="employeeOwnerPickerOpen()" (click)="toggleEmployeeOwnerPicker($event)">
+                <span class="owner-picker-value" [class.is-placeholder]="!selectedEmployeeOwnerLabel()"
+                  [class.has-clear]="!!selectedEmployeeOwnerLabel()" [attr.title]="selectedEmployeeOwnerLabel() || null">
+                  {{ selectedEmployeeOwnerLabel() || 'Select active employee' }}
+                </span>
+                <svg aria-hidden="true" lucideIcon="chevron-down" size="14" strokeWidth="3"></svg>
+              </button>
+              @if (selectedEmployeeOwnerLabel()) {
+              <button type="button" class="owner-picker-clear" aria-label="Clear selected employee"
+                (click)="clearEmployeeOwner($event)">
+                <svg aria-hidden="true" lucideIcon="x" size="14"></svg>
+              </button>
               }
-            </select>
+              @if (employeeOwnerPickerOpen()) {
+              <div class="owner-picker-panel" [class.drop-up]="ownerPickerPlacement().dropUp" role="dialog"
+                aria-label="Select employee owner" (click)="$event.stopPropagation()">
+                <div class="owner-picker-search">
+                  <svg aria-hidden="true" lucideIcon="search" size="14"></svg>
+                  <input class="form-control owner-picker-search-input" type="text" placeholder="Search active employees…"
+                    aria-label="Search active employees" [value]="employeeOwnerSearch()"
+                    (input)="employeeOwnerSearch.set($any($event.target).value)"
+                    (keydown.escape)="closeOwnerPickers()" />
+                </div>
+                <ul class="owner-picker-list" role="listbox" aria-label="Active employees"
+                  [style.max-height.px]="ownerPickerPlacement().maxHeight">
+                  @if (filteredEmployeeOwnerOptions().length === 0) {
+                  <li class="owner-picker-empty">No active employees match “{{ employeeOwnerSearch() }}”.</li>
+                  } @else {
+                  @for (employee of filteredEmployeeOwnerOptions(); track employee.id) {
+                  <li>
+                    <button type="button" class="owner-picker-option" role="option"
+                      [attr.aria-selected]="form.controls.ownerId.value === employee.id"
+                      [class.is-selected]="form.controls.ownerId.value === employee.id"
+                      (click)="selectEmployeeOwner(employee.id)">
+                      <span class="owner-picker-option-main">
+                        <span class="owner-picker-option-name">{{ employee.label }}</span>
+                        @if (employee.meta) {
+                        <span class="owner-picker-option-meta">{{ employee.meta }}</span>
+                        }
+                      </span>
+                      @if (form.controls.ownerId.value === employee.id) {
+                      <svg aria-hidden="true" lucideIcon="check" size="14" strokeWidth="3"></svg>
+                      }
+                    </button>
+                  </li>
+                  }
+                  }
+                </ul>
+              </div>
+              }
+            </div>
+            @if (loadingEmployees()) {
+            <p class="form-hint">Loading active employees…</p>
+            }
             }
             @if (form.hasError('ownerRequired') && (form.controls.ownerId.touched ||
             form.controls.divisionOwnerId.touched)) {
-            <p class="form-error">Select an owner: an individual user or a division.</p>
+            <p class="form-error">Select an owner: an active employee or a division.</p>
             }
           </div>
         </div>
@@ -205,6 +350,7 @@
       </button>
     </div>
   </div>
+
 </div>
 }
 

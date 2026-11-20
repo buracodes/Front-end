@@ -70,6 +70,11 @@ export interface KpiOwnerOption {
   positionLevel?: string;
   divisionId?: string;
   divisionName?: string;
+  /** HR name parts: MiddleName is the father's name and LastName is the grandfather's name. */
+  firstName?: string;
+  fatherName?: string;
+  grandfatherName?: string;
+  departmentName?: string;
 }
 
 export interface KPI {
@@ -245,7 +250,6 @@ export interface EntryScorecard {
   id: string;
   fiscalYearId: string;
   name: string;
-  scope: string;
   scorecardStatus: string;
 }
 

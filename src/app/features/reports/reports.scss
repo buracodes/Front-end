@@ -190,6 +190,26 @@
   }
 }
 
+.filters-hint,
+.filters-error {
+  margin: 8px 0 0;
+  font-size: var(--rp-fs-label);
+  line-height: 16px;
+}
+
+.filters-hint {
+  color: var(--rp-muted);
+}
+
+.filters-error {
+  color: var(--rp-red-text);
+  font-weight: 600;
+}
+
+.filter-select[aria-invalid='true'] {
+  border-color: var(--rp-red-text);
+}
+
 .filters-actions {
   display: flex;
   gap: 10px;

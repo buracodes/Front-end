@@ -79,7 +79,7 @@ describe('KpiPage owner assignment', () => {
   function settle(kpis: Kpi[] = [], divisions: Division[] = [division(), division({ id: 'd-2', name: 'Operations', code: 'OPS' })]): void {
     http.expectOne((r) => isUrl(r.url, 'fiscalyear')).flush(ok([]));
     http.match((r) => isUrl(r.url, 'scorecard')).forEach((request) =>
-      request.flush(ok([{ id: 'sc-1', fiscalYearId: 'fy-1', fiscalYearName: 'FY 2026', name: 'Corporate 2026', scope: 'Corporate' }])),
+      request.flush(ok([{ id: 'sc-1', fiscalYearId: 'fy-1', fiscalYearName: 'FY 2026', name: 'Corporate 2026' }])),
     );
     http.expectOne((r) => isUrl(r.url, 'kpi')).flush(ok(kpis));
     http.expectOne((r) => isUrl(r.url, 'kra')).flush(ok([]));
@@ -258,5 +258,41 @@ describe('KpiPage owner assignment', () => {
     expect(page.form.controls.divisionOwnerId.value).toBe('d-1');
     expect(page.selectedDivision()?.name).toBe('Trading');
     expect(page.selectedDivision()?.code).toBe('TRD');
+  });
+
+  it('leads with the summary columns and pins actions ahead of the scrollable detail', () => {
+    settle();
+
+    expect(page.columnDefs.map((column) => column.headerName)).toEqual([
+      'Name',
+      'Owner',
+      'Unit',
+      'Weight',
+      'Target',
+      'Optimization',
+      'Actions',
+      'Scorecard',
+      'Goal',
+      'KRA',
+      'KPI Type',
+      'Data Source',
+      'Active',
+      'Child KPIs',
+      'Actual',
+      'Score',
+    ]);
+
+    const actions = page.columnDefs[6];
+    expect(actions.pinned).toBe('right');
+    expect(actions.maxWidth).toBe(72);
+
+    // The summary columns fit the opening view together; the detail columns keep fixed
+    // widths so the grid scrolls horizontally instead of squeezing the summary.
+    expect(page.columnDefs[0].flex).toBe(1);
+    expect(page.columnDefs[0].minWidth).toBe(220);
+    expect(page.columnDefs[1].flex).toBe(1);
+    expect(page.columnDefs[1].minWidth).toBe(160);
+    expect(page.columnDefs.slice(2, 6).every((column) => typeof column.width === 'number')).toBe(true);
+    expect(page.columnDefs.slice(7).every((column) => typeof column.width === 'number')).toBe(true);
   });
 });

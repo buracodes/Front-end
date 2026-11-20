@@ -6,8 +6,8 @@ import {
 import { FiscalYear } from '../../core/model/scorecard.model';
 
 const YEARS: FiscalYear[] = [
-  { id: 'fy-2', label: '2026/27', startDate: '2026-07-01', endDate: '2027-06-30', status: 'Open' },
-  { id: 'fy-1', label: '2025/26', startDate: '2025-07-01', endDate: '2026-06-30', status: 'Closed' },
+  { id: 'fy-2', label: 'FY 2026', startDate: '2026-07-01', endDate: '2027-06-30', status: 'Open' },
+  { id: 'fy-1', label: 'FY 2025', startDate: '2025-07-01', endDate: '2026-06-30', status: 'Closed' },
 ];
 
 interface Harness {
@@ -149,15 +149,15 @@ describe('DivisionPeriodFilterComponent', () => {
     expect(rootOf(harness).querySelector('.period-trigger')?.textContent).toContain('Filter by Period:');
   });
 
-  it('offers full fiscal-year labels and emits the chosen year', () => {
+  it('offers the configured fiscal-year name and emits the chosen year', () => {
     const harness = mount();
     openPanel(harness);
     clickTab(harness, 'Year');
 
     const select = rootOf(harness).querySelector('.year-select') as HTMLSelectElement;
     expect(Array.from(select.options).map((option) => option.textContent)).toEqual([
-      '2026/2027',
-      '2025/2026',
+      'FY 2026',
+      'FY 2025',
     ]);
 
     choose(harness, select, 'fy-1');

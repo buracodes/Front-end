@@ -1,4 +1,5 @@
 import { Component, HostListener, computed, inject, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { AbstractControl, FormControl, FormGroup, ReactiveFormsModule, ValidationErrors, Validators, ValidatorFn } from '@angular/forms';
@@ -15,14 +16,12 @@ import {
 import { InitiativeService } from '../../features/initiative/initiative.service';
 import { NotificationService } from '../../core/service/notification.service';
 import { ConfirmDialogService } from '../../shared/service/confirm-dialog.service';
-import { AdminUserService } from '../admin-users/admin-users.service';
-import { AppUser } from '../admin-users/admin-users.model';
 import { KraService } from '../kra/kra.service';
 import { Kra } from '../kra/kra.model';
 import { KpiService } from '../kpi/kpi.service';
 import { Kpi } from '../kpi/kpi.model';
 import { GoalService } from '../../core/service/goal.service';
-import { Goal } from '../../core/model/goal.model';
+import { Goal, KpiOwnerOption } from '../../core/model/goal.model';
 import { UserStore } from '../../core/service/user-store.service';
 import { DivisionService } from '../division/division.service';
 import { Division } from '../division/division.model';
@@ -38,7 +37,6 @@ export class InitiativePage {
   private readonly notifications = inject(NotificationService);
   private readonly dialog = inject(ConfirmDialogService);
   private readonly router = inject(Router);
-  private readonly adminUserService = inject(AdminUserService);
   private readonly kraService = inject(KraService);
   private readonly kpiService = inject(KpiService);
   private readonly goalService = inject(GoalService);
@@ -52,9 +50,10 @@ export class InitiativePage {
   // FR-403/FR-404: every figure below is calculated by the backend.
   readonly summary = signal<InitiativeSummary | null>(null);
 
-  // Users available to assign as initiative owner (ownerId is a user GUID in the API).
-  readonly userOptions = signal<AppUser[]>([]);
-  readonly loadingUsers = signal(false);
+  // Active HR employees available to own an initiative individually. ownerId is the employee's
+  // stable user GUID in the API; the list comes from the HR lookup, not the local user directory.
+  readonly employeeOwners = signal<KpiOwnerOption[]>([]);
+  readonly loadingEmployees = signal(false);
 
   // Divisions available to own an initiative instead of an individual user.
   readonly divisions = signal<Division[]>([]);
@@ -80,6 +79,8 @@ export class InitiativePage {
   readonly search = signal('');
   readonly statusFilter = signal<string>('all');
   readonly ownerFilter = signal<string>('all');
+  readonly ownerFilterSearch = signal('');
+  readonly ownerFilterPickerOpen = signal(false);
   readonly includeClosed = signal(true);
 
   readonly page = signal(1);
@@ -91,6 +92,29 @@ export class InitiativePage {
   readonly canEdit = computed(() => this.userStore.hasPermission('initiatives:edit'));
   readonly canDelete = computed(() => this.userStore.hasPermission('initiatives:delete'));
   readonly canClose = computed(() => this.userStore.hasPermission('initiatives:close'));
+
+  /**
+   * Data Input, View Only and Executive accounts already receive an owner-scoped portfolio from
+   * the backend, so a cross-owner dropdown would be misleading. Role names are normalized so both
+   * the canonical "Data Input User" and the compact "DataInputUser" form resolve to the same role.
+   */
+  private static readonly scopedRoleKeys = new Set(['datainputuser', 'viewonly', 'executive']);
+
+  readonly hasScopedOwner = computed(() =>
+    this.userStore
+      .roles()
+      .some((role) => InitiativePage.scopedRoleKeys.has(role.toLowerCase().replace(/[\s_-]/g, '')))
+  );
+
+  /** The one owner scope shown to scoped roles: their division(s), or their own name. */
+  readonly scopedOwnerLabel = computed(() => {
+    const divisionNames = this.userStore
+      .divisionIds()
+      .map((id) => this.divisions().find((division) => division.id === id)?.name ?? id);
+    if (divisionNames.length) return divisionNames.join(', ');
+    const user = this.userStore.user();
+    return user?.fullName || user?.username || '—';
+  });
 
   /**
    * Unique owners across the visible initiatives as {value, label} pairs for the filter dropdown.
@@ -115,6 +139,19 @@ export class InitiativePage {
     );
   });
 
+  /** Label shown by the elevated-role owner filter trigger. */
+  readonly selectedOwnerFilterLabel = computed(() => {
+    const value = this.ownerFilter();
+    if (value === 'all') return 'All owners';
+    return this.ownerFilterOptions().find((owner) => owner.value === value)?.label ?? value;
+  });
+
+  readonly filteredOwnerFilterOptions = computed(() => {
+    const term = this.ownerFilterSearch().trim().toLowerCase();
+    const options = this.ownerFilterOptions();
+    return term ? options.filter((owner) => owner.label.toLowerCase().includes(term)) : options;
+  });
+
   /** Active divisions offered as an initiative owner, plus the current one when it is not listed. */
   readonly divisionOptions = computed(() => {
     const options = this.divisions()
@@ -130,18 +167,225 @@ export class InitiativePage {
     return options;
   });
 
-  /** Options for the owner <select> in the form: all users, plus the current owner if it isn't one. */
+  /** HR stores father in MiddleName and grandfather in LastName; show the complete name in the picker. */
+  private static employeeFullName(employee: KpiOwnerOption): string {
+    const parts = [employee.firstName, employee.fatherName, employee.grandfatherName].filter(Boolean);
+    return parts.length ? parts.join(' ') : employee.fullName;
+  }
+
+  /** Options for the individual-owner picker: active HR employees, plus the current owner if missing. */
   readonly ownerFormOptions = computed(() => {
-    const options = this.userOptions().map((user) => ({
-      id: user.id,
-      label: user.fullName || user.username,
-    }));
+    const options = this.employeeOwners().map((employee) => {
+      const label = InitiativePage.employeeFullName(employee);
+      const meta = [employee.divisionName, employee.departmentName, employee.positionName]
+        .filter(Boolean)
+        .join(' · ');
+      return {
+        id: employee.id,
+        label,
+        meta,
+        // Search the complete name (first + father + grandfather) plus the HR short name,
+        // id and department/role so any visible part of the option finds the employee.
+        searchText: [
+          label,
+          employee.fullName,
+          employee.firstName,
+          employee.fatherName,
+          employee.grandfatherName,
+          employee.employeeCode,
+          employee.email,
+          meta,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase(),
+      };
+    });
     const current = this.currentOwnerId();
     if (current && !options.some((o) => o.id === current)) {
-      options.unshift({ id: current, label: current });
+      options.unshift({ id: current, label: current, meta: '', searchText: current.toLowerCase() });
     }
     return options;
   });
+
+  // ── Searchable owner pickers (same behaviour/style as Division Planning's division picker) ──
+
+  readonly divisionOwnerSearch = signal('');
+  readonly divisionOwnerPickerOpen = signal(false);
+  readonly employeeOwnerSearch = signal('');
+  readonly employeeOwnerPickerOpen = signal(false);
+  /** Toolbar filter panel anchor (it is not inside the scrolling modal). */
+  readonly ownerPickerPosition = signal({ top: 0, left: 0, width: 0 });
+  /** Modal panels are absolute children of the trigger wrapper, bounded by the modal body. */
+  readonly ownerPickerPlacement = signal({ maxHeight: 260, dropUp: false });
+
+  readonly filteredDivisionOwnerOptions = computed(() => {
+    const term = this.divisionOwnerSearch().trim().toLowerCase();
+    const options = this.divisionOptions();
+    return term ? options.filter((o) => o.label.toLowerCase().includes(term)) : options;
+  });
+
+  readonly filteredEmployeeOwnerOptions = computed(() => {
+    const words = this.employeeOwnerSearch().trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const options = this.ownerFormOptions();
+    if (!words.length) return options;
+    return options.filter((o) => words.every((word) => o.searchText.includes(word)));
+  });
+
+  /** Selected owner label shown by the closed trigger; driven by form-value signals above. */
+  readonly selectedDivisionOwnerLabel = computed(
+    () => this.divisionOptions().find((o) => o.id === this.divisionOwnerIdValue())?.label ?? ''
+  );
+
+  readonly selectedEmployeeOwnerLabel = computed(
+    () => this.ownerFormOptions().find((o) => o.id === this.ownerIdValue())?.label ?? ''
+  );
+
+  /** Toolbar filter panel: fixed to the viewport trigger, clamped inside the window. */
+  private positionToolbarOwnerPicker(trigger: HTMLElement): void {
+    const rect = trigger.getBoundingClientRect();
+    const width = Math.max(rect.width, 260);
+    const left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 12));
+    const panelHeight = 340;
+    const spaceBelow = window.innerHeight - rect.bottom - 12;
+    const top =
+      spaceBelow >= panelHeight || spaceBelow >= rect.top - 12
+        ? rect.bottom + 4
+        : Math.max(12, rect.top - panelHeight - 4);
+    this.ownerPickerPosition.set({ top, left, width });
+  }
+
+  /**
+   * Modal pickers are absolute children of the trigger wrapper so they stay aligned with the
+   * control and scroll with the modal. Bound their height to the space available in .modal-body,
+   * flipping above the trigger when the control has been scrolled near the bottom of the dialog.
+   */
+  private prepareModalOwnerPicker(trigger: HTMLElement): void {
+    const rect = trigger.getBoundingClientRect();
+    const modalBody = trigger.closest<HTMLElement>('.modal-body');
+    const bodyRect = modalBody?.getBoundingClientRect();
+    const spaceBelow = (bodyRect?.bottom ?? window.innerHeight) - rect.bottom - 12;
+    const spaceAbove = rect.top - (bodyRect?.top ?? 0) - 12;
+    const dropUp = spaceBelow < 180 && spaceAbove > spaceBelow;
+    // Search row, padding and border occupy roughly 64px; the list gets the rest, capped at 260px.
+    const maxHeight = Math.max(96, Math.min(260, (dropUp ? spaceAbove : spaceBelow) - 64));
+    this.ownerPickerPlacement.set({ maxHeight, dropUp });
+  }
+
+  toggleDivisionOwnerPicker(event: MouseEvent): void {
+    event.stopPropagation();
+    if (this.divisionOwnerPickerOpen()) {
+      this.closeOwnerPickers();
+      return;
+    }
+    this.prepareModalOwnerPicker(event.currentTarget as HTMLElement);
+    this.divisionOwnerSearch.set('');
+    this.employeeOwnerPickerOpen.set(false);
+    this.divisionOwnerPickerOpen.set(true);
+  }
+
+  toggleEmployeeOwnerPicker(event: MouseEvent): void {
+    event.stopPropagation();
+    if (this.employeeOwnerPickerOpen()) {
+      this.closeOwnerPickers();
+      return;
+    }
+    this.prepareModalOwnerPicker(event.currentTarget as HTMLElement);
+    this.employeeOwnerSearch.set('');
+    this.divisionOwnerPickerOpen.set(false);
+    this.employeeOwnerPickerOpen.set(true);
+  }
+
+  closeOwnerPickers(): void {
+    this.divisionOwnerPickerOpen.set(false);
+    this.employeeOwnerPickerOpen.set(false);
+    this.ownerFilterPickerOpen.set(false);
+  }
+
+  toggleOwnerFilterPicker(event: MouseEvent): void {
+    event.stopPropagation();
+    if (this.ownerFilterPickerOpen()) {
+      this.closeOwnerPickers();
+      return;
+    }
+    this.positionToolbarOwnerPicker(event.currentTarget as HTMLElement);
+    this.ownerFilterSearch.set('');
+    this.ownerFilterPickerOpen.set(true);
+  }
+
+  selectOwnerFilter(value: string): void {
+    this.onOwnerFilterChange(value);
+    this.closeOwnerPickers();
+  }
+
+  onOwnerPickerBackdropClick(event: MouseEvent): void {
+    event.stopPropagation();
+    this.closeOwnerPickers();
+  }
+
+  /** True while one of the modal owner pickers is open. */
+  private isModalOwnerPickerOpen(): boolean {
+    return this.divisionOwnerPickerOpen() || this.employeeOwnerPickerOpen();
+  }
+
+  /**
+   * A backdrop click dismisses an open owner picker first; only a click with no picker open
+   * closes the whole modal. Without this, opening a picker then clicking outside would lose
+   * the in-progress form.
+   */
+  onModalBackdropClick(event: MouseEvent): void {
+    event.stopPropagation();
+    if (this.isModalOwnerPickerOpen()) {
+      this.closeOwnerPickers();
+      return;
+    }
+    this.onCancelEdit();
+  }
+
+  /**
+   * Clicks elsewhere inside the dialog bubble here (the picker trigger and panel stop
+   * propagation before this point), so this closes a stuck-open picker without touching
+   * the modal itself.
+   */
+  onModalDialogClick(event: MouseEvent): void {
+    event.stopPropagation();
+    this.closeOwnerPickers();
+  }
+
+  selectDivisionOwner(id: string): void {
+    const control = this.form.controls.divisionOwnerId;
+    // Re-selecting the current division toggles it off, giving a clear way to unselect.
+    control.setValue(control.value === id ? '' : id);
+    control.markAsTouched();
+    this.form.updateValueAndValidity();
+    this.closeOwnerPickers();
+  }
+
+  selectEmployeeOwner(id: string): void {
+    const control = this.form.controls.ownerId;
+    // Re-selecting the current employee toggles it off, giving a clear way to unselect.
+    control.setValue(control.value === id ? '' : id);
+    control.markAsTouched();
+    this.form.updateValueAndValidity();
+    this.closeOwnerPickers();
+  }
+
+  /** Explicit clear buttons on the picker triggers. */
+  clearDivisionOwner(event?: MouseEvent): void {
+    event?.stopPropagation();
+    this.form.controls.divisionOwnerId.setValue('');
+    this.form.controls.divisionOwnerId.markAsTouched();
+    this.form.updateValueAndValidity();
+    this.closeOwnerPickers();
+  }
+
+  clearEmployeeOwner(event?: MouseEvent): void {
+    event?.stopPropagation();
+    this.form.controls.ownerId.setValue('');
+    this.form.controls.ownerId.markAsTouched();
+    this.form.updateValueAndValidity();
+    this.closeOwnerPickers();
+  }
 
   /** The page slice is rendered as-is: filtering and paging happen on the server. */
   readonly filteredRows = computed(() => this.rows());
@@ -236,26 +480,35 @@ export class InitiativePage {
     resources: new FormControl('', { nonNullable: true }),
   }, { validators: [this.ownerRequiredValidator] });
 
+  /**
+   * Bridge the reactive-form owner values into signals. A plain FormControl read inside a
+   * computed signal is not tracked, so without this the trigger label would stay stale after a
+   * selection. Every setValue/patchValue/reset emits valueChanges and refreshes these signals.
+   */
+  private readonly ownerIdValue = toSignal(this.form.controls.ownerId.valueChanges, { initialValue: '' });
+  private readonly divisionOwnerIdValue = toSignal(this.form.controls.divisionOwnerId.valueChanges, { initialValue: '' });
+
   constructor() {
     this.loadInitiatives();
     this.loadSummary();
-    this.loadUsers();
+    this.loadEmployeeOwners();
     this.loadDivisions();
     this.loadGoals();
     this.loadKras();
     this.loadKpis();
   }
 
-  loadUsers(): void {
-    this.loadingUsers.set(true);
-    this.adminUserService.getAll().subscribe({
-      next: (users) => {
-        this.userOptions.set(users);
-        this.loadingUsers.set(false);
+  /** Active HR employees (EmpId = the local user id) that may own an initiative individually. */
+  loadEmployeeOwners(): void {
+    this.loadingEmployees.set(true);
+    this.kpiService.getOwnerOptions(undefined, 200).subscribe({
+      next: (employees) => {
+        this.employeeOwners.set(employees);
+        this.loadingEmployees.set(false);
       },
       error: () => {
-        this.userOptions.set([]);
-        this.loadingUsers.set(false);
+        this.employeeOwners.set([]);
+        this.loadingEmployees.set(false);
       },
     });
   }
@@ -321,6 +574,7 @@ export class InitiativePage {
   @HostListener('document:click')
   closeMenus(): void {
     this.openMenuId.set(null);
+    this.closeOwnerPickers();
   }
 
   toggleMenu(id: string, event: MouseEvent): void {
@@ -356,6 +610,7 @@ export class InitiativePage {
    * so the other id can never be submitted alongside it.
    */
   onOwnerTypeChange(type: InitiativeOwnerType): void {
+    this.closeOwnerPickers();
     if (type === 'Division') {
       this.form.controls.ownerId.setValue('');
     } else {
@@ -471,11 +726,11 @@ export class InitiativePage {
     return initiative.milestoneWeightsAreValid;
   }
 
-  /** Display name for a user id (falls back to the raw id when unknown/deleted). */
+  /** Display name for an employee id (falls back to the raw id when unknown/no longer active). */
   ownerName(id: string): string {
     if (!id) return '—';
-    const user = this.userOptions().find((u) => u.id === id);
-    return user?.fullName || user?.username || id;
+    const employee = this.employeeOwners().find((e) => e.id === id);
+    return employee?.fullName || id;
   }
 
   /** Display name for a division id (falls back to the raw id when unknown/deleted). */
@@ -525,6 +780,7 @@ export class InitiativePage {
   }
 
   openAddModal(): void {
+    this.closeOwnerPickers();
     this.editingId.set(null);
     this.currentOwnerId.set(null);
     this.originalStartDateIso = null;
@@ -542,6 +798,7 @@ export class InitiativePage {
   }
 
   onEdit(initiative: InitiativeListItem): void {
+    this.closeOwnerPickers();
     this.openMenuId.set(null);
     // The grid projection has no resources/strategic links, so load the detail
     // before populating the form instead of inventing values.
@@ -578,6 +835,7 @@ export class InitiativePage {
   }
 
   onCancelEdit(): void {
+    this.closeOwnerPickers();
     this.editingId.set(null);
     this.currentOwnerId.set(null);
     this.currentDivisionOwnerId.set(null);

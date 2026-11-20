@@ -97,41 +97,67 @@
             <label class="filter-label" for="rp-period">Period</label>
             <select id="rp-period" class="filter-select" [ngModel]="quarter()" (ngModelChange)="quarter.set($event); envelope.set(null)">
               <option [ngValue]="null">All quarters</option>
-              @for (q of quarterOptions; track q) {
-                <option [ngValue]="q">{{ quarterLabel(q) }}</option>
+              @for (q of quarterOptions(); track q.value) {
+                <option [ngValue]="q.value">{{ q.label }}</option>
               }
             </select>
           </div>
-        } @else {
+        }
+
+        @if (showMonthRange()) {
           <div class="filter-field">
             <label class="filter-label" for="rp-from">From month</label>
-            <select id="rp-from" class="filter-select" [ngModel]="fromMonth()" (ngModelChange)="fromMonth.set($event); envelope.set(null)">
+            <select
+              id="rp-from"
+              class="filter-select"
+              [ngModel]="fromMonth()"
+              [attr.aria-invalid]="monthRangeInvalid()"
+              (ngModelChange)="fromMonth.set($event); envelope.set(null)"
+            >
               <option [ngValue]="null">All</option>
-              @for (m of monthOptions; track m) {
-                <option [ngValue]="m">M{{ m }}</option>
+              @for (m of monthOptions(); track m.value) {
+                <option [ngValue]="m.value">{{ m.label }}</option>
               }
             </select>
           </div>
           <div class="filter-field">
             <label class="filter-label" for="rp-to">To month</label>
-            <select id="rp-to" class="filter-select" [ngModel]="toMonth()" (ngModelChange)="toMonth.set($event); envelope.set(null)">
+            <select
+              id="rp-to"
+              class="filter-select"
+              [ngModel]="toMonth()"
+              [attr.aria-invalid]="monthRangeInvalid()"
+              (ngModelChange)="toMonth.set($event); envelope.set(null)"
+            >
               <option [ngValue]="null">All</option>
-              @for (m of monthOptions; track m) {
-                <option [ngValue]="m">M{{ m }}</option>
+              @for (m of monthOptions(); track m.value) {
+                <option [ngValue]="m.value">{{ m.label }}</option>
+              }
+            </select>
+          </div>
+        }
+
+        @if (showYear()) {
+          <div class="filter-field">
+            <label class="filter-label" for="rp-period-year">Fiscal year</label>
+            <select id="rp-period-year" class="filter-select" [ngModel]="fiscalYearId()" (ngModelChange)="onPeriodYearChange($event)">
+              <option [ngValue]="null">All fiscal years</option>
+              @for (fy of fiscalYears(); track fy.id) {
+                <option [ngValue]="fy.id">{{ fy.label }}</option>
               }
             </select>
           </div>
         }
       }
 
-      <div class="filter-field">
+      <!-- <div class="filter-field">
         <label class="filter-label" for="rp-goal">Goal</label>
         <select id="rp-goal" class="filter-select" disabled title="Filtering by goal is not supported by the reporting API yet">
           <option>All goals</option>
         </select>
-      </div>
+      </div> -->
 
-      <div class="filter-field">
+      <!-- <div class="filter-field">
         <label class="filter-label" for="rp-department">Department / owner</label>
         @if (showDivision()) {
           <select id="rp-department" class="filter-select" [ngModel]="divisionId()" (ngModelChange)="divisionId.set($event); envelope.set(null)">
@@ -145,8 +171,16 @@
             <option>All departments</option>
           </select>
         }
-      </div>
+      </div> -->
     </div>
+
+    @if (showGranularity()) {
+      @if (showMonthRange() && monthRangeInvalid()) {
+        <p class="filters-error" role="alert">From month must be before or equal to To month.</p>
+      } @else if (granularity() === 'ytd') {
+        <p class="filters-hint">YTD — no month range is applied.</p>
+      }
+    }
 
     <div class="filters-actions">
       <button type="button" class="rp-btn primary" (click)="generate()" [disabled]="loading() || exporting()">

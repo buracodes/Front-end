@@ -60,6 +60,7 @@ export class DashboardFiltersComponent {
   readonly filter = input.required<DashboardFilter>();
   readonly fiscalYears = input.required<DashboardFilterOption[]>();
   readonly scorecards = input.required<{ id: string; label: string }[]>();
+  readonly scorecardSelectionRequired = input<boolean>(false);
   readonly disabled = input<boolean>(false);
   readonly busy = input<boolean>(false);
 

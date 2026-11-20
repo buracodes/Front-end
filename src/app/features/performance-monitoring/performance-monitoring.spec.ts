@@ -55,14 +55,12 @@ describe('PerformanceMonitoringPage', () => {
           id: 'sc-1',
           fiscalYearId: 'fy-1',
           name: 'Corporate Scorecard',
-          scope: 'Corporate' as const,
           scorecardStatus: 'Active' as const,
         },
         {
           id: 'sc-div',
           fiscalYearId: 'fy-1',
           name: 'Division Scorecard',
-          scope: 'Division' as const,
           scorecardStatus: 'Active' as const,
         },
       ]),
@@ -93,7 +91,7 @@ describe('PerformanceMonitoringPage', () => {
     return { page, get, notifications, divisionGetAll, fiscalYearGetAll, scorecardGetAll };
   }
 
-  it('loads data on init and scopes the scorecard selector to corporate scorecards', () => {
+  it('loads data on init and offers every scorecard in the selected fiscal year', () => {
     const { page, get, fiscalYearGetAll, scorecardGetAll } = setup();
 
     expect(get).toHaveBeenCalledTimes(1);
@@ -102,7 +100,23 @@ describe('PerformanceMonitoringPage', () => {
     expect(page.data()?.overallScore).toBeUndefined();
     expect(page.hasData()).toBe(true);
     expect(page.isCorporate()).toBe(true);
-    expect(page.selectableScorecards().map((s) => s.id)).toEqual(['sc-1']);
+    expect(page.selectableScorecards().map((s) => s.id)).toEqual(['sc-1', 'sc-div']);
+  });
+
+  it('requires an explicit scorecard when the server reports a selection is required', () => {
+    const { page } = setup({
+      response: payload({
+        scorecardSelectionRequired: true,
+        selectableScorecards: [
+          { id: 'sc-1', name: 'Corporate Scorecard' },
+          { id: 'sc-div', name: 'Division Scorecard' },
+        ],
+      }),
+    });
+
+    expect(page.scorecardSelectionRequired()).toBe(true);
+    expect(page.hasData()).toBe(false);
+    expect(page.selectableScorecards().map((s) => s.id)).toEqual(['sc-1', 'sc-div']);
   });
 
   it('adopts the resolved fiscal year and scorecard returned by the API', () => {

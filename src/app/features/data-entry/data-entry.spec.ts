@@ -19,12 +19,19 @@ const FY = {
   endDate: '2027-06-30',
 };
 
+const CLOSED_FY = {
+  id: 'fy-0',
+  label: 'FY 2025',
+  status: 'Closed',
+  startDate: '2025-07-01',
+  endDate: '2026-06-30',
+};
+
 const SCORECARDS = [
   {
     id: 'sc-1',
     fiscalYearId: 'fy-1',
     name: 'Corporate Scorecard',
-    scope: 'Corporate',
     scorecardStatus: 'Active',
   },
 ];
@@ -99,7 +106,6 @@ const BOARD: EntryBoard = {
       id: 'sc-1',
       fiscalYearId: 'fy-1',
       name: 'Corporate Scorecard',
-      scope: 'corporate',
       scorecardStatus: 'active',
     },
   ],
@@ -278,6 +284,8 @@ describe('DataEntryPage scope and division visibility', () => {
   let seenUrls: string[];
   /** Number of upcoming entry-board reads answered with a server error. */
   let boardFailures: number;
+  /** The fiscal-year catalog the picker reads. */
+  let fiscalYearsPayload: (typeof FY)[];
 
   const respond = (req: TestRequest): void => {
     seenUrls.push(req.request.urlWithParams);
@@ -296,7 +304,7 @@ describe('DataEntryPage scope and division visibility', () => {
       return;
     }
     if (path.endsWith('/fiscalyear')) {
-      req.flush(ok([FY]));
+      req.flush(ok(fiscalYearsPayload));
       return;
     }
     if (path.includes('/entry-board')) {
@@ -372,6 +380,7 @@ describe('DataEntryPage scope and division visibility', () => {
     divisionPlanPayload = DIVISION_PLAN;
     seenUrls = [];
     boardFailures = 0;
+    fiscalYearsPayload = [FY];
     await TestBed.configureTestingModule({
       imports: [DataEntryPage],
       providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
@@ -443,25 +452,40 @@ describe('DataEntryPage scope and division visibility', () => {
   const saveButton = (): HTMLButtonElement =>
     host.querySelector<HTMLButtonElement>('.entry-save') as HTMLButtonElement;
 
-  it('opens a Data Input division account on its division while offering both scopes', () => {
+  it('opens a Data Input account on its corporate board and reads the division only when picked', () => {
     const page = start(ENTRY_RIGHTS);
 
     expect(state.usesEntryScope()).toBe(true);
-    expect(page.scope()).toBe('Division');
-    // The board carries the corporate KPIs assigned to the account, so Corporate is a real
-    // responsibility next to its division plan rather than a hidden scope.
+    // The page opens on Corporate whenever the board carries corporate KPIs.
+    expect(page.scope()).toBe('Corporate');
     expect(page.scopeOptions()).toEqual(['Corporate', 'Division']);
     expect(host.querySelector('#entry-scope')).not.toBeNull();
+    expect(host.querySelector('#entry-scorecard')).not.toBeNull();
     expect(host.querySelector('#entry-division')).toBeNull();
-    expect(host.querySelector('#entry-scorecard')).toBeNull();
 
+    // The corporate goals, KRAs and KPIs arrive with the board read on the first visit.
+    expect(page.kpis().map((kpi) => kpi.id)).toEqual(['kpi-1', 'kpi-2']);
+    expect(goalCards()).toHaveLength(1);
+    expect(host.querySelector('.entry-goal-name')?.textContent?.trim()).toBe('Operational Excellence');
+    expect(host.querySelector('.entry-kra-name')?.textContent?.trim()).toBe('Service Delivery');
+    expect(page.reportingMonth()).toBe(5);
+    expect(page.cellValue('kpi-1', 5)?.value).toBe(98.5);
+    expect(page.entrySubtitle()).toContain('KPIs assigned to me or my division');
+    expect(inputs()).toHaveLength(2);
+
+    // Nothing of the division plan is read while the corporate board is on screen.
+    expect(seenUrls.some((url) => url.endsWith('/plans'))).toBe(false);
+    expect(seenUrls.some((url) => url.endsWith('/division/actuals'))).toBe(false);
+
+    switchScope('Division');
+
+    expect(page.scope()).toBe('Division');
     expect(page.visibleDivisions().map((division) => division.id)).toEqual(['div-1']);
     expect(page.selectedDivision()?.name).toBe('Application Development');
     expect(page.divisionPlan()?.scorecardName).toBe('Corporate Scorecard');
     expect(page.divisionPlanStatus()).toBe('Finalized');
     expect(page.entrySubtitle()).toContain('Application Development');
 
-    expect(page.reportingMonth()).toBe(5);
     expect(page.targetFor('dkpi-1', 5)).toBe(95);
     expect(page.cellValue('dkpi-1', 5)?.value).toBe(91);
     expect(page.divisionGroups()[0].goal.name).toBe('Division Delivery Goal');
@@ -471,9 +495,30 @@ describe('DataEntryPage scope and division visibility', () => {
     expect(inputs()[0].disabled).toBe(false);
   });
 
+  it('offers only active fiscal years in the picker', () => {
+    fiscalYearsPayload = [CLOSED_FY, FY];
+    const page = start(ENTRY_RIGHTS);
+
+    expect(page.fiscalYears().map((fy) => fy.id)).toEqual(['fy-1']);
+    const options = Array.from(
+      host.querySelectorAll<HTMLOptionElement>('#entry-fiscal-year option')
+    ).map((option) => option.value);
+    expect(options).toEqual(['fy-1']);
+  });
+
+  it('moves a carried closed selection onto the active year', () => {
+    fiscalYearsPayload = [CLOSED_FY, FY];
+    state.fiscalYearId.set('fy-0');
+    start(ENTRY_RIGHTS);
+
+    expect(state.fiscalYearId()).toBe('fy-1');
+    expect(host.querySelector<HTMLSelectElement>('#entry-fiscal-year')!.value).toBe('fy-1');
+  });
+
   it('keeps a draft division plan read-only until it is finalized', () => {
     divisionPlanPayload = { ...DIVISION_PLAN, planStatus: 'draft' };
     const page = start(ENTRY_RIGHTS);
+    switchScope('Division');
 
     expect(page.divisionPlanStatus()).toBe('Draft');
     // FR-906: Data Input Users may enter performance only after the plan is finalized.
@@ -484,23 +529,43 @@ describe('DataEntryPage scope and division visibility', () => {
     expect(saveButton().disabled).toBe(true);
   });
 
-  it('switches a dual-assignment account between its corporate board and division plan', () => {
+  it('switches between the corporate board and the division plan without leftovers', () => {
     const page = start(ENTRY_RIGHTS);
 
-    switchScope('Corporate');
-
     expect(page.scope()).toBe('Corporate');
-    expect(host.querySelector('#entry-scorecard')).not.toBeNull();
-    expect(page.kpis().map((kpi) => kpi.id)).toEqual(['kpi-1', 'kpi-2']);
-    expect(page.cellValue('kpi-1', 5)?.value).toBe(98.5);
-    expect(page.canEnter()).toBe(true);
-    expect(inputs()[0].disabled).toBe(false);
+    expect(seenUrls.filter((url) => url.includes('entry-board'))).toHaveLength(1);
 
     switchScope('Division');
 
     expect(page.scope()).toBe('Division');
+    expect(host.querySelector('#entry-scorecard')).toBeNull();
+    expect(page.selectedDivision()?.name).toBe('Application Development');
     expect(page.divisionPlan()?.id).toBe('plan-1');
     expect(page.cellValue('dkpi-1', 5)?.value).toBe(91);
+    expect(page.cellValue('kpi-1', 5)).toBeUndefined();
+
+    switchScope('Corporate');
+
+    expect(page.scope()).toBe('Corporate');
+    // Leaving Division drops its board and abandons its reads, and the corporate board is
+    // re-read so no division row can surface among the corporate rows.
+    expect(page.divisionPlan()).toBeNull();
+    expect(seenUrls.filter((url) => url.includes('entry-board'))).toHaveLength(2);
+    expect(page.kpis().map((kpi) => kpi.id)).toEqual(['kpi-1', 'kpi-2']);
+    expect(page.cellValue('kpi-1', 5)?.value).toBe(98.5);
+    expect(page.cellValue('dkpi-1', 5)).toBeUndefined();
+    expect(inputs().map((input) => input.getAttribute('aria-label'))).toEqual([
+      'Actual for Application uptime',
+      'Actual for Requirement delivery',
+    ]);
+    expect(page.canEnter()).toBe(true);
+    expect(inputs().every((input) => !input.disabled)).toBe(true);
+
+    switchScope('Division');
+
+    expect(page.divisionPlan()?.id).toBe('plan-1');
+    expect(page.cellValue('dkpi-1', 5)?.value).toBe(91);
+    expect(inputs()).toHaveLength(1);
   });
 
   it('serves a corporate assignment without any division claim and without division reads', () => {
@@ -553,6 +618,7 @@ describe('DataEntryPage scope and division visibility', () => {
   it('never exposes a division outside the account assignment', () => {
     // The catalog lists every division; the page still narrows to the assignment.
     const page = start(READ_RIGHTS);
+    switchScope('Division');
 
     expect(divisionsPayload.map((division) => division.id)).toEqual(['div-1', 'div-2']);
     expect(page.visibleDivisions().map((division) => division.id)).toEqual(['div-1']);
@@ -562,6 +628,7 @@ describe('DataEntryPage scope and division visibility', () => {
 
   it('limits a multi-division account to assigned divisions and preselects the HR primary', () => {
     const page = start(ENTRY_RIGHTS, ['div-1', 'div-2'], 'div-2');
+    switchScope('Division');
 
     const select = host.querySelector<HTMLSelectElement>('#entry-division');
     expect(select).not.toBeNull();
@@ -577,6 +644,7 @@ describe('DataEntryPage scope and division visibility', () => {
 
   it('reloads only the division that was just selected', () => {
     const page = start(ENTRY_RIGHTS, ['div-1', 'div-2'], 'div-2');
+    switchScope('Division');
 
     switchDivision('div-1');
 
@@ -614,6 +682,7 @@ describe('DataEntryPage scope and division visibility', () => {
 
   it('keeps the division board read-only without the division entry right', () => {
     const page = start(READ_RIGHTS);
+    switchScope('Division');
 
     expect(page.divisionPlan()).not.toBeNull();
     expect(page.canEnter()).toBe(false);
@@ -629,6 +698,7 @@ describe('DataEntryPage scope and division visibility', () => {
       periods: LOCKS.periods.map((period) => ({ ...period, state: 'locked' as const })),
     };
     const page = start(ENTRY_RIGHTS);
+    switchScope('Division');
 
     expect(page.canEnter()).toBe(false);
     expect(inputs()).toHaveLength(1);
@@ -639,6 +709,7 @@ describe('DataEntryPage scope and division visibility', () => {
 
   it('saves a division value through the division actuals endpoint', () => {
     const page = start(ENTRY_RIGHTS);
+    switchScope('Division');
 
     page.setCellValue('dkpi-1', 5, '93');
     fixture.detectChanges();
@@ -816,6 +887,7 @@ describe('DataEntryPage scope and division visibility', () => {
 
   it('renders a division goal as a collapsible card around the existing KPI table', () => {
     const page = start(ENTRY_RIGHTS);
+    switchScope('Division');
 
     expect(goalCards()).toHaveLength(1);
     expect(host.querySelector('.entry-goal-name')?.textContent?.trim()).toBe('Division Delivery Goal');
@@ -930,6 +1002,7 @@ describe('DataEntryPage scope and division visibility', () => {
 
   it('keeps Data Input entry on the assigned division', () => {
     const page = start(ENTRY_RIGHTS, ['div-1']);
+    switchScope('Division');
 
     expect(page.visibleDivisions().map((division) => division.id)).toEqual(['div-1']);
     expect(page.canEnter()).toBe(true);

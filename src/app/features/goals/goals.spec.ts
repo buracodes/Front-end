@@ -15,7 +15,6 @@ const scorecard = (overrides: Partial<Scorecard> = {}): Scorecard => ({
   fiscalYearId: 'fy-1',
   fiscalYearName: 'FY 2026',
   name: 'Corporate 2026',
-  scope: 'Corporate',
   scorecardStatus: 'Active',
   ...overrides,
 });

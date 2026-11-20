@@ -36,7 +36,9 @@
       <div class="pm-filter">
         <label for="pm-scorecard">Scorecard</label>
         <select id="pm-scorecard" [(ngModel)]="scorecardId" (change)="onFilterChange()">
+          @if (!scorecardSelectionRequired()) {
           <option value="">All</option>
+          }
           @for (sc of selectableScorecards(); track sc.id) {
             <option [value]="sc.id">{{ sc.name }}</option>
           }
@@ -69,7 +71,11 @@
   @if (loading() && !data()) {
     <div class="pm-empty" role="status">Loading performance data...</div>
   } @else if (data(); as d) {
-    @if (!hasData()) {
+    @if (scorecardSelectionRequired()) {
+      <div class="pm-empty" role="status">
+        Select a scorecard above to view performance.
+      </div>
+    } @else if (!hasData()) {
       <div class="pm-empty" role="status">
         No scorecards or performance records are available for the selected filters.
       </div>

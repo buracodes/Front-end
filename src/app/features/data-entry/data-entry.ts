@@ -9,6 +9,7 @@ import {
   ScorecardWorkspaceState,
   fiscalMonthForDate,
   fiscalMonthLabel,
+  isFiscalYearClosed,
   kpiEntries,
 } from '../strategic-scorecard/workspace-state.service';
 import { toApiError } from '../../core/model/api-error';
@@ -116,7 +117,13 @@ export class DataEntryPage implements OnInit {
     this.state.loadFiscalYearsAndScorecards();
   }
 
-  readonly fiscalYears = this.state.fiscalYears;
+  /**
+   * Actuals are only entered in a year that is still open, so the picker offers the active
+   * years only; closed years stay reachable on the targets and monitoring pages.
+   */
+  readonly fiscalYears = computed(() =>
+    this.state.fiscalYears().filter((fy) => !isFiscalYearClosed(fy))
+  );
   readonly fiscalYearId = this.state.fiscalYearId;
   readonly scorecardId = this.state.scorecardId;
 
@@ -158,15 +165,21 @@ export class DataEntryPage implements OnInit {
 
   readonly showScopePicker = computed(() => this.scopeOptions().length > 1);
 
-  /** Corporate | Division: which board the page is showing and entering. */
+  /**
+   * Corporate | Division: which board the page is showing and entering. The page opens on
+   * Corporate whenever the principal has a corporate board: a corporate viewer knows that
+   * up front, an entry account once its board read resolves.
+   */
   readonly scope = signal<EntryScope>(this.canViewCorporate() ? 'Corporate' : 'Division');
 
-  /** Scorecards belonging to the selected fiscal year only. */
-  readonly corporateScorecards = computed(() =>
-    this.state
+  /** Every scorecard in the selected fiscal year may be entered from the corporate board. */
+  readonly corporateScorecards = computed(() => {
+    const fiscalYearId = this.state.fiscalYearId();
+    return this.state
       .scorecards()
-      .filter((sc) => sc.fiscalYearId === this.state.fiscalYearId() && sc.scope === 'Corporate')
-  );
+      .filter((sc) => sc.fiscalYearId === fiscalYearId)
+      .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+  });
 
   readonly monthState = this.state.monthState;
   readonly kpis = this.state.kpis;
@@ -195,6 +208,9 @@ export class DataEntryPage implements OnInit {
   private divisionBootstrapped = false;
   /** Fiscal year (and scorecard) whose Corporate rows have already been requested. */
   private corporateLoadKey = '';
+  /** The opening-scope decision runs once; a scope the user picked by hand always wins. */
+  private readonly scopeDefaultDecided = signal(false);
+  private scopePickedByUser = false;
 
   /**
    * Divisions the page may show. An assigned account sees exactly its HR primary and
@@ -503,12 +519,37 @@ export class DataEntryPage implements OnInit {
   });
 
   constructor() {
-    // The board read resolves the assignments, so the available scopes are only known after it
-    // arrives. Follow the only available scope when the assignments change (a corporate-only
-    // account starts here in Division) without overriding a scope the user picked.
+    // A closed year can arrive as the shared selection from another workspace page. The
+    // picker only lists active years, so move the selection onto one of them once they load.
+    effect(() => {
+      const years = this.fiscalYears();
+      if (!years.length) return;
+      const current = this.state.fiscalYearId();
+      if (current && years.some((fy) => fy.id === current)) return;
+      const fallback = years.find((fy) => fy.status.toLowerCase() === 'active') ?? years[0];
+      if (fallback) this.state.selectFiscalYear(fallback.id);
+    });
+
+    // Scope follows the principal's assignments, and the page opens on Corporate whenever a
+    // corporate board exists. The board's rows arrive with the entry read, so the default is
+    // only decided once that read settles; a scope the user picked by hand is never overridden.
     effect(() => {
       const options = this.scopeOptions();
-      if (!options.length || options.includes(this.scope())) return;
+      if (!options.length) return;
+
+      if (!this.scopeDefaultDecided()) {
+        if (!this.state.fiscalYears().length) return;
+        if (this.state.usesEntryScope() && this.state.loading()) return;
+        this.scopeDefaultDecided.set(true);
+        if (!this.scopePickedByUser && options.includes('Corporate') && this.scope() !== 'Corporate') {
+          this.scope.set('Corporate');
+          this.focusKpiId.set(null);
+          this.loadingCells.set(true);
+          return;
+        }
+      }
+
+      if (options.includes(this.scope())) return;
       this.scope.set(options[0]);
       this.focusKpiId.set(null);
       if (options[0] === 'Division') {
@@ -518,11 +559,12 @@ export class DataEntryPage implements OnInit {
       }
     });
 
-    // A division account opens directly on Division scope; start its read as soon as the
-    // fiscal year is known instead of waiting for a scope change. An account without a
-    // division assignment has nothing to read here.
+    // A division account reads its plan only after the opening scope is settled: starting the
+    // division read first would issue reads the Corporate default is about to replace. An
+    // account without a division assignment has nothing to read here.
     effect(() => {
-      if (this.divisionBootstrapped || this.scope() !== 'Division') return;
+      if (this.divisionBootstrapped || !this.scopeDefaultDecided()) return;
+      if (this.scope() !== 'Division') return;
       if (!this.canViewDivisionScope()) return;
       if (!this.state.fiscalYearId()) return;
       this.divisionBootstrapped = true;
@@ -629,12 +671,25 @@ export class DataEntryPage implements OnInit {
     if (scope !== 'Corporate' && scope !== 'Division') return;
     if (scope === 'Corporate' && !this.corporateScopeAvailable()) return;
     if (scope === 'Division' && !this.canViewDivisionScope()) return;
+    // A hand-picked scope wins over the Corporate default, even before it was applied.
+    this.scopePickedByUser = true;
+    this.scopeDefaultDecided.set(true);
+    if (scope === this.scope()) return;
     this.scope.set(scope);
     this.focusKpiId.set(null);
     if (scope === 'Division') {
+      // A corporate read still in flight must not paint the division board.
+      this.gridRequest++;
       this.ensureDivisions();
       return;
     }
+    // Leave nothing of the division board behind, and abandon its in-flight reads, so the
+    // corporate rows load from a clean state.
+    this.divisionRequest++;
+    this.divisionPlan.set(null);
+    this.divisionLocks.set(new Map());
+    this.divisionActuals.set(new Map());
+    this.grid.set(new Map());
     this.loadingCells.set(true);
     if (this.state.usesEntryScope()) {
       this.state.reloadEntryBoard();
@@ -772,6 +827,9 @@ export class DataEntryPage implements OnInit {
 
   /** Loads the selected authorized division's plan, its period windows and its actuals. */
   loadDivisionContext(): void {
+    // A read that resolves after the user switched back to Corporate must not restore the
+    // division board behind the corporate rows.
+    if (this.scope() !== 'Division') return;
     const token = ++this.divisionRequest;
     const divisionId = this.divisionId();
     const fiscalYearId = this.state.fiscalYearId();

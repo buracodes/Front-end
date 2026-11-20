@@ -597,6 +597,45 @@ describe('InitiativeDetailPage', () => {
     expect(page.canManageMilestones()).toBe(false);
   });
 
+  it('authorises a Data Input user by ownership, never by role alone', () => {
+    // The seeded Data Input role has no initiative write permission; the assigned owner still
+    // reaches progress through the guard. A different Data Input user must not inherit that right.
+    const ownerPage = start([], initiative({ ownerId: 'user-1' }));
+    expect(ownerPage.isOwner()).toBe(true);
+    expect(ownerPage.canUpdateProgress()).toBe(true);
+    expect(ownerPage.canManageMilestones()).toBe(true);
+    expect(ownerPage.canEdit()).toBe(false);
+
+    const strangerPage = start([], initiative({ ownerId: 'another-user' }));
+    expect(strangerPage.isOwner()).toBe(false);
+    expect(strangerPage.canUpdateProgress()).toBe(false);
+    expect(strangerPage.canManageMilestones()).toBe(false);
+  });
+
+  it('recognises ownership through any of the user\'s divisions, not only the primary one', () => {
+    const page = start(
+      [],
+      initiative({
+        ownerId: undefined,
+        ownerName: undefined,
+        divisionOwnerId: 'division-2',
+        divisionOwnerName: 'IT Department',
+      })
+    );
+
+    store.setUser({
+      ...user([]),
+      divisionId: 'division-1',
+      divisionIds: ['division-1', 'division-2'],
+    });
+    expect(page.isOwner()).toBe(true);
+    expect(page.canUpdateProgress()).toBe(true);
+
+    store.setUser({ ...user([]), divisionId: 'division-1', divisionIds: ['division-1'] });
+    expect(page.isOwner()).toBe(false);
+    expect(page.canUpdateProgress()).toBe(false);
+  });
+
   it('labels a division-owned initiative with its division name', () => {
     const page = start(
       ['initiatives:view'],

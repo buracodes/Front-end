@@ -36,6 +36,7 @@
           [filter]="filter()"
           [fiscalYears]="fiscalYearOptions()"
           [scorecards]="scorecardOptions()"
+          [scorecardSelectionRequired]="scorecardSelectionRequired()"
           [disabled]="refreshing()"
           [busy]="refreshing()"
           (filterChange)="onFilterChange($event)"
@@ -45,6 +46,12 @@
 
     @if (error()) {
       <p class="dx-alert dx-alert--warning">{{ error() }} — showing the last successful result.</p>
+    }
+
+    @if (scorecardSelectionRequired()) {
+      <p class="dx-alert dx-alert--info" role="status">
+        Select a scorecard above to load the dashboard.
+      </p>
     }
 
     @if (fiscalYearClosed()) {

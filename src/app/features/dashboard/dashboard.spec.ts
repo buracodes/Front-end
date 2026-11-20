@@ -336,14 +336,31 @@ describe('DashboardPage (role driven shell)', () => {
   });
 
   it('adopts the filter the server actually applied', () => {
-    // The requested scorecard was out of scope, so the server answered with the
-    // one it fell back to; the shell must keep that instead of retrying the old id.
-    const fallback = contextFor('Power User', {
+    const applied = contextFor('Power User', {
       filter: { ...APPLIED_FILTER, scorecardId: 'sc-9', scorecardName: 'Operations' },
     });
-    const fixture = render(fallback);
+    const fixture = render(applied);
 
     expect(fixture.componentInstance.filter().scorecardId).toBe('sc-9');
+  });
+
+  it('shows only the server-provided choices when a scorecard selection is required', () => {
+    const selectionContext = contextFor('Power User', {
+      filter: {
+        ...APPLIED_FILTER,
+        scorecardSelectionRequired: true,
+        selectableScorecards: [
+          { id: 'sc-1', label: 'Alpha', isSelected: false, detail: null },
+          { id: 'sc-2', label: 'Beta', isSelected: false, detail: null },
+        ],
+      },
+      scorecards: [],
+    });
+    const fixture = render(selectionContext);
+
+    expect(fixture.componentInstance.scorecardSelectionRequired()).toBe(true);
+    expect(fixture.componentInstance.scorecardOptions().map((option) => option.id)).toEqual(['sc-1', 'sc-2']);
+    expect(fixture.nativeElement.textContent).toContain('Select a scorecard above');
   });
 
   it('resolves each descriptor to a renderable payload', () => {

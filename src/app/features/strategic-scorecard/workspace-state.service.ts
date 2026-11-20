@@ -817,7 +817,6 @@ function entryScorecard(entry: EntryScorecard): Scorecard {
     id: entry.id,
     fiscalYearId: entry.fiscalYearId,
     name: entry.name,
-    scope: titleCaseEnumName(entry.scope) as Scorecard['scope'],
     scorecardStatus: titleCaseEnumName(entry.scorecardStatus) as Scorecard['scorecardStatus'],
   };
 }

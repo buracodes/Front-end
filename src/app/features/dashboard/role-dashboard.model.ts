@@ -37,6 +37,8 @@ export interface DashboardAppliedFilter {
   scorecardName: string | null;
   periodLabel: string | null;
   fiscalYearClosed: boolean;
+  scorecardSelectionRequired?: boolean;
+  selectableScorecards?: DashboardFilterOption[];
   quarter: number | null;
   fromMonth: number | null;
   toMonth: number | null;

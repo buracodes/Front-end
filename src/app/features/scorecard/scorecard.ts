@@ -62,21 +62,18 @@ export class ScorecardPage implements OnInit {
 
   readonly searchText = signal('');
   readonly fiscalYearFilter = signal('');
-  readonly scopeFilter = signal('');
   readonly statusFilter = signal('');
 
   readonly openMenuId = signal<string | null>(null);
   /** Cards whose menu opens upward because it would be clipped at the viewport bottom. */
   readonly openUpMenuIds = signal<Set<string>>(new Set());
 
-  readonly scopes: Scorecard['scope'][] = ['Corporate', 'Division'];
   readonly statuses: Scorecard['scorecardStatus'][] = ['Active', 'Closed'];
 
   readonly filteredScorecards = computed(() => {
     let list = this.rows();
     const q = this.searchText().trim().toLowerCase();
     const fyId = this.fiscalYearFilter();
-    const scope = this.scopeFilter();
     const status = this.statusFilter();
 
     if (q) {
@@ -89,10 +86,6 @@ export class ScorecardPage implements OnInit {
     }
     if (fyId) {
       list = list.filter((s) => s.fiscalYearId === fyId);
-    }
-    if (scope) {
-      const scopeLower = scope.toLowerCase();
-      list = list.filter((s) => s.scope.toLowerCase() === scopeLower);
     }
     if (status) {
       const statusLower = status.toLowerCase();
@@ -133,10 +126,18 @@ export class ScorecardPage implements OnInit {
       validators: [Validators.required, Validators.maxLength(200)],
     }),
     description: new FormControl('', { nonNullable: true, validators: [Validators.maxLength(500)] }),
-    scope: new FormControl<Scorecard['scope']>('Corporate', {
-      nonNullable: true,
-      validators: [Validators.required],
-    }),
+  });
+
+  /**
+   * A new scorecard may only be attached to an active (Open) fiscal year. Edit mode keeps the
+   * full list so an existing scorecard still renders its year even if that year has since closed.
+   */
+  readonly fiscalYearOptions = computed(() => {
+    const years = this.fiscalYears();
+    if (this.editingId()) {
+      return years;
+    }
+    return years.filter((fy) => (fy.status ?? '').toLowerCase() === 'open');
   });
 
   /**
@@ -181,10 +182,6 @@ export class ScorecardPage implements OnInit {
     this.searchText.set((event.target as HTMLInputElement).value);
   }
 
-  onScopeFilterChange(event: Event): void {
-    this.scopeFilter.set((event.target as HTMLSelectElement).value);
-  }
-
   onStatusFilterChange(event: Event): void {
     this.statusFilter.set((event.target as HTMLSelectElement).value);
   }
@@ -196,7 +193,6 @@ export class ScorecardPage implements OnInit {
   clearFilters(): void {
     this.searchText.set('');
     this.fiscalYearFilter.set('');
-    this.scopeFilter.set('');
     this.statusFilter.set('');
   }
 
@@ -204,7 +200,7 @@ export class ScorecardPage implements OnInit {
 
   openAddModal(): void {
     this.editingId.set(null);
-    this.form.reset({ fiscalYearId: '', name: '', description: '', scope: 'Corporate' });
+    this.form.reset({ fiscalYearId: '', name: '', description: '' });
     this.showForm.set(true);
   }
 
@@ -219,14 +215,13 @@ export class ScorecardPage implements OnInit {
       fiscalYearId: scorecard.fiscalYearId,
       name: scorecard.name,
       description: scorecard.description ?? '',
-      scope: scorecard.scope,
     });
     this.showForm.set(true);
   }
 
   onCancelEdit(): void {
     this.editingId.set(null);
-    this.form.reset({ scope: 'Corporate' });
+    this.form.reset({ fiscalYearId: '', name: '', description: '' });
     this.showForm.set(false);
   }
 
@@ -241,7 +236,6 @@ export class ScorecardPage implements OnInit {
       fiscalYearId: this.form.controls.fiscalYearId.value,
       name: this.form.controls.name.value,
       description: this.form.controls.description.value || undefined,
-      scope: this.form.controls.scope.value,
     };
 
     this.scorecardService.create(request).subscribe({
@@ -269,7 +263,6 @@ export class ScorecardPage implements OnInit {
     const request: UpdateScorecardRequest = {
       name: this.form.controls.name.value,
       description: this.form.controls.description.value || undefined,
-      scope: this.form.controls.scope.value,
     };
 
     this.scorecardService.update(id, request).subscribe({
@@ -331,11 +324,7 @@ export class ScorecardPage implements OnInit {
 
   openScorecard(scorecard: Scorecard): void {
     this.openMenuId.set(null);
-    if (scorecard.scope.toLowerCase() === 'division') {
-      this.router.navigate(['/division-planning', scorecard.id]);
-    } else {
-      this.router.navigate(['/scorecards', scorecard.id]);
-    }
+    this.router.navigate(['/scorecards', scorecard.id]);
   }
 
   toggleCardMenu(scorecardId: string, event: MouseEvent): void {
@@ -394,17 +383,6 @@ export class ScorecardPage implements OnInit {
     }
   }
 
-  scopeBadgeClass(scope: string): string {
-    switch (scope.toLowerCase()) {
-      case 'corporate':
-        return 'badge-corporate';
-      case 'division':
-        return 'badge-division';
-      default:
-        return 'badge-department';
-    }
-  }
-
   displayStatus(status: string): string {
     return status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
   }
@@ -441,7 +419,7 @@ export class ScorecardPage implements OnInit {
         // to the one just created, matching the intended add-FY → add-scorecard flow.
         this.loadFiscalYears(() => {
           this.editingId.set(null);
-          this.form.reset({ fiscalYearId: created.id, name: '', description: '', scope: 'Corporate' });
+          this.form.reset({ fiscalYearId: created.id, name: '', description: '' });
           this.showForm.set(true);
         });
       },

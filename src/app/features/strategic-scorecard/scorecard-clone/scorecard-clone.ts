@@ -146,7 +146,6 @@ export class ScorecardClonePage implements OnInit {
           fiscalYearId: res.targetFiscalYearId,
           name: res.name,
           scorecardStatus: 'Active',
-          scope: this.source()?.scope ?? 'Corporate',
           goalCount: res.goalCount,
           kraCount: res.kraCount,
           kpiCount: res.kpiCount,

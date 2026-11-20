@@ -4,7 +4,6 @@ export interface Scorecard {
   fiscalYearName?: string;
   name: string;
   description?: string;
-  scope: 'Corporate' | 'Division' | 'Department';
   scorecardStatus: 'Active' | 'Closed' | 'Draft';
   goalCount?: number;
   kraCount?: number;
@@ -20,7 +19,6 @@ export interface CreateScorecardRequest {
   fiscalYearId: string;
   name: string;
   description?: string;
-  scope?: 'Corporate' | 'Division' | 'Department';
 }
 
 /** The API serializes enums as camelCase (e.g. "corporate"); the UI models use TitleCase. */
@@ -33,7 +31,6 @@ export function titleCaseEnumName(value: string | null | undefined): string {
 export function normalizeScorecard(scorecard: Scorecard): Scorecard {
   return {
     ...scorecard,
-    scope: titleCaseEnumName(scorecard.scope) as Scorecard['scope'],
     scorecardStatus: titleCaseEnumName(scorecard.scorecardStatus) as Scorecard['scorecardStatus'],
   };
 }
@@ -41,7 +38,6 @@ export function normalizeScorecard(scorecard: Scorecard): Scorecard {
 export interface UpdateScorecardRequest {
   name?: string;
   description?: string;
-  scope?: 'Corporate' | 'Division' | 'Department';
   scorecardStatus?: 'Active' | 'Closed' | 'Draft';
 }
 
@@ -49,7 +45,6 @@ export interface ScorecardSummary {
   id: string;
   name: string;
   fiscalYearName: string;
-  scope: string;
   status: string;
   goalCount: number;
   kraCount: number;

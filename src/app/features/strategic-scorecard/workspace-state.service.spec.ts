@@ -32,7 +32,6 @@ const scorecard = (overrides: Partial<Scorecard> = {}): Scorecard => ({
   fiscalYearId: 'fy-1',
   fiscalYearName: 'FY 2026',
   scorecardStatus: 'Active',
-  scope: 'Corporate',
   description: '',
   ...overrides,
 });
@@ -407,14 +406,12 @@ const entryBoard = (): EntryBoard => ({
       fiscalYearId: 'fy-1',
       name: 'Corporate Scorecard',
       // The API serializes enums camel-cased, exactly as the board read returns them.
-      scope: 'corporate',
       scorecardStatus: 'active',
     },
     {
       id: 'sc-2',
       fiscalYearId: 'fy-1',
       name: 'Finance Scorecard',
-      scope: 'corporate',
       scorecardStatus: 'draft',
     },
   ],
@@ -505,7 +502,6 @@ describe('ScorecardWorkspaceState entry board', () => {
   it('restores the camel-cased board enums for the picker', () => {
     state = loadBoard();
     const first = state.scorecards()[0];
-    expect(first.scope).toBe('Corporate');
     expect(first.scorecardStatus).toBe('Active');
   });
 

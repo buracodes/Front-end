@@ -68,12 +68,12 @@ const row = (overrides: Partial<InitiativeListItem> = {}): InitiativeListItem =>
   ...overrides,
 });
 
-const user = (permissions: string[]): AuthUser => ({
+const user = (permissions: string[], roles: string[] = ['DataInputUser']): AuthUser => ({
   id: 'user-1',
   username: 'owner',
   fullName: 'Owner One',
   email: 'owner@spms.local',
-  roles: ['DataInputUser'],
+  roles,
   permissions,
 });
 
@@ -86,9 +86,9 @@ describe('InitiativePage', () => {
   const isSummary = (r: { urlWithParams: string }): boolean =>
     r.urlWithParams.endsWith('/api/initiative/summary');
 
-  /** Answers the option requests the grid fires on construction. */
+  /** Answers the option requests the grid fires on construction (owners come from the HR lookup). */
   const flushOptions = (): void => {
-    http.expectOne((r) => r.urlWithParams.endsWith('/api/user')).flush(ok([]));
+    http.expectOne((r) => r.urlWithParams.endsWith('/api/user/lookup?take=200')).flush(ok([]));
     http.expectOne((r) => r.urlWithParams.endsWith('/api/division')).flush(ok([]));
     http.expectOne((r) => r.urlWithParams.endsWith('/api/goal')).flush(ok([]));
     http.expectOne((r) => r.urlWithParams.endsWith('/api/kra')).flush(ok([]));
@@ -684,5 +684,420 @@ describe('InitiativePage', () => {
     // No pseudo-icon characters survive anywhere on the page.
     expect(host.textContent).not.toContain('\u00d7');
     expect(host.textContent).not.toContain('\u22ee');
+  });
+
+  it('shows a read-only owner label for scoped roles and keeps the filter for elevated roles', () => {
+    const page = start();
+    page.divisions.set([{ id: 'division-1', name: 'Finance Department' }]);
+
+    for (const role of ['Data Input User', 'View Only', 'Executive', 'DataInputUser']) {
+      store.setUser({ ...user([]), roles: [role], divisionIds: ['division-1'] });
+      expect(page.hasScopedOwner()).toBe(true);
+      expect(page.scopedOwnerLabel()).toBe('Finance Department');
+    }
+
+    store.setUser({ ...user([]), roles: ['Admin', 'Power User'], divisionIds: [] });
+    expect(page.hasScopedOwner()).toBe(false);
+    expect(page.scopedOwnerLabel()).toBe('Owner One');
+
+    store.setUser({ ...user([]), roles: ['View Only'], divisionIds: [] });
+    expect(page.scopedOwnerLabel()).toBe('Owner One');
+  });
+
+  it('renders the scoped badge instead of the All owners select for restricted roles', () => {
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+    });
+    store = TestBed.inject(UserStore);
+    store.setUser({ ...user(['initiatives:create']), roles: ['View Only'], divisionIds: ['division-1'] });
+    http = TestBed.inject(HttpTestingController);
+
+    const fixture = TestBed.createComponent(InitiativePage);
+    fixture.detectChanges();
+    flushOptions();
+    flushGrid([]);
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('.toolbar-owner-scope')?.textContent).toContain('division-1');
+    expect(host.querySelector('.owner-filter-trigger')).toBeNull();
+
+    store.setUser({ ...user(['initiatives:create']), roles: ['Admin'] });
+    fixture.detectChanges();
+    expect(host.querySelector('.toolbar-owner-scope')).toBeNull();
+    expect(host.querySelector('.owner-filter-trigger')?.textContent).toContain('All owners');
+  });
+
+  it('filters owners by search text and applies the selection from the elevated-role dropdown', () => {
+    const page = start(
+      [],
+      [row(), row({ id: 'init-2', ownerId: 'user-2', ownerName: 'IT Team' })]
+    );
+    store.setUser(user([], ['Admin']));
+
+    expect(page.selectedOwnerFilterLabel()).toBe('All owners');
+    page.ownerFilterPickerOpen.set(true);
+    page.ownerFilterSearch.set('it');
+    expect(page.filteredOwnerFilterOptions()).toEqual([{ value: 'user-2', label: 'IT Team' }]);
+
+    page.selectOwnerFilter('user-2');
+    expect(page.ownerFilter()).toBe('user-2');
+    expect(page.selectedOwnerFilterLabel()).toBe('IT Team');
+    expect(page.ownerFilterPickerOpen()).toBe(false);
+    http.expectOne(isGrid).flush(
+      ok({ items: [], totalCount: 0, page: 1, pageSize: 25, totalPages: 0 })
+    );
+  });
+
+  it('populates the individual picker from HR employees and filters both pickers by search text', () => {
+    const page = start();
+    page.employeeOwners.set([
+      {
+        id: 'emp-1',
+        fullName: 'Ada Byron',
+        firstName: 'Ada',
+        fatherName: 'Charles',
+        grandfatherName: 'Babbage',
+        divisionName: 'Finance',
+        departmentName: 'Planning',
+      },
+      {
+        id: 'emp-2',
+        fullName: 'Grace Hopper',
+        firstName: 'Grace',
+        fatherName: 'Murray',
+        grandfatherName: 'Hooper',
+        divisionName: 'IT',
+        departmentName: 'Systems',
+        positionName: 'CTO',
+      },
+    ]);
+    page.divisions.set([
+      { id: 'division-1', name: 'Finance Department' },
+      { id: 'division-2', name: 'IT Department' },
+    ]);
+
+    expect(page.ownerFormOptions().map((o) => o.id)).toEqual(['emp-1', 'emp-2']);
+    expect(page.ownerFormOptions().map((o) => o.label)).toEqual([
+      'Ada Charles Babbage',
+      'Grace Murray Hooper',
+    ]);
+    expect(page.ownerFormOptions().map((o) => o.meta)).toEqual([
+      'Finance · Planning',
+      'IT · Systems · CTO',
+    ]);
+
+    page.employeeOwnerSearch.set('babbage');
+    expect(page.filteredEmployeeOwnerOptions().map((o) => o.id)).toEqual(['emp-1']);
+    page.employeeOwnerSearch.set('systems');
+    expect(page.filteredEmployeeOwnerOptions().map((o) => o.id)).toEqual(['emp-2']);
+    page.employeeOwnerSearch.set('');
+
+    page.divisionOwnerSearch.set('it department');
+    expect(page.filteredDivisionOwnerOptions().map((o) => o.id)).toEqual(['division-2']);
+  });
+
+  it('selects owners through the searchable pickers and keeps exactly one owner in the form', () => {
+    const page = start(['initiatives:create']);
+    page.employeeOwners.set([{ id: 'emp-1', fullName: 'Ada Lovelace' }]);
+    page.divisions.set([{ id: 'division-1', name: 'Finance Department' }]);
+    page.form.patchValue({ name: 'Picker initiative', startDate: isoDay(1), endDate: isoDay(40) });
+
+    page.employeeOwnerPickerOpen.set(true);
+    page.selectEmployeeOwner('emp-1');
+    expect(page.form.controls.ownerId.value).toBe('emp-1');
+    expect(page.employeeOwnerPickerOpen()).toBe(false);
+    expect(page.selectedEmployeeOwnerLabel()).toBe('Ada Lovelace');
+    expect(page.form.valid).toBe(true);
+
+    page.form.controls.ownerType.setValue('Division');
+    page.onOwnerTypeChange('Division');
+    page.divisionOwnerPickerOpen.set(true);
+    page.selectDivisionOwner('division-1');
+    expect(page.form.controls.divisionOwnerId.value).toBe('division-1');
+    expect(page.form.controls.ownerId.value).toBe('');
+    expect(page.selectedDivisionOwnerLabel()).toBe('Finance Department');
+    expect(page.divisionOwnerPickerOpen()).toBe(false);
+    expect(page.form.valid).toBe(true);
+  });
+
+  it('closes an open owner picker when the modal is cancelled', () => {
+    const page = start(['initiatives:create']);
+
+    page.openAddModal();
+    flushCascade();
+    page.employeeOwnerPickerOpen.set(true);
+    page.onCancelEdit();
+
+    expect(page.employeeOwnerPickerOpen()).toBe(false);
+    expect(page.divisionOwnerPickerOpen()).toBe(false);
+    expect(page.showForm()).toBe(false);
+  });
+
+  it('anchors the employee picker to its owner control inside the modal', () => {
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+    });
+    store = TestBed.inject(UserStore);
+    store.setUser(user(['initiatives:create']));
+    http = TestBed.inject(HttpTestingController);
+
+    const fixture = TestBed.createComponent(InitiativePage);
+    fixture.detectChanges();
+    flushOptions();
+    flushGrid([]);
+    fixture.detectChanges();
+
+    fixture.componentInstance.employeeOwners.set([
+      {
+        id: 'emp-1',
+        fullName: 'Ada Byron',
+        firstName: 'Ada',
+        fatherName: 'Charles',
+        grandfatherName: 'Babbage',
+        divisionName: 'Finance',
+        departmentName: 'Planning',
+      },
+    ]);
+    fixture.componentInstance.openAddModal();
+    flushCascade();
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const wrapper = host.querySelector('.owner-picker') as HTMLElement;
+    (wrapper.querySelector('.owner-picker-trigger') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    const panel = wrapper.querySelector('.owner-picker-panel') as HTMLElement;
+    expect(panel).not.toBeNull();
+    expect(panel.parentElement).toBe(wrapper);
+    expect(host.querySelector('.modal-backdrop > .owner-picker-panel')).toBeNull();
+    expect(panel.querySelector('input[aria-label="Search active employees"]')).not.toBeNull();
+    expect(panel.querySelector('.owner-picker-list')?.textContent).toContain('Ada Charles Babbage');
+    expect(panel.querySelector('.owner-picker-option-meta')?.textContent).toContain('Finance · Planning');
+  });
+
+  it('keeps the selected owner label in sync with form changes after the trigger has rendered', () => {
+    const page = start(['initiatives:create']);
+    page.employeeOwners.set([
+      {
+        id: 'emp-1',
+        fullName: 'Ada Byron',
+        firstName: 'Ada',
+        fatherName: 'Charles',
+        grandfatherName: 'Babbage',
+      },
+    ]);
+    page.divisions.set([{ id: 'division-1', name: 'Finance Department' }]);
+
+    // Read while empty first: a plain FormControl read inside computed would cache this forever.
+    expect(page.selectedEmployeeOwnerLabel()).toBe('');
+    expect(page.selectedDivisionOwnerLabel()).toBe('');
+
+    page.selectEmployeeOwner('emp-1');
+    expect(page.selectedEmployeeOwnerLabel()).toBe('Ada Charles Babbage');
+
+    page.form.controls.ownerType.setValue('Division');
+    page.onOwnerTypeChange('Division');
+    expect(page.selectedEmployeeOwnerLabel()).toBe('');
+    expect(page.selectedDivisionOwnerLabel()).toBe('');
+
+    page.selectDivisionOwner('division-1');
+    expect(page.selectedDivisionOwnerLabel()).toBe('Finance Department');
+
+    // Clearing the control also clears the label.
+    page.form.controls.divisionOwnerId.setValue('');
+    expect(page.selectedDivisionOwnerLabel()).toBe('');
+  });
+
+  it('shows the selected employee and division names in the closed trigger, not the placeholder', () => {
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+    });
+    store = TestBed.inject(UserStore);
+    store.setUser(user(['initiatives:create']));
+    http = TestBed.inject(HttpTestingController);
+
+    const fixture = TestBed.createComponent(InitiativePage);
+    fixture.detectChanges();
+    flushOptions();
+    flushGrid([]);
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance;
+    page.employeeOwners.set([
+      {
+        id: 'emp-1',
+        fullName: 'Ada Byron',
+        firstName: 'Ada',
+        fatherName: 'Charles',
+        grandfatherName: 'Babbage',
+        divisionName: 'Finance',
+        departmentName: 'Planning',
+      },
+    ]);
+    page.divisions.set([{ id: 'division-1', name: 'Finance Department' }]);
+    page.openAddModal();
+    flushCascade();
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const triggerValue = (): HTMLElement =>
+      host.querySelector('.owner-picker-trigger .owner-picker-value') as HTMLElement;
+
+    expect(triggerValue().textContent?.trim()).toBe('Select active employee');
+    page.selectEmployeeOwner('emp-1');
+    fixture.detectChanges();
+    expect(triggerValue().textContent?.trim()).toBe('Ada Charles Babbage');
+    expect(triggerValue().classList.contains('is-placeholder')).toBe(false);
+    expect(triggerValue().getAttribute('title')).toBe('Ada Charles Babbage');
+
+    page.form.controls.ownerType.setValue('Division');
+    page.onOwnerTypeChange('Division');
+    page.selectDivisionOwner('division-1');
+    fixture.detectChanges();
+    expect(triggerValue().textContent?.trim()).toBe('Finance Department');
+    expect(triggerValue().classList.contains('is-placeholder')).toBe(false);
+  });
+
+  it('matches every part of an employee full name and multiple search words', () => {
+    const page = start();
+    page.employeeOwners.set([
+      {
+        id: 'emp-1',
+        fullName: 'Ada Byron',
+        firstName: 'Ada',
+        fatherName: 'Charles',
+        grandfatherName: 'Babbage',
+      },
+    ]);
+
+    page.employeeOwnerSearch.set('babbage');
+    expect(page.filteredEmployeeOwnerOptions().map((o) => o.id)).toEqual(['emp-1']);
+    page.employeeOwnerSearch.set('ada babbage');
+    expect(page.filteredEmployeeOwnerOptions().map((o) => o.id)).toEqual(['emp-1']);
+    page.employeeOwnerSearch.set('byron');
+    expect(page.filteredEmployeeOwnerOptions().map((o) => o.id)).toEqual(['emp-1']);
+    page.employeeOwnerSearch.set('charles nobody');
+    expect(page.filteredEmployeeOwnerOptions()).toEqual([]);
+  });
+
+  it('clears selected owners with the trigger clear buttons and toggles re-selected options off', () => {
+    const page = start(['initiatives:create']);
+    page.employeeOwners.set([{ id: 'emp-1', fullName: 'Ada Lovelace' }]);
+    page.divisions.set([{ id: 'division-1', name: 'Finance Department' }]);
+
+    page.selectEmployeeOwner('emp-1');
+    expect(page.form.controls.ownerId.value).toBe('emp-1');
+    page.clearEmployeeOwner();
+    expect(page.form.controls.ownerId.value).toBe('');
+    expect(page.selectedEmployeeOwnerLabel()).toBe('');
+    expect(page.employeeOwnerPickerOpen()).toBe(false);
+
+    page.form.controls.ownerType.setValue('Division');
+    page.selectDivisionOwner('division-1');
+    expect(page.form.controls.divisionOwnerId.value).toBe('division-1');
+    page.clearDivisionOwner();
+    expect(page.form.controls.divisionOwnerId.value).toBe('');
+    expect(page.selectedDivisionOwnerLabel()).toBe('');
+    expect(page.divisionOwnerPickerOpen()).toBe(false);
+
+    // Re-selecting the current value toggles it off for both picker types.
+    page.selectDivisionOwner('division-1');
+    page.selectDivisionOwner('division-1');
+    expect(page.form.controls.divisionOwnerId.value).toBe('');
+    page.form.controls.ownerType.setValue('Individual');
+    page.onOwnerTypeChange('Individual');
+    page.selectEmployeeOwner('emp-1');
+    page.selectEmployeeOwner('emp-1');
+    expect(page.form.controls.ownerId.value).toBe('');
+
+    // Changing owner type still clears the inactive picker.
+    page.selectDivisionOwner('division-1');
+    page.form.controls.ownerId.setValue('emp-1');
+    page.onOwnerTypeChange('Division');
+    expect(page.form.controls.ownerId.value).toBe('');
+  });
+
+  it('closes the picker first on backdrop click, then the modal on a second click', () => {
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+    });
+    store = TestBed.inject(UserStore);
+    store.setUser(user(['initiatives:create']));
+    http = TestBed.inject(HttpTestingController);
+
+    const fixture = TestBed.createComponent(InitiativePage);
+    fixture.detectChanges();
+    flushOptions();
+    flushGrid([]);
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance;
+    page.openAddModal();
+    flushCascade();
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const backdrop = host.querySelector('.modal-backdrop') as HTMLElement;
+    const clickBackdrop = (): void => {
+      backdrop.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      fixture.detectChanges();
+    };
+
+    // The trigger stops propagation, so opening the picker leaves it open.
+    (host.querySelector('.owner-picker-trigger') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(page.employeeOwnerPickerOpen()).toBe(true);
+
+    clickBackdrop();
+    expect(page.employeeOwnerPickerOpen()).toBe(false);
+    expect(page.showForm()).toBe(true);
+
+    clickBackdrop();
+    expect(page.showForm()).toBe(false);
+  });
+
+  it('closes an open picker on clicks elsewhere in the dialog and via the trigger clear button', () => {
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+    });
+    store = TestBed.inject(UserStore);
+    store.setUser(user(['initiatives:create']));
+    http = TestBed.inject(HttpTestingController);
+
+    const fixture = TestBed.createComponent(InitiativePage);
+    fixture.detectChanges();
+    flushOptions();
+    flushGrid([]);
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance;
+    page.employeeOwners.set([{ id: 'emp-1', fullName: 'Ada Lovelace' }]);
+    page.openAddModal();
+    flushCascade();
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    (host.querySelector('.owner-picker-trigger') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(page.employeeOwnerPickerOpen()).toBe(true);
+
+    // A click on an unrelated field inside the dialog closes the picker but keeps the modal.
+    (host.querySelector('#initiative-name') as HTMLInputElement).click();
+    fixture.detectChanges();
+    expect(page.employeeOwnerPickerOpen()).toBe(false);
+    expect(page.showForm()).toBe(true);
+
+    // Selecting then clearing from the trigger also leaves the modal open.
+    page.selectEmployeeOwner('emp-1');
+    fixture.detectChanges();
+    const clear = host.querySelector('.owner-picker-clear[aria-label="Clear selected employee"]') as HTMLButtonElement;
+    expect(clear).not.toBeNull();
+    clear.click();
+    fixture.detectChanges();
+    expect(page.form.controls.ownerId.value).toBe('');
+    expect(host.querySelector('.owner-picker-trigger .owner-picker-value')?.textContent?.trim()).toBe('Select active employee');
+    expect(page.showForm()).toBe(true);
   });
 });

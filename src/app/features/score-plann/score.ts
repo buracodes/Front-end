@@ -368,10 +368,6 @@ export class score implements OnInit, OnDestroy {
       nonNullable: true,
       validators: [Validators.maxLength(500)],
     }),
-    scope: new FormControl<Scorecard['scope']>('Corporate', {
-      nonNullable: true,
-      validators: [Validators.required],
-    }),
   });
 
   ngOnInit(): void {
@@ -580,27 +576,6 @@ export class score implements OnInit, OnDestroy {
     if (next) this.navigateToScorecard(next);
   }
 
-  onScopeChange(event: Event): void {
-    if (this.isReadOnly()) {
-      this.notifications.error('This scorecard is closed and cannot be modified.');
-      return;
-    }
-    const scope = (event.target as HTMLSelectElement).value as Scorecard['scope'];
-    const sc = this.selectedScorecard();
-    if (!sc || sc.scope === scope) return;
-    this.scorecardListService.update(sc.id, { scope }).subscribe({
-      next: () => {
-        this.notifications.success(`Scope changed to ${scope}.`);
-        this.loadSiblingScorecards();
-        this.state.loadFiscalYearsAndScorecards(sc.id);
-      },
-      error: (e) => {
-        this.notifications.error(e?.message ?? 'Failed to update scope.');
-        this.state.loadFiscalYearsAndScorecards(sc.id);
-      },
-    });
-  }
-
   onSwitchScorecardRow(sc: Scorecard): void {
     if (sc.id === this.selectedScorecard()?.id) return;
     this.navigateToScorecard(sc.id);
@@ -684,7 +659,6 @@ export class score implements OnInit, OnDestroy {
   //     fiscalYearId: sc.fiscalYearId,
   //     name: `${sc.name} (Copy)`,
   //     description: sc.description,
-  //     scope: sc.scope,
   //   };
   //   this.scorecardListService.create(req).subscribe({
   //     next: () => { this.notifications.success('Scorecard cloned.'); this.loadSiblingScorecards(); },
@@ -697,7 +671,6 @@ export class score implements OnInit, OnDestroy {
     this.scorecardMetaForm.setValue({
       name: sc.name,
       description: sc.description ?? '',
-      scope: sc.scope,
     });
     this.showScorecardModal.set(true);
   }

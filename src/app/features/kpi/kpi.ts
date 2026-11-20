@@ -107,14 +107,62 @@ export class KpiPage implements OnDestroy {
     maxValue: new FormControl<number | null>(null),
   });
 
+  /**
+   * Core summary first (Name, Owner, Unit, Weight, Target, Optimization, Actions), then the
+   * secondary detail. The core columns are sized to fit the opening view and the trailing
+   * Actions column is pinned right, while the fixed-width secondary columns scroll
+   * horizontally instead of squeezing the summary.
+   */
   readonly columnDefs: ColDef[] = [
-    { field: 'name', headerName: 'Name', sortable: true, filter: true, flex: 1 },
+    { field: 'name', headerName: 'Name', sortable: true, filter: true, flex: 1, minWidth: 220 },
+    {
+      headerName: 'Owner',
+      sortable: true,
+      filter: true,
+      flex: 1,
+      minWidth: 160,
+      valueGetter: (params) => (params.data ? this.ownerLabel(params.data) : ''),
+    },
+    {
+      field: 'unit',
+      headerName: 'Unit',
+      sortable: true,
+      filter: true,
+      width: 96,
+      valueFormatter: (params) => (params.value ? params.value : '—'),
+    },
+    { field: 'weight', headerName: 'Weight', type: 'rightAligned', sortable: true, width: 100 },
+    {
+      headerName: 'Target',
+      type: 'rightAligned',
+      sortable: true,
+      width: 120,
+      valueGetter: (params) => this.snapshotOf(params.data?.id)?.targetValue ?? null,
+      valueFormatter: (params) => (params.value == null ? '—' : `${Number(params.value).toLocaleString()}`),
+    },
+    { field: 'optimizationType', headerName: 'Optimization', sortable: true, filter: true, width: 140 },
+    {
+      ...actionsColumn<Kpi>(
+        (key, row) => {
+          if (key === 'edit') this.onEdit(row);
+          if (key === 'configure') this.configureTarget(row);
+          if (key === 'delete') this.onDelete(row.id);
+        },
+        [
+          { key: 'edit', label: 'Edit' },
+          { key: 'configure', label: 'Configure Target' },
+          { key: 'delete', label: 'Delete', danger: true, separated: true },
+        ],
+      ),
+      // Stay reachable while the secondary columns scroll underneath.
+      pinned: 'right',
+    },
     {
       field: 'scorecardName',
       headerName: 'Scorecard',
       sortable: true,
       filter: true,
-      flex: 1,
+      width: 170,
       valueGetter: (params) => (params.data ? this.scorecardLabel(params.data) : ''),
     },
     {
@@ -122,7 +170,7 @@ export class KpiPage implements OnDestroy {
       headerName: 'Goal',
       sortable: true,
       filter: true,
-      flex: 1,
+      width: 180,
       valueGetter: (params) => (params.data ? this.goalLabel(params.data) : ''),
     },
     {
@@ -130,40 +178,25 @@ export class KpiPage implements OnDestroy {
       headerName: 'KRA',
       sortable: true,
       filter: true,
-      flex: 1,
+      width: 180,
       valueGetter: (params) => (params.data ? this.kraLabel(params.data) : ''),
     },
-    { field: 'unit', headerName: 'Unit', sortable: true, filter: true, valueFormatter: (params) => (params.value ? params.value : '—') },
-    {
-      headerName: 'Owner',
-      sortable: true,
-      filter: true,
-      flex: 1,
-      valueGetter: (params) => (params.data ? this.ownerLabel(params.data) : ''),
-    },
-    { field: 'weight', headerName: 'Weight', type: 'rightAligned', sortable: true },
-    { field: 'kpiType', headerName: 'KPI Type', sortable: true, filter: true },
-    { field: 'optimizationType', headerName: 'Optimization', sortable: true, filter: true },
-    { field: 'dataSource', headerName: 'Data Source', sortable: true, filter: true },
+    { field: 'kpiType', headerName: 'KPI Type', sortable: true, filter: true, width: 110 },
+    { field: 'dataSource', headerName: 'Data Source', sortable: true, filter: true, width: 120 },
     {
       field: 'isActive',
       headerName: 'Active',
       sortable: true,
       filter: true,
+      width: 96,
       cellRenderer: (params: { value?: boolean }): string => (params.value ? 'Yes' : 'No'),
     },
-    { field: 'childKpiCount', headerName: 'Child KPIs', type: 'rightAligned' },
-    {
-      headerName: 'Target',
-      type: 'rightAligned',
-      sortable: true,
-      valueGetter: (params) => this.snapshotOf(params.data?.id)?.targetValue ?? null,
-      valueFormatter: (params) => (params.value == null ? '—' : `${Number(params.value).toLocaleString()}`),
-    },
+    { field: 'childKpiCount', headerName: 'Child KPIs', type: 'rightAligned', width: 110 },
     {
       headerName: 'Actual',
       type: 'rightAligned',
       sortable: true,
+      width: 110,
       valueGetter: (params) => this.snapshotOf(params.data?.id)?.actualValue ?? null,
       valueFormatter: (params) => (params.value == null ? '—' : `${Number(params.value).toLocaleString()}`),
     },
@@ -171,24 +204,13 @@ export class KpiPage implements OnDestroy {
       headerName: 'Score',
       type: 'rightAligned',
       sortable: true,
+      width: 96,
       valueGetter: (params) => this.snapshotOf(params.data?.id)?.score ?? null,
       cellRenderer: (params: { value?: number | null }): string => {
         if (params.value == null) return '<span class="text-subtle">—</span>';
         return `<span style="color:${scoreColor(params.value)};font-weight:600">${params.value}</span>`;
       },
     },
-    actionsColumn<Kpi>(
-      (key, row) => {
-        if (key === 'edit') this.onEdit(row);
-        if (key === 'configure') this.configureTarget(row);
-        if (key === 'delete') this.onDelete(row.id);
-      },
-      [
-        { key: 'edit', label: 'Edit' },
-        { key: 'configure', label: 'Configure Target' },
-        { key: 'delete', label: 'Delete', danger: true, separated: true },
-      ],
-    ),
   ];
 
   constructor() {

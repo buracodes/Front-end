@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { ActivatedRoute, convertToParamMap } from '@angular/router';
 import { DivisionPlanningPage } from './division-planning';
 import { DivisionService } from '../division/division.service';
@@ -80,15 +80,13 @@ const CORPORATE_SCORECARD: Scorecard = {
   id: 'sc-1',
   fiscalYearId: 'fy-1',
   name: 'ECX Corporate Strategy',
-  scope: 'Corporate',
   scorecardStatus: 'Active',
 };
 
-const DIVISION_SCORECARD: Scorecard = {
+const SECOND_SCORECARD: Scorecard = {
   id: 'sc-2',
   fiscalYearId: 'fy-1',
-  name: 'ECX Division Scorecard',
-  scope: 'Division',
+  name: 'Second Strategy',
   scorecardStatus: 'Active',
 };
 
@@ -202,7 +200,7 @@ describe('DivisionPlanningPage', () => {
     expect(divisionService.getPlanningContext).toHaveBeenCalledTimes(1);
   });
 
-  it('opens the first corporate scorecard when the route has no scorecard id', () => {
+  it('opens the only scorecard when the route has no scorecard id', () => {
     start([CORPORATE_SCORECARD], DEFAULT_PERMISSIONS, '', null);
 
     expect(router.navigate).toHaveBeenCalledWith(
@@ -211,10 +209,10 @@ describe('DivisionPlanningPage', () => {
     );
   });
 
-  it('reports when no corporate scorecard exists to plan', () => {
+  it('reports when no scorecard exists to plan', () => {
     const page = start([], DEFAULT_PERMISSIONS, '', null);
 
-    expect(page.loadError()).toContain('No corporate scorecard is available');
+    expect(page.loadError()).toContain('No scorecard is available');
   });
 
   it('keeps the planning surface closed to principals without divisions:plan', () => {
@@ -231,31 +229,28 @@ describe('DivisionPlanningPage', () => {
     expect(scorecardGetAll).not.toHaveBeenCalled();
   });
 
-  it('offers only corporate scorecards in the scorecard picker', () => {
-    const page = start([DIVISION_SCORECARD, CORPORATE_SCORECARD]);
+  it('offers every scorecard in the scorecard picker', () => {
+    const page = start([SECOND_SCORECARD, CORPORATE_SCORECARD]);
 
-    expect(page.scorecards().map((s) => s.id)).toEqual(['sc-1']);
+    expect(page.scorecards().map((s) => s.id)).toEqual(['sc-1', 'sc-2']);
     expect(divisionService.getPlanningContext).toHaveBeenCalledTimes(1);
   });
 
-  it('redirects a division-scope route scorecard to the corporate scorecard of the same fiscal year', () => {
+  it('treats an explicit route scorecard as authoritative', () => {
     start([
-      { ...CORPORATE_SCORECARD, scope: 'Division', name: 'ECX Division Scorecard' },
-      { ...CORPORATE_SCORECARD, id: 'sc-8', name: 'Corporate 2026' },
-      { ...CORPORATE_SCORECARD, id: 'sc-9', fiscalYearId: 'fy-9', name: 'Corporate 2027' },
-    ]);
+      CORPORATE_SCORECARD,
+      { ...CORPORATE_SCORECARD, id: 'sc-8', name: 'Another Scorecard' },
+    ], DEFAULT_PERMISSIONS, '', 'sc-8');
 
-    expect(router.navigate).toHaveBeenCalledWith(['/division-planning', 'sc-8'], { replaceUrl: true });
-    expect(divisionService.getPlanningContext).not.toHaveBeenCalled();
+    expect(router.navigate).not.toHaveBeenCalled();
+    expect(divisionService.getPlanningContext.mock.calls[0][0]).toBe('sc-8');
   });
 
-  it('falls back to the first corporate scorecard when none shares the fiscal year', () => {
-    start([
-      { ...CORPORATE_SCORECARD, scope: 'Division', name: 'ECX Division Scorecard' },
-      { ...CORPORATE_SCORECARD, id: 'sc-9', fiscalYearId: 'fy-9', name: 'Corporate 2027' },
-    ]);
+  it('requires an explicit scorecard when more than one is available', () => {
+    const page = start([CORPORATE_SCORECARD, SECOND_SCORECARD], DEFAULT_PERMISSIONS, '', null);
 
-    expect(router.navigate).toHaveBeenCalledWith(['/division-planning', 'sc-9'], { replaceUrl: true });
+    expect(router.navigate).not.toHaveBeenCalled();
+    expect(page.loadError()).toBe('Select a scorecard to load its division plans.');
     expect(divisionService.getPlanningContext).not.toHaveBeenCalled();
   });
 
@@ -334,9 +329,16 @@ describe('DivisionPlanningPage', () => {
   it('lists every corporate goal with its persisted contributed state', () => {
     const page = start();
 
-    expect(page.corporateGoals().map((g) => g.id)).toEqual(['g1', 'g3', 'g2']);
-    expect(page.corporateGoals()[0]).toMatchObject({ name: 'Grow revenue', contributesTo: true });
-    expect(page.corporateGoals()[2]).toMatchObject({ name: 'Expand ops', contributesTo: false });
+    // Alphabetical, independent of contributed status, so a tick never reorders rows.
+    expect(page.corporateGoals().map((g) => g.id)).toEqual(['g2', 'g1', 'g3']);
+    expect(page.corporateGoals().find((g) => g.id === 'g1')).toMatchObject({
+      name: 'Grow revenue',
+      contributesTo: true,
+    });
+    expect(page.corporateGoals().find((g) => g.id === 'g2')).toMatchObject({
+      name: 'Expand ops',
+      contributesTo: false,
+    });
   });
 
   it('persists a ticked corporate goal immediately without a save step', async () => {
@@ -355,6 +357,26 @@ describe('DivisionPlanningPage', () => {
     expect(notifications.success).not.toHaveBeenCalled();
     // The page reloads the plan so the checklist reflects what the backend stored.
     expect(divisionService.getPlanningContext).toHaveBeenCalledTimes(2);
+  });
+
+  it('refreshes the checklist in place instead of flashing the page loading state', async () => {
+    const page = start();
+    const refresh = new Subject<DivisionPlanDto>();
+    divisionService.getPlanningContext.mockReturnValueOnce(refresh.asObservable());
+
+    await page.toggleContribution('g2', true);
+
+    // The board stays rendered while the background read is still in flight.
+    expect(page.loading()).toBe(false);
+    expect(page.selectionSaving()).toBe(true);
+    expect(page.plan()).not.toBeNull();
+    expect([...page.selectedIds()].sort()).toEqual(['g1', 'g2', 'g3']);
+
+    refresh.next(PLAN);
+    refresh.complete();
+
+    expect(page.loading()).toBe(false);
+    expect(page.selectionSaving()).toBe(false);
   });
 
   it('unticks a corporate goal that owns no division goals without asking', async () => {
@@ -427,7 +449,7 @@ describe('DivisionPlanningPage', () => {
     expect(divisionService.setContributions).toHaveBeenCalledWith({
       divisionId: 'div-1',
       scorecardId: 'sc-1',
-      goalIds: ['g1', 'g3', 'g2'],
+      goalIds: ['g2', 'g1', 'g3'],
       cascadeRemoveDependents: false,
     });
     // The saved plan is reloaded so the checklist and Select All reflect the backend.

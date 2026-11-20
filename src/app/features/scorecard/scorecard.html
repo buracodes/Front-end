@@ -36,19 +36,13 @@
       <option [value]="fy.id">{{ fy.label }}</option>
       }
     </select>
-    <select class="form-control sc-filter-select" [value]="scopeFilter()" (change)="onScopeFilterChange($event)">
-      <option value="">All Scopes</option>
-      @for (scope of scopes; track scope) {
-      <option [value]="scope">{{ scope }}</option>
-      }
-    </select>
     <select class="form-control sc-filter-select" [value]="statusFilter()" (change)="onStatusFilterChange($event)">
       <option value="">All Statuses</option>
       @for (status of statuses; track status) {
       <option [value]="status">{{ status }}</option>
       }
     </select>
-    @if (searchText() || fiscalYearFilter() || scopeFilter() || statusFilter()) {
+    @if (searchText() || fiscalYearFilter() || statusFilter()) {
     <button type="button" class="btn btn-secondary sc-clear-btn" (click)="clearFilters()">Clear Filters</button>
     }
   </div>
@@ -67,7 +61,7 @@
 <div class="sc-empty card">
   <div class="sc-empty-body">
     <svg class="sc-empty-icon" lucideIcon="file-text" size="48" strokeWidth="1.5"></svg>
-    @if (searchText() || fiscalYearFilter() || scopeFilter() || statusFilter()) {
+    @if (searchText() || fiscalYearFilter() || statusFilter()) {
     <p class="sc-empty-text">No scorecards match the current filters.</p>
     <button type="button" class="btn btn-secondary" (click)="clearFilters()">Clear Filters</button>
     } @else {
@@ -88,9 +82,7 @@
           <div class="sc-card-title-wrap">
             <h3 class="sc-card-title">{{ scorecard.name }}</h3>
             <div class="sc-card-meta">
-              <span class="badge badge-sm" [class]="scopeBadgeClass(scorecard.scope)">{{ displayStatus(scorecard.scope)
-                }}</span>
-              <span class="sc-card-fy">{{ scorecard.fiscalYearName ?? '—' }}</span>
+              <span class="sc-card-fy">{{ scorecard.fiscalYearName ?? ' ' }}</span>
             </div>
           </div>
           <div class="sc-card-tools">
@@ -209,7 +201,7 @@
             } @else {
             <option value="">Select a fiscal year</option>
             }
-            @for (fy of fiscalYears(); track fy.id) {
+            @for (fy of fiscalYearOptions(); track fy.id) {
             <option [value]="fy.id">{{ fy.label }} ({{ fy.status }})</option>
             }
           </select>
@@ -221,7 +213,7 @@
         <div class="form-group">
           <label class="form-label" for="scorecard-name">Name</label>
           <input id="scorecard-name" class="form-control" type="text" formControlName="name"
-            placeholder="e.g. Corporate Scorecard 2026" />
+            placeholder="e.g. Scorecard 2019" />
           @if (form.controls.name.invalid && form.controls.name.touched) {
           <p class="form-error">
             @if (form.controls.name.hasError('required')) {
@@ -239,18 +231,6 @@
             placeholder="Optional description"></textarea>
           @if (form.controls.description.invalid && form.controls.description.touched) {
           <p class="form-error">Description must be at most 500 characters.</p>
-          }
-        </div>
-
-        <div class="form-group">
-          <label class="form-label" for="scorecard-scope">Scope</label>
-          <select id="scorecard-scope" class="form-control" formControlName="scope">
-            @for (scope of scopes; track scope) {
-            <option [value]="scope">{{ scope }}</option>
-            }
-          </select>
-          @if (form.controls.scope.invalid && form.controls.scope.touched) {
-          <p class="form-error">Scope is required.</p>
           }
         </div>
 

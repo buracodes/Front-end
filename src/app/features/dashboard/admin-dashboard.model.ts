@@ -94,7 +94,6 @@ export interface RagCounts {
 export interface ScorecardPerformanceRow {
   id: string;
   name: string;
-  scope: Scorecard['scope'];
   status: Scorecard['scorecardStatus'];
   fiscalYearName?: string;
   goalCount: number | null;

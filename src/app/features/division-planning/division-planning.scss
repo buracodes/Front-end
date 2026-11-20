@@ -460,8 +460,13 @@
 
   &:disabled {
     cursor: default;
-    opacity: 0.75;
   }
+}
+
+/* Fade only the permanently locked rows; the momentary disable during an in-place
+   save must not make the checkbox blink on every tick. */
+.dp-goal-row.is-locked input[type='checkbox'] {
+  opacity: 0.75;
 }
 
 .dp-select-all-row {

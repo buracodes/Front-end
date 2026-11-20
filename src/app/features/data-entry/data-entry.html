@@ -41,7 +41,7 @@
           (change)="onScorecardChange($event)"
         >
           @for (sc of corporateScorecards(); track sc.id) {
-            <option [value]="sc.id">{{ sc.name }} — {{ sc.scope }} ({{ sc.scorecardStatus }})</option>
+            <option [value]="sc.id">{{ sc.name }} ({{ sc.scorecardStatus }})</option>
           }
         </select>
       </div>

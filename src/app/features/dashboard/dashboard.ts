@@ -86,7 +86,14 @@ export class DashboardPage implements OnInit {
       starts[year.id] ? { ...year, startDate: starts[year.id] } : year,
     );
   });
-  readonly scorecardOptions = computed(() => this.context()?.scorecards ?? []);
+  readonly scorecardSelectionRequired = computed(
+    () => this.context()?.filter?.scorecardSelectionRequired === true
+  );
+  readonly scorecardOptions = computed(() =>
+    this.scorecardSelectionRequired()
+      ? this.context()?.filter?.selectableScorecards ?? []
+      : this.context()?.scorecards ?? []
+  );
   readonly quickActions = computed(() => this.context()?.quickActions ?? []);
   readonly readOnly = computed(() => this.context()?.readOnly ?? false);
   readonly scopeLabel = computed(() => {
@@ -196,7 +203,7 @@ export class DashboardPage implements OnInit {
     }).subscribe(({ context, bundle }) => {
       if (context) {
         this.context.set(context);
-        // The server is authoritative: it may fall back to another scorecard/year.
+        // The server is authoritative: it applies the fiscal-year and scorecard selection.
         this.filter.set({ ...filter, ...pickFilter(context.filter) });
       }
       if (bundle) {

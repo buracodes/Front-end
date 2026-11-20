@@ -1,70 +1,4 @@
 <div class="scorecard-page">
-  <!-- Top context bar: fiscal year + scorecard + scope + period switchers -->
-  <!-- <header class="workspace-topbar">
-    <div class="workspace-topbar-left">
-      <p class="breadcrumb">SPMS / Scorecards / {{ selectedFiscalYear()?.label ?? selectedScorecard()?.name ??
-        'Scorecard' }}</p>
-      <h1 class="page-title">Strategic scorecard &middot; goal, KRA &amp; KPI planning</h1>
-    </div>
-
-    <div class="workspace-topbar-right">
-      <div class="wt-field">
-        <label class="wt-label" for="wt-fiscal-year">Fiscal Year</label>
-        <div class="wt-select-wrap">
-          <select id="wt-fiscal-year" class="wt-select" [value]="fiscalYearId() ?? ''"
-            (change)="onSwitchFiscalYear($event)">
-            @for (fy of fiscalYears(); track fy.id) {
-            <option [value]="fy.id">{{ fy.label }} ({{ fy.status }})</option>
-            }
-          </select>
-          <svg class="wt-select-chevron" lucideIcon="chevron-down" size="14"></svg>
-        </div>
-      </div>
-
-      <div class="wt-field">
-        <label class="wt-label" for="wt-scorecard">Scorecard</label>
-        <div class="wt-select-wrap">
-          <select id="wt-scorecard" class="wt-select" [value]="selectedScorecard()?.id ?? ''"
-            (change)="onSwitchScorecard($event)">
-            @if (siblingLoading()) {
-            <option value="">Loading scorecards…</option>
-            } @else {
-            @for (sc of siblingsForFy(); track sc.id) {
-            <option [value]="sc.id">{{ sc.name }}</option>
-            }
-            }
-          </select>
-          <svg class="wt-select-chevron" lucideIcon="chevron-down" size="14"></svg>
-        </div>
-      </div>
-
-      <div class="wt-field">
-        <label class="wt-label" for="wt-scope">Scope</label>
-        <div class="wt-select-wrap">
-          <select id="wt-scope" class="wt-select" [value]="selectedScorecard()?.scope ?? ''"
-            (change)="onScopeChange($event)">
-            <option value="Corporate">Corporate</option>
-            <option value="Division">Division</option>
-            <option value="Department">Department</option>
-          </select>
-          <svg class="wt-select-chevron" lucideIcon="chevron-down" size="14"></svg>
-        </div>
-      </div>
-
-      <div class="wt-field">
-        <label class="wt-label" for="wt-period">Period</label>
-        <div class="wt-select-wrap">
-          <select id="wt-period" class="wt-select" [value]="periodValue()" (change)="onPeriodValueChange($event)">
-            @for (p of periodOptions(); track p.value) {
-            <option [value]="p.value">{{ p.label }}</option>
-            }
-          </select>
-          <svg class="wt-select-chevron" lucideIcon="chevron-down" size="14"></svg>
-        </div>
-      </div>
-    </div>
-  </header> -->
-
   <!-- Stat row -->
   <div class="stat-row">
     <div class="stat-card">
@@ -699,7 +633,7 @@
 </div>
 }
 
-<!-- Scorecard metadata edit modal (rename / description / scope) -->
+<!-- Scorecard metadata edit modal (rename / description) -->
 @if (showScorecardModal()) {
 <div class="modal-backdrop" (click)="closeScorecardModal()">
   <div class="modal-dialog" (click)="$event.stopPropagation()">
@@ -719,14 +653,6 @@
         <div class="form-group">
           <label class="form-label">Description</label>
           <textarea class="form-control" formControlName="description" placeholder="Optional description"></textarea>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Scope</label>
-          <select class="form-control" formControlName="scope">
-            <option value="Corporate">Corporate</option>
-            <option value="Division">Division</option>
-            <option value="Department">Department</option>
-          </select>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" (click)="closeScorecardModal()">Cancel</button>

@@ -30,12 +30,19 @@ export interface PerformanceDivisionSummary {
   planStatus?: string | null;
 }
 
+export interface ScorecardSelectionOption {
+  id: string;
+  name: string;
+}
+
 export interface PerformanceMonitoring {
   scope: 'Corporate' | 'Division';
   fiscalYearId?: string | null;
   fiscalYearName?: string | null;
   scorecardId?: string | null;
   scorecardName?: string | null;
+  scorecardSelectionRequired?: boolean;
+  selectableScorecards?: ScorecardSelectionOption[];
   divisionId?: string | null;
   divisionName?: string | null;
   overallScore?: number | null;

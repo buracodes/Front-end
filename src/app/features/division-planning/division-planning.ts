@@ -180,11 +180,12 @@ private readonly notifications = inject(NotificationService);
 // ── Corporate goals checklist ──────────────────────────────────────────
 
   /** FR-901/FR-903: every corporate goal of the scorecard with its persisted
-   *  contributed status (contributions first, then the available pool). */
+   *  contributed status. Sorted by name, not by contributed status, so ticking a goal
+   *  never moves its row out of place. */
   readonly corporateGoals = computed<CorporateGoalItem[]>(() => {
     const p = this.plan();
     if (!p) return [];
-    return [
+    const goals: CorporateGoalItem[] = [
       ...p.contributions.map((c) => ({
         id: c.goalId,
         name: c.name,
@@ -198,6 +199,7 @@ private readonly notifications = inject(NotificationService);
         contributesTo: false,
       })),
     ];
+    return goals.sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
   });
 
   /** The currently checked corporate goals, used by the division goal modal. */
@@ -305,9 +307,10 @@ private readonly notifications = inject(NotificationService);
       })
       .subscribe({
         next: () => {
-          this.selectionSaving.set(false);
-          // The checklist itself reflects the save; no toast is shown for a contribution tick.
-          this.reloadPlan();
+          // Re-read in the background: the checklist stays on screen (no loading swap,
+          // no height collapse) and the checkboxes stay disabled until it lands so a
+          // second tick cannot race the in-flight read.
+          this.reloadPlan(true, () => this.selectionSaving.set(false));
         },
         error: (error) => {
           this.selectionSaving.set(false);
@@ -448,16 +451,21 @@ readonly overallScore = computed(() => {
 
   /**
    * The Year tab selects a full fiscal year, which can point at a different scorecard.
-   * Switch to that year's corporate scorecard when one exists; otherwise keep the old
-   * filter and say why. Every other mode stays inside the open plan's fiscal year.
+   * Switch only when that year has one unambiguous scorecard; otherwise the planner must
+   * choose explicitly. Every other mode stays inside the open plan's fiscal year.
    */
   onPeriodFilterChange(filter: DivisionPeriodFilter): void {
     if (filter.type === 'Year' && filter.fiscalYearId && filter.fiscalYearId !== this.selectedFiscalYear()?.id) {
-      const target = this.scorecards().find((s) => s.fiscalYearId === filter.fiscalYearId);
-      if (!target) {
-        this.notifications.error('No corporate scorecard exists for that fiscal year.');
+      const candidates = this.scorecards().filter((s) => s.fiscalYearId === filter.fiscalYearId);
+      if (candidates.length !== 1) {
+        this.notifications.error(
+          candidates.length === 0
+            ? 'No scorecard exists for that fiscal year.'
+            : 'Select the scorecard for that fiscal year before switching years.'
+        );
         return;
       }
+      const target = candidates[0];
       this.periodFilter.set(filter);
       this.scorecardFilter.set(target.id);
       const queryParams = this.divisionFilter() ? { divisionId: this.divisionFilter() } : undefined;
@@ -1108,13 +1116,12 @@ submitGoal(): void {
   /** Division picker: search text and open state for the searchable control. */
   readonly divisionSearch = signal('');
   readonly divisionPickerOpen = signal(false);
-  /** Every scorecard, kept private: the picker only offers corporate scorecards. */
+  /** Every scorecard may host division plans; the picker is sorted deterministically. */
   private readonly allScorecards = signal<Scorecard[]>([]);
-  /** Division plans always align to the corporate scorecard, so the picker is Corporate-only. */
   readonly scorecards = computed<Scorecard[]>(() =>
-    this.allScorecards()
-      .filter((s) => s.scope === 'Corporate')
-      .sort((a, b) => a.name.localeCompare(b.name))
+    [...this.allScorecards()].sort(
+      (a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)
+    )
   );
   readonly scorecardFilter = signal<string>('');
 
@@ -1164,35 +1171,6 @@ submitGoal(): void {
     this.router.navigate(['/division-planning', scorecardId]);
   }
 
-  /**
-   * Division plans are built against a corporate scorecard. A route that points at a
-   * Division-scope scorecard (the scorecard list still links those here) is redirected to
-   * the corporate scorecard of the same fiscal year, or the first corporate scorecard.
-   * Returns false when a redirect was issued so the caller can skip loading the old plan.
-   */
-  private ensureCorporateScorecard(routeScorecardId: string): boolean {
-    const all = this.allScorecards();
-    // Scorecards have not arrived yet; the loader re-runs this check once they do.
-    if (all.length === 0) return true;
-
-    const routeScorecard = all.find((s) => s.id === routeScorecardId);
-    if (routeScorecard?.scope === 'Corporate') return true;
-
-    const corporate = this.scorecards();
-    if (corporate.length === 0) return true;
-
-    const sameFiscalYear = routeScorecard
-      ? corporate.find((s) => s.fiscalYearId === routeScorecard.fiscalYearId)
-      : undefined;
-    const target = sameFiscalYear ?? corporate[0];
-    if (target.id === routeScorecardId) return true;
-
-    this.loading.set(true);
-    this.scorecardFilter.set(target.id);
-    void this.router.navigate(['/division-planning', target.id], { replaceUrl: true });
-    return false;
-  }
-
   private syncFilters(plan: DivisionPlanDto): void {
     if (plan.divisionId && this.divisionFilter() !== plan.divisionId) {
       this.divisionFilter.set(plan.divisionId);
@@ -1239,21 +1217,20 @@ submitGoal(): void {
         }
       },
     });
-    // Subscribe to the route before the catalog so an explicit scorecard id is known when
-    // the scorecard list arrives and can be validated against it.
+    // An explicit scorecard id is authoritative; it is never replaced by another scorecard.
     this.route.paramMap.subscribe((params) => {
       const id = params.get('scorecardId') ?? '';
       if (!id) {
         this.scorecardId.set('');
         if (!this.userStore.hasPermission('scorecard:view')) {
           this.loading.set(false);
-          this.loadError.set('You do not have access to the corporate scorecard catalog.');
+          this.loadError.set('You do not have access to the scorecard catalog.');
           return;
         }
         if (this.scorecardsLoaded) {
-          this.openDefaultCorporateScorecard();
+          this.openDefaultScorecard();
         } else {
-          // Catalog still loading; its subscription opens the default scorecard.
+          // Catalog still loading; its subscription opens the only scorecard if unambiguous.
           this.loading.set(true);
           this.loadError.set(null);
         }
@@ -1264,13 +1241,6 @@ submitGoal(): void {
       this.plan.set(null);
       this.selectedIds.set(new Set());
       this.collapsedGoals.set(new Set());
-      // A Division-scope route has to be redirected, so wait for the catalog before
-      // requesting a plan we may be about to abandon.
-      if (!this.scorecardsLoaded && this.userStore.hasPermission('scorecard:view')) {
-        this.loading.set(true);
-        return;
-      }
-      if (!this.ensureCorporateScorecard(id)) return;
       this.reloadPlan();
     });
     // The planning page is a corporate authoring surface, so the scorecard picker requires
@@ -1280,12 +1250,9 @@ submitGoal(): void {
         next: (scorecards) => {
           this.scorecardsLoaded = true;
           this.allScorecards.set(scorecards);
-          const current = this.scorecardId();
-          if (current) {
-            if (this.ensureCorporateScorecard(current)) this.reloadPlan();
-          } else {
-            this.openDefaultCorporateScorecard();
-          }
+          // The route parameter subscription already loads an explicit scorecard. The
+          // catalog only resolves the no-id case, so both paths issue exactly one request.
+          this.openDefaultScorecard();
         },
         error: (error) => {
           if (this.scorecardId()) return;
@@ -1297,57 +1264,80 @@ submitGoal(): void {
   }
 
   /**
-   * Admin and Power User land here without an id. Open the restored corporate scorecard,
-   * or the first corporate scorecard, instead of requiring a hand-built deep link.
+   * A route without an id only resolves automatically when exactly one scorecard is
+   * available. With FR-301 multiple independent scorecards, the planner must choose one.
    */
-  private openDefaultCorporateScorecard(): void {
+  private openDefaultScorecard(): void {
     if (this.scorecardId()) return;
-    const corporate = this.scorecards();
-    const target =
-      corporate.find((scorecard) => scorecard.id === this.scorecardFilter()) ?? corporate[0];
-    if (!target) {
-      this.loading.set(false);
-      this.loadError.set(
-        'No corporate scorecard is available. Create a corporate scorecard before planning divisions.'
-      );
+    const available = this.scorecards();
+    const target = available.find((scorecard) => scorecard.id === this.scorecardFilter());
+    if (target) {
+      const queryParams = this.divisionFilter() ? { divisionId: this.divisionFilter() } : undefined;
+      void this.router.navigate(['/division-planning', target.id], {
+        queryParams,
+        replaceUrl: true,
+      });
       return;
     }
-    const queryParams = this.divisionFilter() ? { divisionId: this.divisionFilter() } : undefined;
-    void this.router.navigate(['/division-planning', target.id], {
-      queryParams,
-      replaceUrl: true,
-    });
+
+    this.loading.set(false);
+    if (available.length === 0) {
+      this.loadError.set('No scorecard is available. Create a scorecard before planning divisions.');
+    } else if (available.length === 1) {
+      const queryParams = this.divisionFilter() ? { divisionId: this.divisionFilter() } : undefined;
+      void this.router.navigate(['/division-planning', available[0].id], {
+        queryParams,
+        replaceUrl: true,
+      });
+    } else {
+      this.loadError.set('Select a scorecard to load its division plans.');
+    }
   }
 
   private reloadSequence = 0;
 
-  private reloadPlan(): void {
+  /**
+   * `background` refreshes the plan without touching the loading/error state, so an
+   * in-place save (contribution tick) never swaps the checklist for a loading placeholder.
+   */
+  private reloadPlan(background = false, onSettled?: () => void): void {
     if (!this.scorecardId()) {
       this.loading.set(false);
-      this.loadError.set('No corporate scorecard was selected.');
+      this.loadError.set('No scorecard was selected.');
+      onSettled?.();
       return;
     }
     // Period/division/filter changes can overlap; only the newest response may win.
     const sequence = ++this.reloadSequence;
-    this.loading.set(true);
-    this.loadError.set(null);
+    if (!background) {
+      this.loading.set(true);
+      this.loadError.set(null);
+    }
     const ownDivision = this.userStore.isDivisionAccount() ? this.userStore.divisionId() : null;
     const divisionId = this.divisionFilter() || ownDivision || undefined;
     this.divisionService
       .getPlanningContext(this.scorecardId(), this.periodQuery(), divisionId)
 .subscribe({
         next: (plan) => {
-          if (sequence !== this.reloadSequence) return;
+          if (sequence !== this.reloadSequence) {
+            onSettled?.();
+            return;
+          }
           this.plan.set(plan);
           this.selectedIds.set(new Set(plan.contributions.map((c) => c.goalId)));
           this.loading.set(false);
           this.syncFilters(plan);
           this.prepareEntry();
+          onSettled?.();
         },
         error: (error) => {
-          if (sequence !== this.reloadSequence) return;
+          if (sequence !== this.reloadSequence) {
+            onSettled?.();
+            return;
+          }
           this.loading.set(false);
-          this.loadError.set(toApiError(error).message);
+          if (!background) this.loadError.set(toApiError(error).message);
+          onSettled?.();
         },
       });
   }

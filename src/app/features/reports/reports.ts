@@ -7,6 +7,7 @@ import { NotificationService } from '../../core/service/notification.service';
 import { UserStore } from '../../core/service/user-store.service';
 import { FiscalYear, Scorecard } from '../../core/model/scorecard.model';
 import { Division } from '../division/division.model';
+import { fiscalMonthLabel } from '../strategic-scorecard/workspace-state.service';
 import {
   ReportService,
   ReportTemplate,
@@ -23,7 +24,25 @@ interface GranularityOption {
   label: string;
 }
 
-type PeriodMode = 'month' | 'quarter';
+interface PeriodChoice {
+  value: number;
+  label: string;
+}
+
+const SHORT_MONTHS = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
 
 type CardIcon = 'document' | 'target' | 'bars' | 'list' | 'briefcase' | 'building';
 
@@ -60,7 +79,8 @@ export class ReportsPage implements OnInit {
   readonly scorecardId = signal<string | null>(null);
   readonly divisionId = signal<string | null>(null);
   readonly level = signal<ReportLevel>('kpi');
-  readonly granularity = signal<PeriodMode>('quarter');
+  /** Opens on YTD, the same default as the Scorecards "Filter by Period" control. */
+  readonly granularity = signal<ReportGranularity>('ytd');
   readonly fromMonth = signal<number | null>(null);
   readonly toMonth = signal<number | null>(null);
   readonly quarter = signal<number | null>(null);
@@ -69,9 +89,6 @@ export class ReportsPage implements OnInit {
   readonly loading = signal(false);
   readonly exporting = signal(false);
   readonly loadError = signal<string | null>(null);
-
-  readonly monthOptions: number[] = Array.from({ length: 12 }, (_, i) => i + 1);
-  readonly quarterOptions: number[] = [1, 2, 3, 4];
 
   readonly cardDefs: ReportCard[] = [
     { key: 'scorecard-summary', templateId: 'scorecard-performance', level: 'scorecard', title: 'Scorecard summary', subtitle: 'Overall performance by goal and KRA', icon: 'document' },
@@ -104,23 +121,78 @@ export class ReportsPage implements OnInit {
   );
 
   readonly granularityOptions: GranularityOption[] = [
-    { value: 'month', label: 'Month' },
+    { value: 'ytd', label: 'YTD' },
     { value: 'quarter', label: 'Quarter' },
+    { value: 'month', label: 'Month' },
+    { value: 'year', label: 'Year' },
   ];
 
   readonly selectedTemplate = computed(() => this.templates().find((t) => t.id === this.templateId()));
 
   readonly showScorecard = computed(() => this.selectedTemplate()?.requiresScorecard ?? true);
   readonly showDivision = computed(() => this.templateId() === 'division-performance');
+  /** Initiative summaries are not period-scoped, so they hide the granularity picker. */
   readonly showGranularity = computed(() => this.templateId() !== 'initiative-status');
 
   readonly showMonthRange = computed(() => this.granularity() === 'month');
   readonly showQuarter = computed(() => this.granularity() === 'quarter');
+  readonly showYear = computed(() => this.granularity() === 'year');
 
   readonly fiscalYearLabel = computed(() => {
     const fyId = this.fiscalYearId();
     if (!fyId) return null;
     return this.fiscalYears().find((fy) => fy.id === fyId)?.label ?? null;
+  });
+
+  /**
+   * Fiscal year whose start month labels the fiscal months and quarters: the one picked
+   * in the header, otherwise the year of the selected scorecard.
+   */
+  readonly periodFiscalYear = computed<FiscalYear | null>(() => {
+    const years = this.fiscalYears();
+    const direct = years.find((fy) => fy.id === this.fiscalYearId());
+    if (direct) return direct;
+    const scorecardYearId = this.scorecards().find((sc) => sc.id === this.scorecardId())?.fiscalYearId;
+    return years.find((fy) => fy.id === scorecardYearId) ?? null;
+  });
+
+  /** The twelve fiscal months labelled with their calendar month and year, e.g. "Jul 2026". */
+  readonly monthOptions = computed<PeriodChoice[]>(() => {
+    const fy = this.periodFiscalYear();
+    const start = this.parseStart(fy?.startDate);
+    if (!fy || !start) {
+      return Array.from({ length: 12 }, (_, i) => ({ value: i + 1, label: `Month ${i + 1}` }));
+    }
+    return Array.from({ length: 12 }, (_, i) => {
+      const offset = start.monthIndex + i;
+      return {
+        value: i + 1,
+        label: `${fiscalMonthLabel(fy.startDate, i + 1)} ${start.year + Math.floor(offset / 12)}`,
+      };
+    });
+  });
+
+  /** Quarters with their exact fiscal span, e.g. "Q1 (Jul – Sep 2026)". */
+  readonly quarterOptions = computed<PeriodChoice[]>(() => {
+    const fy = this.periodFiscalYear();
+    const start = this.parseStart(fy?.startDate);
+    return [1, 2, 3, 4].map((quarter) => {
+      if (!fy || !start) {
+        return { value: quarter, label: `Q${quarter}` };
+      }
+      const from = start.monthIndex + (quarter - 1) * 3;
+      const to = from + 2;
+      return {
+        value: quarter,
+        label: `Q${quarter} (${SHORT_MONTHS[from % 12]} – ${SHORT_MONTHS[to % 12]} ${start.year + Math.floor(to / 12)})`,
+      };
+    });
+  });
+
+  readonly monthRangeInvalid = computed(() => {
+    const from = this.fromMonth();
+    const to = this.toMonth();
+    return from !== null && to !== null && from > to;
   });
 
   readonly ragColumnIndex = computed(() => this.envelope()?.columns.findIndex((c) => c === 'RAG') ?? -1);
@@ -135,13 +207,12 @@ export class ReportsPage implements OnInit {
     if (card.level) this.level.set(card.level);
     this.envelope.set(null);
     this.loadError.set(null);
+    // Summary templates carry no period, so the previous period must not leak into them.
+    if (card.templateId === 'initiative-status') this.resetPeriod();
   }
 
   resetFilters(): void {
-    this.granularity.set('quarter');
-    this.fromMonth.set(null);
-    this.toMonth.set(null);
-    this.quarter.set(null);
+    this.resetPeriod();
     this.divisionId.set(null);
     this.envelope.set(null);
     this.loadError.set(null);
@@ -152,11 +223,24 @@ export class ReportsPage implements OnInit {
     this.loadScorecards(this.fiscalYearId());
   }
 
+  /** The Year granularity's picker edits the same fiscal year as the header picker. */
+  onPeriodYearChange(fiscalYearId: string | null): void {
+    if (fiscalYearId === this.fiscalYearId()) return;
+    this.fiscalYearId.set(fiscalYearId);
+    this.onFiscalYearChange();
+  }
+
   onGranularityChange(): void {
     this.envelope.set(null);
-    this.fromMonth.set(null);
-    this.toMonth.set(null);
-    this.quarter.set(null);
+    this.loadError.set(null);
+    // Switching granularity drops the previous granularity's range, like "Filter by Period".
+    if (this.granularity() !== 'month') {
+      this.fromMonth.set(null);
+      this.toMonth.set(null);
+    }
+    if (this.granularity() !== 'quarter') {
+      this.quarter.set(null);
+    }
   }
 
   generate(): void {
@@ -223,12 +307,6 @@ export class ReportsPage implements OnInit {
     const day = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     const time = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
     return `${day} ${time}`;
-  }
-
-  /** "Q1 2026/2027" style label for the period select. */
-  quarterLabel(q: number): string {
-    const fy = this.fiscalYearLabel();
-    return fy ? `Q${q} ${fy}` : `Q${q}`;
   }
 
   /** Filters actually applied to the generated report, as returned by the API. */
@@ -312,8 +390,9 @@ export class ReportsPage implements OnInit {
       return null;
     }
 
-    if (this.granularity() === 'month' && this.fromMonth() != null && this.toMonth() != null && this.fromMonth()! > this.toMonth()!) {
-      this.notifications.error('From month cannot be after To month.');
+    const granularity = this.showGranularity() ? this.granularity() : null;
+    if (granularity === 'month' && this.monthRangeInvalid()) {
+      this.notifications.error('From month must be before or equal to To month.');
       return null;
     }
 
@@ -323,11 +402,27 @@ export class ReportsPage implements OnInit {
       fiscalYearId: this.fiscalYearId() ?? undefined,
       divisionId: this.templateId() === 'division-performance' && this.divisionId() ? this.divisionId()! : undefined,
       level: this.templateId() === 'scorecard-performance' ? this.level() : undefined,
-      granularity: this.granularity(),
-      fromMonth: this.granularity() === 'month' ? (this.fromMonth() ?? undefined) : undefined,
-      toMonth: this.granularity() === 'month' ? (this.toMonth() ?? undefined) : undefined,
-      quarter: this.granularity() === 'quarter' ? (this.quarter() ?? undefined) : undefined,
+      granularity: granularity ?? undefined,
+      fromMonth: granularity === 'month' ? (this.fromMonth() ?? undefined) : undefined,
+      toMonth: granularity === 'month' ? (this.toMonth() ?? undefined) : undefined,
+      quarter: granularity === 'quarter' ? (this.quarter() ?? undefined) : undefined,
     };
     return filter;
+  }
+
+  private resetPeriod(): void {
+    this.granularity.set('ytd');
+    this.fromMonth.set(null);
+    this.toMonth.set(null);
+    this.quarter.set(null);
+  }
+
+  private parseStart(startDate: string | null | undefined): { year: number; monthIndex: number } | null {
+    const match = /^(\d{4})-(\d{2})/.exec(startDate ?? '');
+    if (!match) return null;
+    const year = Number(match[1]);
+    const monthIndex = Number(match[2]) - 1;
+    if (!Number.isInteger(year) || monthIndex < 0 || monthIndex > 11) return null;
+    return { year, monthIndex };
   }
 }

@@ -53,16 +53,30 @@ export class PerformanceMonitoringPage {
     return scoped.length ? this.divisions().filter((d) => scoped.includes(d.id)) : this.divisions();
   });
   readonly isCorporate = computed(() => (this.data()?.scope ?? '').toLowerCase() === 'corporate');
-  readonly hasData = computed(() => !!this.data()?.fiscalYearId);
+  readonly scorecardSelectionRequired = computed(
+    () => this.data()?.scorecardSelectionRequired === true
+  );
+  readonly hasData = computed(
+    () => !!this.data()?.fiscalYearId && !this.scorecardSelectionRequired()
+  );
 
-  /** Only corporate scorecards have division plans; the selector stays within the chosen fiscal year. */
+  /**
+   * The server supplies the authorized choices when a selection is required. The local
+   * catalog is a fallback for a fresh filter change before the next response arrives.
+   */
   readonly selectableScorecards = computed(() => {
+    const fromServer = this.data()?.selectableScorecards;
+    if (fromServer?.length) {
+      return fromServer
+        .map((option) => ({ id: option.id, name: option.name }))
+        .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+    }
+
     const fy = this.fiscalYearId();
-    return this.scorecards().filter(
-      (s) =>
-        (!fy || s.fiscalYearId === fy) &&
-        (String(s.scope ?? '').toLowerCase() === 'corporate'),
-    );
+    return this.scorecards()
+      .filter((s) => !fy || s.fiscalYearId === fy)
+      .map((s) => ({ id: s.id, name: s.name }))
+      .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
   });
 
   constructor() {

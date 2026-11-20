@@ -128,8 +128,10 @@ export class InitiativeDetailPage {
     if (initiative?.ownerId && userId && initiative.ownerId === userId) {
       return true;
     }
-    const divisionId = this.userStore.divisionId();
-    return !!initiative?.divisionOwnerId && !!divisionId && initiative.divisionOwnerId === divisionId;
+    // InitiativeGuard compares against every division id on the principal, not just the primary
+    // one, so a Data Input owner must be recognised through any of their HR divisions.
+    const divisionId = initiative?.divisionOwnerId;
+    return !!divisionId && this.userStore.divisionIds().includes(divisionId);
   });
 
   /**

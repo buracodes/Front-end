@@ -24,7 +24,9 @@
       [value]="current().scorecardId ?? ''"
       (change)="onScorecard($any($event.target).value)"
     >
-      <option value="">All scorecards</option>
+      @if (!scorecardSelectionRequired()) {
+        <option value="">All scorecards</option>
+      }
       @for (scorecard of scorecards(); track scorecard.id) {
         <option [value]="scorecard.id">{{ scorecard.label }}</option>
       }
